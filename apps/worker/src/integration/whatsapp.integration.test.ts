@@ -221,7 +221,7 @@ describe('W2-16: WhatsApp inbound and the real channel orders', () => {
     expect(audit!.diff).toMatchObject({ channel: 'whatsapp', message_id: messageId });
   });
 
-  it('US reporters still get SMS first, opted in to WhatsApp or not', async () => {
+  it('US reporters opted in to WhatsApp get it first (§19 Q372, the US order since 20261020000100)', async () => {
     await notifyJob(
       world.ctx,
       {
@@ -232,6 +232,6 @@ describe('W2-16: WhatsApp inbound and the real channel orders', () => {
       },
       {} as never,
     );
-    expect(await lastOut(MARCO)).toMatchObject({ channel: 'sms', copy_key: 'daily_link' });
+    expect(await lastOut(MARCO)).toMatchObject({ channel: 'whatsapp', copy_key: 'daily_link' });
   });
 });

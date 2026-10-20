@@ -35,7 +35,7 @@ export interface SiteDraft {
   /** W4-02 (F2): the manager's preferred channel, Text link or Call. */
   contactPref: ContactPref;
   /**
-   * The office attests the manager agreed to get daily report texts from TalkOlog (owner decision
+   * The office attests the manager agreed to get daily report messages from TalkOlog by text or WhatsApp (owner decision
    * 2026-10-20); required to create the site. Never resumed from saved progress.
    */
   smsAttested: boolean;

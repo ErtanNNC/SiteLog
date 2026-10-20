@@ -13,7 +13,8 @@
  *
  * Meta placeholders: {{phone}} (WA id digits, --phone), {{ts}} (now, unix seconds), {{id}} (a fresh
  * wamid so dedupe does not swallow the replay). Twilio placeholders: {{phone}} (E.164, --phone),
- * {{to}} (the pack's sender id, --to), {{sid}} (a fresh message SID), {{message_sid}} (--sid).
+ * {{to}} (the pack's sender id, --to), {{sid}} (a fresh message SID), {{message_sid}} (--sid),
+ * {{user_id}} (a WhatsApp business-scoped user id, §19 Q372: --user-id, default `ZZ.<phone digits>`).
  * Twilio requests are signed for the URL they are posted to (`--sms-url` or SMS_WEBHOOK_URL plus the
  * fixture's path), which must be the URL sms-webhook checks (its SMS_WEBHOOK_URL).
  *
@@ -56,6 +57,8 @@ interface Args {
   token: string;
   to: string;
   sid: string;
+  /** §19 Q372: the WhatsApp user id of `{{user_id}}` (`CC.<id>`); unset: `ZZ.<phone digits>`. */
+  userId?: string;
   /** LiveKit: voice-events' URL, the API key and secret it checks, and the call's room. */
   voiceUrl: string;
   livekitKey: string;
@@ -91,6 +94,8 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
     else if (a === '--token') args.token = argv[++i] ?? args.token;
     else if (a === '--to') args.to = argv[++i] ?? args.to;
     else if (a === '--sid') args.sid = argv[++i] ?? args.sid;
+    else if (a === '--user-id')
+      args.userId = (argv[++i] ?? '').replace(/^whatsapp:/, '') || undefined;
     else if (a === '--voice-url') args.voiceUrl = argv[++i] ?? args.voiceUrl;
     else if (a === '--room') args.room = argv[++i] ?? args.room;
     else if (a === '--room-sid') args.roomSid = (argv[++i] ?? '').replace(/^RM_/, '') || undefined;
@@ -117,10 +122,13 @@ export function isTwilioFixture(value: unknown): value is TwilioFixture {
   );
 }
 
-/** Fills a Twilio fixture's placeholders: {{phone}} E.164, {{to}}, {{sid}} fresh, {{message_sid}}. */
+/**
+ * Fills a Twilio fixture's placeholders: {{phone}} E.164, {{to}}, {{sid}} fresh, {{message_sid}},
+ * {{user_id}} (§19 Q372).
+ */
 export function substituteTwilio(
   template: string,
-  vars: { phone: string; to: string; sid: string },
+  vars: { phone: string; to: string; sid: string; userId?: string },
 ): string {
   const sid = `SM${Date.now().toString(16)}${Math.random().toString(16).slice(2, 10)}`;
   return (
@@ -129,6 +137,8 @@ export function substituteTwilio(
       .replace(/\{\{to\}\}/g, vars.to)
       // W2-16: a WhatsApp form names the person's number without `+` too.
       .replace(/\{\{wa_id\}\}/g, vars.phone.replace(/\D/g, ''))
+      // §19 Q372: the person's WhatsApp user id, the same for every file of the run.
+      .replace(/\{\{user_id\}\}/g, vars.userId ?? `ZZ.${vars.phone.replace(/\D/g, '')}`)
       .replace(/\{\{sid\}\}/g, sid)
       .replace(/\{\{message_sid\}\}/g, vars.sid || sid)
   );
@@ -207,7 +217,7 @@ async function replayTwilio(args: Args, file: string, fixture: TwilioFixture): P
   console.log(
     `\n${file}: Twilio ${fixture.path || 'inbound'} ` +
       (inbound
-        ? `${inbound.from} → ${inbound.to}: ${inbound.body}`
+        ? `${inbound.from ?? 'a WhatsApp user id'} → ${inbound.to}: ${inbound.body}`
         : status
           ? `${status.messageSid} ${status.status}`
           : '(unreadable)'),
@@ -255,7 +265,12 @@ async function main(): Promise<void> {
     }
     if (isTwilioFixture(probe)) {
       const fixture = JSON.parse(
-        substituteTwilio(raw, { phone: args.phone, to: args.to, sid: args.sid }),
+        substituteTwilio(raw, {
+          phone: args.phone,
+          to: args.to,
+          sid: args.sid,
+          ...(args.userId ? { userId: args.userId } : {}),
+        }),
       ) as TwilioFixture;
       if (!(await replayTwilio(args, file, fixture))) failures++;
       continue;

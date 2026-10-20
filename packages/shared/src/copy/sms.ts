@@ -20,7 +20,13 @@ import {
   smsTestMessageEs,
   smsWeatherPhraseEs,
 } from './sms.es.ts';
-import { smsHelpPrivacyTr, smsTestMessageTr, smsTr, smsWeatherPhraseTr } from './sms.tr.ts';
+import {
+  smsHelpPrivacyTr,
+  smsReplyHintTr,
+  smsTestMessageTr,
+  smsTr,
+  smsWeatherPhraseTr,
+} from './sms.tr.ts';
 
 /**
  * §9.2 SMS copy catalog. Keys are stable ids; the texts live in `sms.{en,es,tr}.ts`. WhatsApp
@@ -28,7 +34,7 @@ import { smsHelpPrivacyTr, smsTestMessageTr, smsTr, smsWeatherPhraseTr } from '.
  *
  * Which variant a message gets is the country pack's business (spec §4.6), never the driver's:
  * - Two-way packs only (`two_way_sms`): the keys `unknown_number`, `help`, `stop_confirm`,
- *   `pref_call_ok` and `pref_text_ok` (EN and ES text only), and the welcome's reply clause (`SMS_REPLY_HINT`, EN and ES), which
+ *   `pref_call_ok` and `pref_text_ok` (EN and ES text only), and the welcome's reply clause (`SMS_REPLY_HINT`; WhatsApp is always two-way), which
  *   `renderSms` appends. One-way packs never get reply instructions: those keys throw and the
  *   welcome goes out without the clause. Catalogue text + hint is the §9.2 cell, byte for byte.
  * - Packs without links in SMS (`sms_links_allowed` false): the keys with a link
@@ -219,12 +225,14 @@ export const SMS_CATALOGS: {
 } = { en: smsEn, es: smsEs, tr: smsTr };
 
 /**
- * The `welcome` reply clause, appended only for packs with two-way SMS (§9.2). Turkish has none:
- * the TR pack is one-way.
+ * The `welcome` reply clause, appended only for a two-way variant (§9.2): packs with two-way SMS,
+ * and WhatsApp, which is always two-way. Turkish has one since §19 Q372 (the welcome may go by
+ * WhatsApp); the TR pack's SMS is one-way, so no Turkish text carries it.
  */
 export const SMS_REPLY_HINT: Readonly<Partial<Record<SmsLocale, string>>> = {
   en: smsReplyHintEn,
   es: smsReplyHintEs,
+  tr: smsReplyHintTr,
 };
 
 /**

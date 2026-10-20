@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
-  SmsSendError,
+  MessageSendError,
   ensurePersonalLink,
   fieldLinkUrl,
   firstName,
@@ -32,7 +32,11 @@ import { PermanentJobError, type JobHandler } from './types';
  *
  * What the office hears (§13 "Message undeliverable / opted out", `reporter_invite_failed` /
  * `reporter_opted_out`), and what the reporter row records:
- * - the number cannot get texts (`SmsSendError.undeliverable`: invalid, landline, unroutable):
+ * §19 Q372: the welcome may go by WhatsApp (its template) where the pack orders WhatsApp first, and
+ * by SMS where WhatsApp cannot carry it (no sender here, no approved template in the reporter's
+ * language) or refuses it for good (the Notifier falls back, §19 Q22). The refusal below is the
+ * last channel's (`MessageSendError`; `SmsSendError` for SMS):
+ * - the number cannot get messages (`undeliverable`: invalid, landline, unroutable):
  *   `last_invite_error` (Team: "Can't reach this number", F3), audited `reporter.invite_failed`,
  *   no retry;
  * - the number is on the provider's own opt-out list (`optedOut`, Twilio 21610): the Notifier
@@ -41,8 +45,8 @@ import { PermanentJobError, type JobHandler } from './types';
  *   `retryable: false` but not the number's fault): the reporter is left untouched, the office is
  *   told texts are failing for the account, and the job dies (`PermanentJobError`: retried with
  *   backoff, then dead and in Sentry);
- * - nothing deliverable (an opt-out, a refused SMS consent, a pack whose channels cannot carry
- *   the link, a real org whose pack has no sender id in this environment): audited by the
+ * - nothing deliverable (an opt-out, a refused consent, a pack whose channels cannot carry
+ *   the link, a real org whose pack has no SMS or WhatsApp sender in this environment): audited by the
  *   Notifier, the invite left unsent (no `invited_at`, so a re-send stays allowed) and the office
  *   told why; a reporter the office disabled meanwhile gets nothing and nobody is told;
  * - a provider outage (`retryable`): thrown, the queue retries.
@@ -64,18 +68,27 @@ import { PermanentJobError, type JobHandler } from './types';
  * refusal is told as for any welcome (the number may have gone bad since).
  */
 
+/**
+ * §19 Q372: how long after a WhatsApp welcome its walk runs again (`send_welcome.recheck`), so a
+ * late failure (63003, the number is not on WhatsApp) hands it to SMS. Twilio's failed status
+ * comes within seconds to minutes; a later one leaves WhatsApp for the next message
+ * (`whatsappFailedSinceInbound`), the automatic re-send included.
+ */
+export const WELCOME_WHATSAPP_RECHECK_MS = 10 * 60_000;
+
 /** Why nothing went, with what the office can do (§13: reporter, channel, reason, action). */
 const WELCOME_SKIPPED: Record<Exclude<NotifyOutcome, { channel: string }>['reason'], string> = {
   opted_out:
     'They opted out of texts, so TalkOlog texts them nothing until they opt in again (START, on packs that take replies).',
-  no_consent: 'They declined texts when asked for consent, so TalkOlog texts them nothing.',
+  no_consent:
+    'They declined messages when asked for consent, so TalkOlog sends them nothing by text or WhatsApp.',
   no_channel:
     'No message channel of their country can carry the welcome and its link. Contact them another way.',
 };
 
-/** A real org whose pack has no SMS sender set in this environment (spec §4.6, §19 Q29). */
+/** A real org whose pack has no SMS or WhatsApp sender set in this environment (§4.6, §19 Q29, Q84). */
 const CONSOLE_REAL_ORG =
-  'Texts to this country are not live in this environment yet: no SMS sender is set for its country pack, so the reporter got nothing. Once the sender is set, re-send the welcome from Team & numbers.';
+  'Messages to this country are not live in this environment yet: no SMS or WhatsApp sender is set for its country pack, so the reporter got nothing. Once a sender is set, re-send the welcome from Team & numbers.';
 
 export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job) => {
   const reporter = await ctx.db.getReporter(payload.reporterId);
@@ -85,7 +98,8 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
     ctx.log.info('welcome not sent: reporter disabled', { reporter_id: reporter.id });
     return;
   }
-  const auto = payload.auto === true;
+  const recheck = payload.recheck ?? null;
+  const auto = payload.auto === true && recheck === null;
   if (auto && ctx.config.WELCOME_RESEND === 'off') {
     ctx.log.info('automatic welcome re-send off (WELCOME_RESEND)', { reporter_id: reporter.id });
     return;
@@ -167,8 +181,15 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
       data,
     );
 
-  // The Notifier key: per job (a retry never texts twice); the automatic re-send's per reporter.
-  const welcomeKey = auto ? jobKeys.welcomeAutoResend(reporter.id) : `send_welcome:${job.id}`;
+  // The Notifier key: per job (a retry never texts twice); the automatic re-send's per reporter;
+  // a recheck's the welcome's it checks (§19 Q372).
+  const welcomeKey =
+    recheck?.messageKey ??
+    (auto ? jobKeys.welcomeAutoResend(reporter.id) : `send_welcome:${job.id}`);
+  // A recheck reports only a message its own walk sent (a retry of it finds that one already there).
+  const before = recheck
+    ? new Set((await ctx.db.listMessagesByDedupeKey(reporter.id, welcomeKey)).map((m) => m.id))
+    : null;
   let outcome: NotifyOutcome;
   try {
     outcome = await ctx.notifier.send(
@@ -185,7 +206,7 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
       { dedupeKey: welcomeKey },
     );
   } catch (err) {
-    if (!(err instanceof SmsSendError) || err.retryable) throw err;
+    if (!(err instanceof MessageSendError) || err.retryable) throw err;
     const error = err.message.slice(0, 300);
     if (err.optedOut) {
       // The provider's opt-out list (the Notifier recorded it): not a bad number.
@@ -256,6 +277,30 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
     });
     throw new PermanentJobError(`welcome for reporter ${reporter.id}: ${error}`);
   }
+  if (recheck) {
+    // §19 Q372: the walk answered the WhatsApp welcome again (it went, or is still on its way), or
+    // sent the welcome on the next channel after a late failure. Only the latter is news.
+    if (outcome.channel !== null && !before?.has(outcome.messageId)) {
+      await ctx.db.logAudit({
+        org_id: reporter.org_id,
+        actor_type: 'system',
+        action: 'reporter.welcome_fallback',
+        entity: 'reporter',
+        entity_id: reporter.id,
+        diff: {
+          from_message_id: recheck.messageId,
+          channel: outcome.channel,
+          message_id: outcome.messageId,
+        },
+      });
+    } else if (outcome.channel === null) {
+      ctx.log.info('welcome recheck: nothing deliverable after WhatsApp', {
+        reporter_id: reporter.id,
+        reason: outcome.reason,
+      });
+    }
+    return;
+  }
   if (outcome.channel === null) {
     // §13 "Message undeliverable / opted out": the office learns why (the Notifier audited it).
     ctx.log.info('welcome not sent', {
@@ -311,6 +356,19 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
       ...(auto ? { auto: true } : {}),
     },
   });
+  if (outcome.channel === 'whatsapp' && !org.is_demo) {
+    // §19 Q372: the first contact goes by WhatsApp before anyone knows the number is on it.
+    await ctx.db.enqueueJob(
+      'send_welcome',
+      {
+        reporterId: reporter.id,
+        siteId: site.id,
+        reinvite: false,
+        recheck: { messageKey: welcomeKey, messageId: outcome.messageId },
+      },
+      { dedupeKey: jobKeys.welcomeRecheck(welcomeKey), delayMs: WELCOME_WHATSAPP_RECHECK_MS },
+    );
+  }
   if (!auto) await queueAutoResend(ctx, reporter.id, site);
 };
 

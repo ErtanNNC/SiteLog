@@ -3,7 +3,7 @@ import type { SmsCatalog, SmsWeatherPhrases, TrSmsKey } from './sms.ts';
 /**
  * §9.2 SMS copy, Turkish: verbatim from the spec table. The TR pack's SMS is one-way
  * (`two_way_sms = false`: a Twilio long code since §19 Q370, the `TALKOLOG` title later), so these texts never ask for a reply,
- * Turkish has no welcome reply hint, and the two-way keys (unknown_number, help, stop_confirm,
+ * Turkish has a welcome reply hint only for WhatsApp (`smsReplyHintTr`), and the two-way keys (unknown_number, help, stop_confirm,
  * pref_call_ok, pref_text_ok) have no Turkish text: a pack with two-way SMS and Turkish fails `packCopyGaps()` until they
  * exist. The report keywords' replies (day_off_link, edit_preview, edit_unclear; W2-12, spec §19
  * Q83) do have Turkish text, for a two-way TR pack or WhatsApp later. Formal "siz", no exclamation marks (§9.7). Punctuation is GSM-7 only (spec §19 Q15), so
@@ -91,3 +91,10 @@ export const smsHelpPrivacyTr = ' - Aydınlatma metni: {privacy_link}';
 /** W4-05 (spec §19 Q232): Settings' "Send me a test message". For the Q63 review. */
 export const smsTestMessageTr =
   '{company} için TalkOlog deneme mesajı. Şantiye şefleriniz mesajlarını bu göndericiden alır. Yanıt gerekmez.';
+
+/**
+ * The `welcome` reply clause (§19 Q372, 2026-10-20): appended by `renderSms` for a two-way variant.
+ * TR SMS is one-way, so a TR text never carries it; the WhatsApp welcome does (WhatsApp is always
+ * two-way, `whatsappRenderOptions`), and STOP and HELP work there in every language.
+ */
+export const smsReplyHintTr = ' - Durdurmak için STOP, yardım için HELP yazın';

@@ -310,7 +310,7 @@ test.describe('in a tr-TR browser', { tag: ['@m11', '@F2'] }, () => {
     // The office's SMS attestation (owner decision 2026-10-20): required to send the welcome.
     await page
       .getByRole('checkbox', {
-        name: 'Emre, TalkOlog’dan günlük rapor mesajları almayı kabul etti',
+        name: 'Emre, TalkOlog’dan günlük rapor mesajlarını SMS veya WhatsApp ile almayı kabul etti',
       })
       .check();
     await page.getByRole('button', { name: 'Karşılama mesajını gönder' }).click();
@@ -365,7 +365,7 @@ test.describe('in a tr-TR browser', { tag: ['@m11', '@F2'] }, () => {
       .eq('actor_type', 'user') // the office's invite, not the worker's "welcome sent" row
       .single();
     if (invitedError) throw invitedError;
-    expect(invitedAudit.diff).toMatchObject({ sms_attestation: 'team.invite_sms.v1' });
+    expect(invitedAudit.diff).toMatchObject({ sms_attestation: 'team.invite_sms.v2' });
     expect(emre).toEqual({
       name: 'Emre Yıldız',
       phone_e164: '+905320000599',

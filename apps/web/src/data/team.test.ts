@@ -81,7 +81,7 @@ describe('assembleTeam (W4-03)', () => {
     });
     expect(team.pack).toMatchObject({
       code: 'US',
-      settingsChannels: ['sms', 'whatsapp'],
+      settingsChannels: ['whatsapp', 'sms'],
       twoWaySms: true,
     });
     expect(team.orgLocale).toBe('en-US');

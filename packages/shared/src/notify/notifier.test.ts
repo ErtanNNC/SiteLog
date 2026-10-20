@@ -1204,8 +1204,75 @@ describe('Notifier WhatsApp (W2-15; §19 Q25, Q39, Q84)', () => {
     expect((await h.notifier.deliver(revoked, 'daily_link', DAILY)).channel).toBe('sms');
     const stopped = recipient({ pack: p, status: 'opted_out', consents: ['sms', 'whatsapp'] });
     expect((await h.notifier.deliver(stopped, 'daily_link', DAILY)).channel).toBe('whatsapp');
-    // The welcome never goes on WhatsApp (before the opt-in, §19 Q25).
-    const fresh = recipient({ pack: p, consents: ['whatsapp'] });
-    expect((await h.notifier.deliver(fresh, 'welcome', WELCOME)).channel).toBe(null);
+    // §19 Q372: the welcome goes on WhatsApp with its consent, or before any consent answer;
+    // a revoked WhatsApp consent is an answer, and the opt-out of both channels stops it.
+    const optedIn = recipient({ pack: p, consents: ['whatsapp'] });
+    expect((await h.notifier.deliver(optedIn, 'welcome', WELCOME)).channel).toBe('whatsapp');
+    const fresh = recipient({ pack: p });
+    expect((await h.notifier.deliver(fresh, 'welcome', WELCOME)).channel).toBe('whatsapp');
+    const both = recipient({ pack: p, status: 'opted_out', revoked: ['whatsapp'] });
+    expect((await h.notifier.deliver(both, 'welcome', WELCOME)).channel).toBe(null);
+  });
+
+  it('§19 Q372: a real org’s welcome goes by its WhatsApp template before any consent, else by SMS', async () => {
+    const w = wa();
+    const h = harness({ channels: [w.registration] });
+    const live = (templates: CountryRow['whatsapp_templates']) =>
+      pack('US', {
+        ...order,
+        sms_sender_id: '+18885550142',
+        whatsapp_sender_id: '+15550142299',
+        whatsapp_templates: templates,
+      });
+    const fresh = recipient({ isDemo: false, pack: live({ welcome: { en: SID } }) });
+    expect((await h.notifier.deliver(fresh, 'welcome', WELCOME, { dedupeKey: 'w1' })).channel).toBe(
+      'whatsapp',
+    );
+    expect(w.forms[0]!.get('ContentSid')).toBe(SID);
+    const vars = JSON.parse(w.forms[0]!.get('ContentVariables')!) as Record<string, string>;
+    expect(vars).toEqual({
+      '1': 'Marco',
+      '2': 'Kestrel Build Group',
+      '3': 'Riverside Lofts — Block B',
+      '4': '17:30',
+      '5': 'https://go.talkolog.com/r/K7Q2MX',
+    });
+    // The stored text hides the link code, as on SMS.
+    expect(h.rows.get('m-1')!.body).not.toContain('K7Q2MX');
+    // No approved welcome template in the reporter's language: SMS, nothing tried on WhatsApp.
+    const spanish = recipient({
+      isDemo: false,
+      pack: live({ welcome: { en: SID } }),
+      locale: 'es-US',
+    });
+    expect(
+      (await h.notifier.deliver(spanish, 'welcome', WELCOME, { dedupeKey: 'w2' })).channel,
+    ).toBe('sms');
+    expect(w.forms).toHaveLength(1);
+  });
+
+  it('§19 Q372: the device code goes by the authentication template, consent-free, the code unmasked only to Twilio', async () => {
+    const w = wa();
+    const h = harness({ channels: [w.registration] });
+    const live = pack('US', {
+      ...order,
+      sms_sender_id: '+18885550142',
+      whatsapp_sender_id: '+15550142299',
+      whatsapp_templates: { verify_code: { en: SID } },
+    });
+    // Declined WhatsApp at F4 (never given): the code still goes there.
+    const r = recipient({ isDemo: false, pack: live, consents: ['sms', 'recording'] });
+    expect(await h.notifier.deliver(r, 'verify_code', { code: '042917' })).toEqual({
+      channel: 'whatsapp',
+      messageId: 'm-1',
+    });
+    expect(w.forms[0]!.get('ContentSid')).toBe(SID);
+    expect(JSON.parse(w.forms[0]!.get('ContentVariables')!)).toEqual({ '1': '042917' });
+    expect(h.rows.get('m-1')!.body).not.toContain('042917');
+    // WhatsApp's STOP (a revoked consent): the code goes by SMS.
+    const stopped = recipient({ isDemo: false, pack: live, revoked: ['whatsapp'] });
+    expect((await h.notifier.deliver(stopped, 'verify_code', { code: '042917' })).channel).toBe(
+      'sms',
+    );
   });
 });

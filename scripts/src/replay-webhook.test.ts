@@ -73,8 +73,15 @@ describe('replay-webhook Twilio mode (W1-08)', () => {
       if (fixture.path === '') {
         expect(isTwilioWhatsappForm(form), f).toBe(true);
         const inbound = parseTwilioWhatsappInbound(form);
-        expect(inbound, f).toMatchObject({ from: '+905321234567', to: '+905320000099' });
-        expect(form.get('WaId')).toBe('905321234567');
+        if (f.startsWith('inbound-user-id-')) {
+          // §19 Q372: only the person's WhatsApp user id, no number.
+          expect(inbound, f).toMatchObject({ from: null, to: '+905320000099' });
+          expect(inbound!.userId, f).toMatch(/^[A-Z]{2}\./);
+          expect(form.get('WaId')).toBeNull();
+        } else {
+          expect(inbound, f).toMatchObject({ from: '+905321234567', to: '+905320000099' });
+          expect(form.get('WaId')).toBe('905321234567');
+        }
         // An SMS reader never takes it for a text.
         expect(parseTwilioInbound(form), f).toBeNull();
       } else {
@@ -89,6 +96,35 @@ describe('replay-webhook Twilio mode (W1-08)', () => {
       }),
     ) as TwilioFixture;
     expect(parseTwilioWhatsappInbound(new URLSearchParams(note.params))!.media).toHaveLength(1);
+    // §19 Q372: the user id of a run is the same in every file (--user-id, else from the phone).
+    const fill = (file: string, userId?: string) =>
+      parseTwilioWhatsappInbound(
+        new URLSearchParams(
+          (
+            JSON.parse(
+              substituteTwilio(readFileSync(join(dir, file), 'utf8'), {
+                phone: '905321234567',
+                to: '+905320000099',
+                sid: 'SMwa1',
+                ...(userId ? { userId } : {}),
+              }),
+            ) as TwilioFixture
+          ).params,
+        ),
+      )!;
+    expect(fill('inbound-user-id.json')).toMatchObject({
+      from: '+905321234567',
+      userId: 'ZZ.905321234567',
+    });
+    expect(fill('inbound-user-id-only.json')).toMatchObject({
+      from: null,
+      userId: 'ZZ.905321234567',
+    });
+    expect(fill('inbound-user-id-only.json', 'TR.968122199252486').userId).toBe(
+      'TR.968122199252486',
+    );
+    expect(fill('inbound-user-id-unknown.json').userId).not.toBe('ZZ.905321234567');
+    expect(fill('inbound-ok.json').userId).toBeNull();
   });
 
   it('fills the placeholders: E.164 sender, the pack sender, a fresh SID per replay', () => {

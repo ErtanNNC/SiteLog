@@ -7,7 +7,8 @@ The same shape as `../sms/`: `{ "path", "params" }`, signed with `X-Twilio-Signa
 addresses are `whatsapp:` ones: `{{phone}}` the person (`--phone`), `{{to}}` the pack's WhatsApp
 sender (`--to`, the pack's `whatsapp_sender_id`), `{{sid}}` a fresh message SID,
 `{{message_sid}}` the SID a status callback reports on (`--sid`), `{{wa_id}}` the person's number
-without `+`.
+without `+`, `{{user_id}}` the person's WhatsApp business-scoped user id (§19 Q372, `--user-id`,
+default `ZZ.<phone digits>`).
 
 | File                                | What it covers                                                         |
 | ----------------------------------- | ---------------------------------------------------------------------- |
@@ -17,6 +18,9 @@ without `+`.
 | `inbound-answer.json`               | "5": the answer to the open web question (`whatsapp_answer`, §19 Q26)  |
 | `inbound-ok.json`                   | OK: the open draft's link, on WhatsApp (§19 Q82)                       |
 | `inbound-voice-note.json`           | a voice note: stored, never transcribed, the link once a day (§19 Q85) |
+| `inbound-user-id.json`              | OK with the number and `ExternalUserId`: the id is recorded (§19 Q372) |
+| `inbound-user-id-only.json`         | STOP with only the user id in `From`: the reporter who has that id     |
+| `inbound-user-id-unknown.json`      | only an id no reporter has: audited, nothing stored, 200 (§19 Q372)    |
 | `status-read.json`                  | a `read` receipt (msg_status `read`, D49)                              |
 | `status-failed-outside-window.json` | 63016: free-form outside the window; the message goes on by SMS        |
 
@@ -25,3 +29,8 @@ For a local stack: the pack's WhatsApp sender with
 `pnpm replay-webhook -- --sms-url http://127.0.0.1:54321/functions/v1/sms-webhook --token <token> --to +15550142299 --phone <a real org's reporter> fixtures/whatsapp/inbound-help.json`.
 A message from a real sender reaches real orgs only; demo orgs use the Demo phone's WhatsApp
 thread. The worker (`pnpm dev:worker`) answers what `sms-webhook` stores.
+
+Since Meta's usernames (2026) Twilio adds `ExternalUserId` (and `ParentExternalUserId`, unread) to
+every WhatsApp message, and puts the user id in `From` when WhatsApp hides the number. Replay
+`inbound-user-id.json` first (it records the id on the number's reporters), then
+`inbound-user-id-only.json` with the same `--phone` (or `--user-id`) reaches them without a number.

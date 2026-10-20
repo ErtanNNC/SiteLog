@@ -196,7 +196,8 @@ describe('country pack rows (§4.6)', () => {
         paper: 'letter',
         currency: 'USD',
         default_timezone: 'America/Chicago',
-        message_channels: ['push', 'sms', 'whatsapp'],
+        // §19 Q372 (20261020000100): WhatsApp before SMS, as TR.
+        message_channels: ['push', 'whatsapp', 'sms'],
         sms_provider: 'twilio',
         whatsapp_provider: 'twilio',
         sms_sender_type: 'toll_free',
@@ -700,7 +701,8 @@ describe('a new country is a new row (ZZ)', () => {
           optedOut: new Set(),
         });
       expect(reach('daily_link')).toEqual(['sms']);
-      expect(reach('verify_code')).toEqual(['sms']);
+      // §19 Q372: the device code needs no WhatsApp consent, so it may go there first.
+      expect(reach('verify_code')).toEqual(['whatsapp', 'sms']);
       expect(reach('edit_applied')).toEqual(['sms']);
       expect(smsRenderOptions(zz)).toEqual({
         hasVoiceNumber: false,

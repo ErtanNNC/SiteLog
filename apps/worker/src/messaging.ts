@@ -243,7 +243,7 @@ export function workerWhatsappRegistration(
     'TWILIO_ACCOUNT_SID' | 'TWILIO_AUTH_TOKEN' | 'SMS_WEBHOOK_URL' | 'SUPABASE_URL'
   > &
     StandInConfig,
-  db: Pick<Db, 'lastInboundWhatsapp'>,
+  db: Pick<Db, 'lastInboundWhatsapp' | 'lastOutboundWhatsapp'>,
   fetchImpl: typeof fetch = abortableFetch(),
   now: () => Date = () => new Date(),
 ): ChannelRegistration {
@@ -253,6 +253,7 @@ export function workerWhatsappRegistration(
     twilio: () => ({ accountSid: config.TWILIO_ACCOUNT_SID, authToken: config.TWILIO_AUTH_TOKEN }),
     statusCallbackUrl: statusCallbackUrl(config),
     lastInbound: (phone, sender) => db.lastInboundWhatsapp(phone, sender),
+    lastOutbound: (phone) => db.lastOutboundWhatsapp(phone),
     randomUUID: () => crypto.randomUUID(),
     now,
     ...(apiBase ? { apiBase } : {}),

@@ -345,13 +345,13 @@ describe('TeamPage (demo data)', () => {
     await userEvent.click(within(dialog).getByRole('radio', { name: 'Call' }));
     // Owner decision 2026-10-20: the office attests the person agreed to texts, or nothing is sent.
     const attest = within(dialog).getByRole('checkbox', {
-      name: 'Nora agreed to get daily report texts from TalkOlog',
+      name: 'Nora agreed to get daily report messages from TalkOlog by text or WhatsApp',
     });
     expect(attest).not.toBeChecked();
     expect(dialog).toHaveTextContent('Saved in the log with your name.');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Send welcome text' }));
     expect(within(dialog).getByRole('alert')).toHaveTextContent(
-      'Tick the box first: the person must have agreed to get daily report texts.',
+      'Tick the box first: the person must have agreed to get daily report messages.',
     );
     expect(attest).toHaveAttribute('aria-invalid', 'true');
     expect(store.data.reporters.find((r) => r.name === 'Nora Haddad')).toBeUndefined();
@@ -362,7 +362,7 @@ describe('TeamPage (demo data)', () => {
     expect(
       store.data.audit.find((a) => a.action === 'reporter.invited' && a.entity_id === nora.id)
         ?.diff,
-    ).toMatchObject({ sms_attestation: 'team.invite_sms.v1' });
+    ).toMatchObject({ sms_attestation: 'team.invite_sms.v2' });
     expect(nora).toMatchObject({
       phone_e164: '+15550148800',
       languages: ['en', 'es'],

@@ -1,5 +1,6 @@
 import type {
   CountryRow,
+  E164,
   InboundReporterRow,
   InboundSmsAudit,
   InboundScope,
@@ -19,6 +20,8 @@ import type {
 interface FakeReporter extends InboundReporterRow {
   orgCountry: string;
   lastInviteError?: string | null;
+  /** §19 Q372: `reporters.whatsapp_user_id`. */
+  whatsappUserId?: string | null;
 }
 
 /** sms-webhook's store in memory, for the Deno tests. */
@@ -100,8 +103,50 @@ export class FakeSmsStore implements SmsWebhookStore {
             r.orgCountry === country &&
             ('realOnly' in scope ? !r.orgIsDemo : r.orgId === scope.orgId),
         )
-        .map(({ orgCountry: _c, lastInviteError: _e, ...r }) => ({ ...r })),
+        .map(({ orgCountry: _c, lastInviteError: _e, whatsappUserId: _w, ...r }) => ({ ...r })),
     );
+  }
+
+  phoneByWhatsappUserId(userId: string) {
+    const phones = new Set(
+      this.reporters.filter((r) => r.whatsappUserId === userId && !r.orgIsDemo).map((r) => r.phone),
+    );
+    return Promise.resolve(phones.size === 1 ? ([...phones][0] as E164) : null);
+  }
+
+  /** record_whatsapp_user_id(): the id onto the number's real rows, off any other number's. */
+  recordWhatsappUserId(phone: E164, userId: string) {
+    let set = 0;
+    let cleared = 0;
+    for (const r of this.reporters) {
+      if (r.orgIsDemo) continue;
+      if (r.whatsappUserId === userId && r.phone !== phone) {
+        r.whatsappUserId = null;
+        cleared++;
+        this.audits.push({
+          orgId: r.orgId,
+          actorType: 'system',
+          actorId: null,
+          action: 'reporter.whatsapp_user_id_cleared',
+          entity: 'reporter',
+          entityId: r.id,
+          diff: { reason: 'other_number', source: 'twilio_whatsapp' },
+        });
+      } else if (r.phone === phone && r.whatsappUserId !== userId) {
+        r.whatsappUserId = userId;
+        set++;
+        this.audits.push({
+          orgId: r.orgId,
+          actorType: 'system',
+          actorId: null,
+          action: 'reporter.whatsapp_user_id_set',
+          entity: 'reporter',
+          entityId: r.id,
+          diff: { source: 'twilio_whatsapp' },
+        });
+      }
+    }
+    return Promise.resolve({ set, cleared });
   }
 
   /** receive_sms_inbound(): the row, its `sms.received` audit and (Twilio) its job together. */

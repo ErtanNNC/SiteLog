@@ -161,7 +161,7 @@ export interface VerifyCodeMessage {
   code: string;
 }
 
-/** Sends `verify_code` by SMS (SMS_ONLY_KEYS, spec §19 Q25); the Notifier's outcome. */
+/** Sends `verify_code` by SMS or WhatsApp (`CONSENT_FREE_KEYS`, spec §19 Q25, Q372); the Notifier's outcome. */
 export type SendVerifyCode = (message: VerifyCodeMessage) => Promise<NotifyOutcome>;
 
 /** What `expired/daily-link` hands the Notifier (F16 "Send me today's link"). */

@@ -4,9 +4,11 @@ import {
   nextMessageStatus,
   parseTwilioInbound,
   parseTwilioStatus,
+  parseTwilioWhatsappInbound,
   twilioSignature,
   twilioSignedPayload,
   verifyTwilioSignature,
+  whatsappUserIdOf,
 } from './twilio.ts';
 
 /**
@@ -99,6 +101,43 @@ describe('Twilio webhook fields', () => {
     form.set('From', 'whatsapp:+15550143378');
     expect(parseTwilioInbound(form)).toBeNull();
     expect(parseTwilioInbound(new URLSearchParams({ From: '+15550143378' }))).toBeNull();
+  });
+
+  it('reads a WhatsApp business-scoped user id (§19 Q372) beside the number or in its place', () => {
+    const form = (p: Record<string, string>) =>
+      new URLSearchParams({ MessageSid: 'SMwa1', To: 'whatsapp:+15550142299', Body: 'OK', ...p });
+    // The number and the id.
+    expect(
+      parseTwilioWhatsappInbound(
+        form({ From: 'whatsapp:+905321234567', ExternalUserId: 'whatsapp:TR.968122199252486' }),
+      ),
+    ).toMatchObject({ from: '+905321234567', userId: 'TR.968122199252486' });
+    // Only the id: `From` holds it.
+    expect(
+      parseTwilioWhatsappInbound(
+        form({
+          From: 'whatsapp:TR.968122199252486',
+          ExternalUserId: 'whatsapp:TR.968122199252486',
+        }),
+      ),
+    ).toMatchObject({ from: null, userId: 'TR.968122199252486' });
+    expect(parseTwilioWhatsappInbound(form({ From: 'whatsapp:TR.968122199252486' }))).toMatchObject(
+      { from: null, userId: 'TR.968122199252486' },
+    );
+    // No id, or a malformed one: the number alone; a malformed `From` is no message.
+    expect(parseTwilioWhatsappInbound(form({ From: 'whatsapp:+905321234567' }))!.userId).toBeNull();
+    expect(
+      parseTwilioWhatsappInbound(
+        form({ From: 'whatsapp:+905321234567', ExternalUserId: 'whatsapp:tr.12' }),
+      )!.userId,
+    ).toBeNull();
+    expect(parseTwilioWhatsappInbound(form({ From: 'whatsapp:TR.' }))).toBeNull();
+    expect(parseTwilioWhatsappInbound(form({ From: 'whatsapp:TR.12-34' }))).toBeNull();
+    expect(whatsappUserIdOf('TR.968122199252486')).toBe('TR.968122199252486');
+    expect(whatsappUserIdOf(`whatsapp:US.${'a'.repeat(128)}`)).toBe(`US.${'a'.repeat(128)}`);
+    expect(whatsappUserIdOf(`US.${'a'.repeat(129)}`)).toBeNull();
+    expect(whatsappUserIdOf('whatsapp:+905321234567')).toBeNull();
+    expect(whatsappUserIdOf('')).toBeNull();
   });
 
   it('reads a status callback and maps Twilio statuses to msg_status', () => {

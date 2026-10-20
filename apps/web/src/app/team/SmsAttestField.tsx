@@ -5,7 +5,7 @@ import { useCopy } from '@/i18n/useCopy';
 /**
  * The office's SMS attestation when it adds a person (owner decision 2026-10-20, Twilio toll-free
  * verification, opt-in "Verbal"): required in Team's invite and the setup wizard. The version
- * (`INVITE_SMS_ATTESTATION`) is logged with the office user's name by api-invite-reporter.
+ * (`INVITE_MESSAGES_ATTESTATION`) is logged with the office user's name by api-invite-reporter.
  */
 export function SmsAttestField({
   id,

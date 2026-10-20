@@ -1100,6 +1100,25 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         .sort();
       return ins.at(-1) ?? null;
     },
+    async lastOutboundWhatsapp(phone) {
+      const outs = Array.from(d.messages.values())
+        .filter(
+          (m) =>
+            m.phone_e164 === phone &&
+            m.channel === 'whatsapp' &&
+            m.direction === 'out' &&
+            m.provider === 'twilio',
+        )
+        .sort((a, b) => a.created_at.localeCompare(b.created_at));
+      const last = outs.at(-1);
+      return last
+        ? {
+            status: last.status,
+            provider_message_id: last.provider_message_id,
+            created_at: last.created_at,
+          }
+        : null;
+    },
     async pushSubscriptionGone(id, status) {
       const row = d.pushSubscriptions.find((p) => p.id === id && p.revoked_at === null);
       if (!row) return false;

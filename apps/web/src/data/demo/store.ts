@@ -27,7 +27,7 @@ import type {
   WorkItemRow,
 } from '@sitelog/shared/db/types.ts';
 import {
-  INVITE_SMS_ATTESTATION,
+  INVITE_MESSAGES_ATTESTATION,
   isActiveReporterStatus,
   type InvoiceStatus,
   type MemberRole,
@@ -1407,7 +1407,7 @@ export class DemoStore {
    */
   inviteReporter(input: InviteReporterInput, userId: string): string {
     if (input.smsAttested !== true) throw new Error(copy.team.invite.attestation_required);
-    return this.addReporter(input, userId, { sms_attestation: INVITE_SMS_ATTESTATION });
+    return this.addReporter(input, userId, { sms_attestation: INVITE_MESSAGES_ATTESTATION });
   }
 
   private addReporter(

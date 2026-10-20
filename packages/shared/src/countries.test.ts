@@ -67,10 +67,8 @@ describe('country pack rows (spec §4.6)', () => {
       expect(toCountryPack(row).outboundTrunkId, row.code).toBeNull();
       expect(row.legal_keys, row.code).toEqual({});
       // W2-14 (§19 Q107): push first, reached only by a reporter who turned notifications on;
-      // W2-16 (§19 Q19): US SMS then WhatsApp, TR WhatsApp then SMS.
-      expect(row.message_channels, row.code).toEqual(
-        row.code === 'US' ? ['push', 'sms', 'whatsapp'] : ['push', 'whatsapp', 'sms'],
-      );
+      // §19 Q372 (20261020000100): WhatsApp then SMS on both (W2-16 had US SMS first).
+      expect(row.message_channels, row.code).toEqual(['push', 'whatsapp', 'sms']);
     }
   });
 
@@ -181,17 +179,16 @@ describe('country pack rows (spec §4.6)', () => {
       expect(packCopyGaps(toCountryPack(row)), row.code).toEqual([]);
   });
 
-  it('catches a pack whose languages lack copy for its capabilities', () => {
-    // A valid row (a long code can take replies), but Turkish has no welcome reply hint (its
-    // two-way texts exist since W2-16, for WhatsApp): a new country is a row only when its
-    // languages have the copy (spec §4.6).
+  it('finds a two-way TR pack complete: Turkish has its two-way texts and reply hint', () => {
+    // A valid row (a long code can take replies). Turkish has the two-way texts since W2-16 and
+    // the welcome reply hint since §19 Q372 (both for WhatsApp, which is always two-way): a new
+    // country is a row only when its languages have the copy (spec §4.6), which this one has.
     const trTwoWay = toCountryPack({
       ...DEMO_COUNTRIES.find((c) => c.code === 'TR')!,
       sms_sender_type: 'long_code',
       two_way_sms: true,
     });
-    expect(packCopyGaps(trTwoWay)).toEqual(['tr-TR.welcome.replyHint']);
-    // The same pack with English only is complete.
+    expect(packCopyGaps(trTwoWay)).toEqual([]);
     expect(packCopyGaps({ ...trTwoWay, fieldLocales: ['en-US'] })).toEqual([]);
   });
 

@@ -3,15 +3,15 @@ import {
   channelCarriesKey,
   CONSENT_FOR_CHANNEL,
   PUSH_KEYS,
-  CONSENT_FREE_SMS_KEYS,
+  CONSENT_FREE_KEYS,
   deliverableChannels,
   IMPLEMENTED_MESSAGE_CHANNELS,
   messageChannelOrder,
   pickMessageTransport,
-  PRE_CONSENT_SMS_KEYS,
+  PRE_CONSENT_CHANNELS,
+  PRE_CONSENT_KEYS,
   settingsMessageChannels,
   SMS_DRIVERS,
-  SMS_ONLY_KEYS,
   smsRenderOptions,
   replyAllowed,
   smsReplyAllowed,
@@ -53,6 +53,8 @@ const TR_LIVE = pack('TR', {
 const NO_LINKS = pack('US', { sms_links_allowed: false, message_channels: ['whatsapp', 'sms'] });
 /** A valid pack that lists no SMS for its messages (its SMS sender still exists). */
 const NO_SMS = pack('US', { sms_links_allowed: false, message_channels: ['whatsapp'] });
+/** A pack whose only phone channel is SMS, for the SMS rules on their own. */
+const US_SMS = pack('US', { message_channels: ['push', 'sms'] });
 
 const SMS_CONSENT: ReadonlySet<ConsentType> = new Set(['sms', 'recording']);
 const NONE = new Set<never>();
@@ -101,8 +103,8 @@ describe('message channels (§4.5)', () => {
     // The pack is the allow-list: a preference it does not offer is ignored.
     const pushSms = pack('US', { message_channels: ['push', 'sms'] });
     expect(messageChannelOrder(pushSms, 'whatsapp')).toEqual(['push', 'sms']);
-    // W2-16 (§19 Q19, Q107): the launch orders.
-    expect(messageChannelOrder(US, null)).toEqual(['push', 'sms', 'whatsapp']);
+    // §19 Q372 (20261020000100): both launch packs order WhatsApp before SMS.
+    expect(messageChannelOrder(US, null)).toEqual(['push', 'whatsapp', 'sms']);
     expect(messageChannelOrder(TR, null)).toEqual(['push', 'whatsapp', 'sms']);
     // W2-14 review (§19 Q107): an SMS or WhatsApp preference never moves a channel ahead of push,
     // so Settings' Notifications On is what happens.
@@ -142,7 +144,7 @@ describe('message channels (§4.5)', () => {
   });
 
   it('keeps push out of the Settings preference: it has its own toggle (§19 Q107)', () => {
-    expect(settingsMessageChannels(US)).toEqual(['sms', 'whatsapp']);
+    expect(settingsMessageChannels(US)).toEqual(['whatsapp', 'sms']);
     expect(settingsMessageChannels(TR)).toEqual(['whatsapp', 'sms']);
     expect(
       settingsMessageChannels(
@@ -160,36 +162,42 @@ describe('deliverableChannels (§4.5)', () => {
     expect(deliverable(TR, 'filed')).toEqual(['sms']);
   });
 
-  it('needs the SMS consent, except for the welcome before any consent and the device code', () => {
-    expect([...PRE_CONSENT_SMS_KEYS]).toEqual(['welcome', 'verify_code']);
-    expect([...CONSENT_FREE_SMS_KEYS]).toEqual(['verify_code']);
+  it('needs the channel consent, except for the welcome before any consent and the device code', () => {
+    expect([...PRE_CONSENT_KEYS]).toEqual(['welcome', 'verify_code']);
+    expect([...PRE_CONSENT_CHANNELS]).toEqual(['sms', 'whatsapp']);
+    expect([...CONSENT_FREE_KEYS]).toEqual(['verify_code']);
     for (const key of NOTIFIER_KEYS) {
-      const pre = (PRE_CONSENT_SMS_KEYS as readonly string[]).includes(key);
-      const free = (CONSENT_FREE_SMS_KEYS as readonly string[]).includes(key);
-      // Never asked yet (F3, F4): only the welcome and the device code go out.
-      expect(deliverable(US, key, { consents: NONE }), key).toEqual(pre ? ['sms'] : []);
+      const pre = (PRE_CONSENT_KEYS as readonly string[]).includes(key);
+      const free = (CONSENT_FREE_KEYS as readonly string[]).includes(key);
+      // Never asked yet (F3, F4): only the welcome and the device code go out, on SMS or
+      // WhatsApp (§19 Q372), in the pack's order.
+      expect(deliverable(US_SMS, key, { consents: NONE }), key).toEqual(pre ? ['sms'] : []);
+      expect(deliverable(US, key, { consents: NONE }), key).toEqual(pre ? ['whatsapp', 'sms'] : []);
+      expect(deliverable(TR, key, { consents: NONE }), key).toEqual(pre ? ['whatsapp', 'sms'] : []);
       // Past the consent step without SMS (declined at F4, or a call-only consent): only the
-      // device code the person asks for (spec §19 Q25, W2-02).
-      expect(deliverable(US, key, { consents: new Set(['auto_call', 'recording']) }), key).toEqual(
-        free ? ['sms'] : [],
+      // device code the person asks for (spec §19 Q25, W2-02), on WhatsApp too (§19 Q372).
+      const answered = new Set<ConsentType>(['auto_call', 'recording']);
+      expect(deliverable(US_SMS, key, { consents: answered }), key).toEqual(free ? ['sms'] : []);
+      expect(deliverable(US, key, { consents: answered }), key).toEqual(
+        free ? ['whatsapp', 'sms'] : [],
       );
     }
   });
 
   it('sends nothing by SMS once the SMS consent is revoked, not even the welcome; the device code still goes', () => {
     for (const key of NOTIFIER_KEYS) {
-      const free = (CONSENT_FREE_SMS_KEYS as readonly string[]).includes(key);
+      const free = (CONSENT_FREE_KEYS as readonly string[]).includes(key);
       // Revoked in the field app's Settings (§9.3): the office's "Re-send welcome" stays silent.
-      expect(deliverable(US, key, { consents: NONE, revoked: new Set(['sms']) }), key).toEqual(
+      expect(deliverable(US_SMS, key, { consents: NONE, revoked: new Set(['sms']) }), key).toEqual(
         free ? ['sms'] : [],
       );
       expect(
-        deliverable(US, key, { consents: new Set(['recording']), revoked: new Set(['sms']) }),
+        deliverable(US_SMS, key, { consents: new Set(['recording']), revoked: new Set(['sms']) }),
         key,
       ).toEqual(free ? ['sms'] : []);
       // The opt-out still applies to it.
       expect(
-        deliverable(US, key, {
+        deliverable(US_SMS, key, {
           consents: new Set(['recording']),
           revoked: new Set(['sms']),
           optedOut: new Set(['sms']),
@@ -198,6 +206,9 @@ describe('deliverableChannels (§4.5)', () => {
       ).toEqual([]);
     }
     // Another revoked consent still means the person has answered the consent step.
+    expect(
+      deliverable(US_SMS, 'welcome', { consents: NONE, revoked: new Set(['auto_call']) }),
+    ).toEqual([]);
     expect(deliverable(US, 'welcome', { consents: NONE, revoked: new Set(['auto_call']) })).toEqual(
       [],
     );
@@ -205,10 +216,74 @@ describe('deliverableChannels (§4.5)', () => {
     expect(deliverable(US, 'daily_link', { revoked: new Set(['auto_call']) })).toEqual(['sms']);
   });
 
+  it('sends the welcome by WhatsApp before any consent, as by SMS (§19 Q372)', () => {
+    // The pack's order: WhatsApp first on both launch packs; the person's preference first.
+    expect(deliverable(US, 'welcome', { consents: NONE })).toEqual(['whatsapp', 'sms']);
+    expect(deliverable(US, 'welcome', { consents: NONE, preferred: 'sms' })).toEqual([
+      'sms',
+      'whatsapp',
+    ]);
+    // Never by push, which carries neither first-contact key.
+    expect(deliverable(US, 'welcome', { consents: NONE, implemented: MESSAGE_CHANNELS })).toEqual([
+      'whatsapp',
+      'sms',
+    ]);
+    // Once the person answered a consent prompt, each channel needs its own consent again.
+    expect(deliverable(US, 'welcome', { consents: new Set(['whatsapp', 'recording']) })).toEqual([
+      'whatsapp',
+    ]);
+    expect(deliverable(US, 'welcome', { consents: new Set(['sms', 'recording']) })).toEqual([
+      'sms',
+    ]);
+    expect(deliverable(US, 'welcome', { consents: NONE, revoked: new Set(['whatsapp']) })).toEqual(
+      [],
+    );
+    // An SMS opt-out leaves WhatsApp; the opt-outs of both leave nothing.
+    expect(deliverable(US, 'welcome', { consents: NONE, optedOut: new Set(['sms']) })).toEqual([
+      'whatsapp',
+    ]);
+    expect(
+      deliverable(US, 'welcome', { consents: NONE, optedOut: new Set(['whatsapp', 'sms']) }),
+    ).toEqual([]);
+  });
+
+  it('sends the device code by WhatsApp with no consent, short of its opt-out (§19 Q25, Q372)', () => {
+    // Consent-free on both channels: declined or never given does not stop it.
+    expect(deliverable(US, 'verify_code', { consents: new Set(['recording']) })).toEqual([
+      'whatsapp',
+      'sms',
+    ]);
+    expect(
+      deliverable(US, 'verify_code', { consents: NONE, revoked: new Set(['sms', 'recording']) }),
+    ).toEqual(['whatsapp', 'sms']);
+    // WhatsApp's STOP is a revoked WhatsApp consent: it stops the code there, SMS still goes.
+    expect(deliverable(US, 'verify_code', { revoked: new Set(['whatsapp']) })).toEqual(['sms']);
+    // SMS STOP stops it by SMS, WhatsApp still goes.
+    expect(deliverable(US, 'verify_code', { optedOut: new Set(['sms']) })).toEqual(['whatsapp']);
+    expect(
+      deliverable(US, 'verify_code', {
+        revoked: new Set(['whatsapp']),
+        optedOut: new Set(['sms']),
+      }),
+    ).toEqual([]);
+    // The person's preference goes first, as for every key.
+    expect(deliverable(US, 'verify_code', { preferred: 'sms' })).toEqual(['sms', 'whatsapp']);
+    // Never by push.
+    expect(
+      deliverable(US, 'verify_code', {
+        consents: new Set(CONSENT_TYPES),
+        implemented: MESSAGE_CHANNELS,
+        preferred: 'push',
+      }),
+    ).toEqual(['whatsapp', 'sms']);
+  });
+
   it('sends nothing on a channel the person opted out of, not even the welcome', () => {
     for (const key of NOTIFIER_KEYS) {
-      expect(deliverable(US, key, { optedOut: new Set(['sms']) }), key).toEqual([]);
-      expect(deliverable(US, key, { consents: NONE, optedOut: new Set(['sms']) }), key).toEqual([]);
+      expect(deliverable(US_SMS, key, { optedOut: new Set(['sms']) }), key).toEqual([]);
+      expect(deliverable(US_SMS, key, { consents: NONE, optedOut: new Set(['sms']) }), key).toEqual(
+        [],
+      );
     }
     // Opting out of another channel leaves SMS.
     expect(deliverable(US, 'daily_link', { optedOut: new Set(['whatsapp']) })).toEqual(['sms']);
@@ -223,9 +298,9 @@ describe('deliverableChannels (§4.5)', () => {
       'sms',
     ]);
     expect(deliverable(wa, 'filed', { consents: new Set(['sms']) })).toEqual(['sms']);
-    // W2-15: the welcome and the device code never go on WhatsApp (before its opt-in; SMS only).
-    expect(deliverable(wa, 'welcome', { consents: all })).toEqual(['sms']);
-    expect(deliverable(wa, 'verify_code', { consents: all })).toEqual(['sms']);
+    // §19 Q372: the welcome and the device code go on WhatsApp too, never on push.
+    expect(deliverable(wa, 'welcome', { consents: all })).toEqual(['whatsapp', 'sms']);
+    expect(deliverable(wa, 'verify_code', { consents: all })).toEqual(['whatsapp', 'sms']);
     expect(deliverable(wa, 'photos_link', { consents: all })).toEqual(['whatsapp', 'sms']);
     // An SMS opt-out (STOP) stops texts only (§19 Q40): WhatsApp still goes.
     expect(deliverable(wa, 'filed', { consents: all, optedOut: new Set(['sms']) })).toEqual([
@@ -242,17 +317,22 @@ describe('deliverableChannels (§4.5)', () => {
       'push',
       'sms',
     ]);
+    expect(deliverable(wa, 'welcome', { consents: NONE, implemented: ['sms', 'push'] })).toEqual([
+      'sms',
+    ]);
   });
 
   it('computes the order from the pack: a narrowing never adds a channel the pack lacks', () => {
-    // US lists SMS only: a WhatsApp preference or narrowing finds nothing else.
-    expect(deliverable(US, 'daily_link', { preferred: 'whatsapp' })).toEqual(['sms']);
-    expect(deliverable(US, 'daily_link', { narrow: ['sms'] })).toEqual(['sms']);
-    expect(deliverable(US, 'daily_link', { narrow: ['whatsapp'] })).toEqual([]);
-    expect(deliverable(US, 'daily_link', { narrow: [] })).toEqual([]);
+    // A pack that lists SMS only: a WhatsApp preference or narrowing finds nothing else.
+    const smsOnly = pack('US', { message_channels: ['sms'] });
+    expect(deliverable(smsOnly, 'daily_link', { preferred: 'whatsapp' })).toEqual(['sms']);
+    expect(deliverable(smsOnly, 'daily_link', { narrow: ['sms'] })).toEqual(['sms']);
+    expect(deliverable(smsOnly, 'daily_link', { narrow: ['whatsapp'] })).toEqual([]);
+    expect(deliverable(smsOnly, 'daily_link', { narrow: [] })).toEqual([]);
+    expect(deliverable(smsOnly, 'verify_code', { consents: NONE })).toEqual(['sms']);
     // A pack without SMS in its list: no message goes by SMS, even narrowed to SMS.
     for (const key of NOTIFIER_KEYS) {
-      if ((SMS_ONLY_KEYS as readonly string[]).includes(key)) continue;
+      if ((CONSENT_FREE_KEYS as readonly string[]).includes(key)) continue;
       expect(deliverable(NO_SMS, key), key).toEqual([]);
       expect(deliverable(NO_SMS, key, { narrow: ['sms'] }), key).toEqual([]);
       expect(deliverable(NO_SMS, key, { implemented: MESSAGE_CHANNELS }), key).toEqual([]);
@@ -260,23 +340,32 @@ describe('deliverableChannels (§4.5)', () => {
   });
 
   it('sends the device code by SMS on every pack, even one that lists no SMS (§19 Q25)', () => {
-    expect([...SMS_ONLY_KEYS]).toEqual(['verify_code']);
-    for (const p of [US, TR, NO_LINKS, NO_SMS]) {
-      expect(deliverable(p, 'verify_code'), p.code).toEqual(['sms']);
-      expect(deliverable(p, 'verify_code', { preferred: 'whatsapp' }), p.code).toEqual(['sms']);
-      expect(deliverable(p, 'verify_code', { consents: NONE }), p.code).toEqual(['sms']);
-      expect(deliverable(p, 'verify_code', { optedOut: new Set(['sms']) }), p.code).toEqual([]);
+    for (const p of [US_SMS, NO_LINKS, NO_SMS]) {
+      expect(deliverable(p, 'verify_code', { preferred: 'sms' }), p.code).toContain('sms');
+      expect(deliverable(p, 'verify_code', { consents: NONE }).at(-1), p.code).toBe('sms');
+      expect(
+        deliverable(p, 'verify_code', {
+          optedOut: new Set(['sms']),
+          revoked: new Set(['whatsapp']),
+        }),
+        p.code,
+      ).toEqual([]);
     }
-    expect(deliverable(NO_SMS, 'verify_code', { narrow: ['whatsapp'] })).toEqual([]);
+    expect(deliverable(NO_SMS, 'verify_code')).toEqual(['whatsapp', 'sms']);
+    expect(deliverable(NO_SMS, 'verify_code', { narrow: ['whatsapp'] })).toEqual(['whatsapp']);
+    expect(deliverable(NO_SMS, 'verify_code', { narrow: ['push'] })).toEqual([]);
   });
 
   it('keeps link keys off SMS on a pack without links in SMS (§19 Q24)', () => {
     for (const key of MESSAGE_KEYS_WITH_LINK) {
       if (isTwoWaySmsKey(key)) continue;
       expect(deliverable(NO_LINKS, key), key).toEqual([]);
-      expect(deliverable(NO_LINKS, key, { consents: NONE }), key).toEqual([]);
+      // Before any consent, the welcome still goes by WhatsApp (links always work there).
+      expect(deliverable(NO_LINKS, key, { consents: NONE }), key).toEqual(
+        key === 'welcome' ? ['whatsapp'] : [],
+      );
     }
-    expect(deliverable(NO_LINKS, 'verify_code')).toEqual(['sms']);
+    expect(deliverable(NO_LINKS, 'verify_code')).toEqual(['whatsapp', 'sms']);
     expect(deliverable(NO_LINKS, 'edit_applied')).toEqual(['sms']);
     expect(deliverable(US, 'welcome')).toEqual(['sms']);
   });

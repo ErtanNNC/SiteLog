@@ -44,7 +44,7 @@ export const DEMO_COUNTRIES: readonly CountryRow[] = [
     paper: 'letter',
     currency: 'USD',
     default_timezone: 'America/Chicago',
-    message_channels: ['push', 'sms', 'whatsapp'],
+    message_channels: ['push', 'whatsapp', 'sms'],
     sms_provider: 'twilio',
     whatsapp_provider: 'twilio',
     sms_sender_type: 'toll_free',

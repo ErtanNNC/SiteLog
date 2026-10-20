@@ -130,7 +130,7 @@ describe('SetupPage (demo org)', () => {
       expect(
         store.data.audit.find((a) => a.action === 'reporter.invited' && a.entity_id === elena.id)
           ?.diff,
-      ).toMatchObject({ sms_attestation: 'team.invite_sms.v1' });
+      ).toMatchObject({ sms_attestation: 'team.invite_sms.v2' });
       expect(store.data.siteReporters.find((sr) => sr.reporter_id === elena.id)).toMatchObject({
         site_id: site.id,
         is_primary: true,
@@ -177,12 +177,12 @@ describe('SetupPage (demo org)', () => {
       // Owner decision 2026-10-20: the office attests the manager agreed to get texts.
       expect(
         screen.getByText(
-          'Tick the box first: the person must have agreed to get daily report texts.',
+          'Tick the box first: the person must have agreed to get daily report messages.',
         ),
       ).toBeInTheDocument();
       expect(
         screen.getByRole('checkbox', {
-          name: 'This person agreed to get daily report texts from TalkOlog',
+          name: 'This person agreed to get daily report messages from TalkOlog by text or WhatsApp',
         }),
       ).toHaveAttribute('aria-invalid', 'true');
       expect(store.data.sites).toHaveLength(6);
@@ -539,11 +539,11 @@ describe('SetupPage site step on v1.2 (W4-02)', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
       expect(
         await screen.findByText(
-          'Tick the box first: the person must have agreed to get daily report texts.',
+          'Tick the box first: the person must have agreed to get daily report messages.',
         ),
       ).toBeInTheDocument();
       expect(screen.getByTestId('bk-sms-attest')).toHaveAccessibleName(
-        'Ana agreed to get daily report texts from TalkOlog',
+        'Ana agreed to get daily report messages from TalkOlog by text or WhatsApp',
       );
       expect(store.data.sites.some((s) => s.project_code === 'HV-5122')).toBe(false);
       await userEvent.click(screen.getByTestId('bk-sms-attest'));
@@ -672,7 +672,7 @@ describe('SetupPage site step on v1.2 (W4-02)', () => {
       expect(text).toHaveAttribute('lang', 'tr');
       expect(screen.getByText('Önizleme · Emre ne alacak')).toBeInTheDocument();
       expect(screen.getByTestId('mgr-sms-attest')).toHaveAccessibleName(
-        'Emre, TalkOlog’dan günlük rapor mesajları almayı kabul etti',
+        'Emre, TalkOlog’dan günlük rapor mesajlarını SMS veya WhatsApp ile almayı kabul etti',
       );
       // No TRY price yet (§19 Q9): Billing's line instead of a number.
       expect(screen.getByTestId('pricing-card')).toHaveTextContent(

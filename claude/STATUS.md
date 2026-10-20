@@ -1,8 +1,15 @@
 # TalkOlog · Durum
 
+**2026-10-20 (akşam) — İlk mesaj WhatsApp'tan (§19 Q372, onayınızla).**
+
+- **Neden:** Türk operatörleri ABD numarasından gelen linkli SMS'leri teslim etmiyor (Twilio'da durum `sent`, hiç `delivered` olmuyor); ABD SMS'i kayıt bekliyor.
+- **Değişen:** Welcome ve yeni telefondaki doğrulama kodu artık WhatsApp'tan gidebiliyor (onaylı şablonla). Şablon yoksa ya da WhatsApp ulaşamazsa SMS'e düşüyor. ABD paketi de "önce WhatsApp". Ofisin onay kutusu "SMS veya WhatsApp" (`team.invite_sms.v2`). /sms, /terms, /privacy sürüm 2.
+- **WhatsApp kullanıcı kimlikleri (BSUID):** numarası gizli WhatsApp mesajları kayıtlı kişiyle eşleşiyor (`reporters.whatsapp_user_id`).
+- **Sizin adımınız:** `claude/whatsapp-templates.md` içindeki şablonları Twilio Content Template Builder'da onaya gönderin, `HX…` kimliklerini bana verin. Onaylanana kadar her şey eskisi gibi SMS ile gider.
+
 **2026-10-20 — Twilio toll-free doğrulaması için hazırlık (§19 Q371, onayınızla).**
 
-- **Panelde onay kutusu:** Team'de kişi eklerken ve kurulum sihirbazında "{isim} TalkOlog'dan günlük rapor mesajları almayı kabul etti" kutusu zorunlu. Kutu işaretlenmeden davet gitmez; sunucu da reddeder. Kayıt, ekleyen ofis kullanıcısının adı ve saatiyle audit log'a düşer (`team.invite_sms.v1`).
+- **Panelde onay kutusu:** Team'de kişi eklerken ve kurulum sihirbazında "{isim} TalkOlog'dan günlük rapor mesajları almayı kabul etti" kutusu zorunlu. Kutu işaretlenmeden davet gitmez; sunucu da reddeder. Kayıt, ekleyen ofis kullanıcısının adı ve saatiyle audit log'a düşer (`team.invite_sms.v1 (artık v2)`).
 - **Herkese açık sayfalar:** `talkolog.com/sms` (program, sözlü izin metni, örnek mesajlar), `talkolog.com/terms`, `talkolog.com/privacy`. Şirket: Yalp LLC, Wyoming, ertan@yalpllc.com. Metinler taslak; okuyup onaylamanız gerekir (mümkünse bir avukat).
 - **Fly.io test worker'ı çalışıyor (2026-10-20 11:53 UTC):** `talkolog-worker-preview` (iad, 1 makine, sürekli açık), preview projesine bağlı; `/health` dinliyor. Artık her test öncesi `preview-worker` başlatmak gerekmiyor. Worker değişince Deploy → preview → `preview-worker-fly` yeniden çalıştırılır.
 - **E-posta Resend ile (2026-10-20 12:24 UTC):** Fly worker `RESEND_API_KEY` ile yeniden kuruldu; gerçek şirketlerin e-postaları `reports@talkolog.com` adresinden gidiyor, demo şirketlerinki Demo telefonun E-posta sekmesinde kalıyor. Giriş e-postaları için Supabase Auth SMTP ayarı sizde (RUNBOOK).

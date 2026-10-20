@@ -291,7 +291,7 @@ describe('Settings → Field channels (W4-05, P12, §19 Q231, Q232)', () => {
       'Toll-free number · Not set up in this environment',
     );
     expect(row('Number to call TalkOlog')).toHaveTextContent('Talk now only');
-    expect(screen.getByTestId('channel-order')).toHaveTextContent('Notifications → SMS → WhatsApp');
+    expect(screen.getByTestId('channel-order')).toHaveTextContent('Notifications → WhatsApp → SMS');
     expect(row('Replies to texts')).toHaveTextContent('Two-way');
     expect(row('Links in texts')).toHaveTextContent('Allowed');
     // Nothing in the pack card can be edited.

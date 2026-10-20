@@ -53,13 +53,21 @@ describe('public legal pages', () => {
     expect(h1.closest('[lang="en"]')).not.toBeNull();
     expect(document.title).toBe('SMS program · TalkOlog');
     expect(screen.getByText(VERBAL_SCRIPT)).toBeInTheDocument();
-    expect(screen.getByText('<Name> agreed to get daily report texts from TalkOlog')).toBeVisible();
+    expect(
+      screen.getByText(
+        '<Name> agreed to get daily report messages from TalkOlog by text or WhatsApp',
+      ),
+    ).toBeVisible();
     expect(screen.getByText(SAMPLE_WELCOME)).toBeInTheDocument();
     expect(screen.getByText('Usually 1 to 4 messages per workday.')).toBeInTheDocument();
     expect(screen.getByText('Message and data rates may apply.')).toBeInTheDocument();
     expect(screen.getByText(/^Reply STOP to opt out\./)).toBeInTheDocument();
     expect(screen.getByText('Reply START to resume.')).toBeInTheDocument();
     expect(screen.getByText('Reply HELP for help.')).toBeInTheDocument();
+    // §19 Q372: one program on SMS and WhatsApp; STOP works on both.
+    expect(screen.getByText(/^TalkOlog sends these messages by SMS or by WhatsApp/)).toBeVisible();
+    expect(screen.getByText(/^On WhatsApp, STOP works the same way/)).toBeVisible();
+    expect(VERBAL_SCRIPT).toContain('TalkOlog will text you or message you on WhatsApp');
     expect(
       screen.getByText('Carriers are not liable for delayed or undelivered messages.'),
     ).toBeInTheDocument();
@@ -78,13 +86,13 @@ describe('public legal pages', () => {
     expect(SAMPLE_WELCOME.endsWith(smsReplyHintEn)).toBe(true);
   });
 
-  it('/terms: Yalp LLC, Wyoming, the SMS terms, version 1', async () => {
+  it('/terms: Yalp LLC, Wyoming, the SMS terms, version 2', async () => {
     renderSignedOut('/terms');
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Terms of Service' }),
     ).toBeVisible();
     expect(document.title).toBe('Terms of Service · TalkOlog');
-    expect(screen.getByText('Yalp LLC · Effective: 2026-10-20 · Version 1')).toBeInTheDocument();
+    expect(screen.getByText('Yalp LLC · Effective: 2026-10-20 · Version 2')).toBeInTheDocument();
     expect(screen.getByText(/Yalp LLC, a Wyoming \(USA\) limited liability company/)).toBeVisible();
     expect(screen.getByRole('heading', { level: 2, name: '4. SMS messaging terms' })).toBeVisible();
     expect(screen.getByRole('heading', { level: 2, name: '14. Governing law' })).toBeVisible();
@@ -99,7 +107,7 @@ describe('public legal pages', () => {
     renderSignedOut('/privacy');
     expect(await screen.findByRole('heading', { level: 1, name: 'Privacy Policy' })).toBeVisible();
     expect(document.title).toBe('Privacy Policy · TalkOlog');
-    expect(screen.getByText('Yalp LLC · Effective: 2026-10-20 · Version 1')).toBeInTheDocument();
+    expect(screen.getByText('Yalp LLC · Effective: 2026-10-20 · Version 2')).toBeInTheDocument();
     expect(
       screen.getByText(
         `${NO_SHARING} Text messaging originator opt-in data and consent will not be shared with any third parties.`,

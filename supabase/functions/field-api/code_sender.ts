@@ -8,13 +8,16 @@ import {
 import type { SendDailyLink, SendVerifyCode, VerifyCodeMessage } from './app.ts';
 
 /**
- * `device/send-code` (F4 step 2) through the Notifier (spec §4.5; W1-08): `verify_code` goes by
- * SMS whatever the channel order (SMS_ONLY_KEYS), with or without an SMS consent (the person asks
- * for it; a consent declined at F4 or turned off in Settings does not stop it:
- * CONSENT_FREE_SMS_KEYS, spec §19 Q25, W2-02) but never after an opt-out, in the reporter's
- * language, through the pack's
- * driver (`pickMessageTransport`: the pack's provider once its sender id is set here, else
- * `console`). The Notifier writes the `messages` row and its audit.
+ * `device/send-code` (F4 step 2) through the Notifier (spec §4.5; W1-08): `verify_code` follows
+ * the person's channel order kept to SMS and WhatsApp (spec §19 Q372: WhatsApp by its
+ * authentication template where the pack orders it first and the template is approved here, else
+ * SMS, which every order ends with for this key), with or without the channel's consent (the
+ * person asks for it; a consent declined at F4 or turned off in Settings does not stop it:
+ * `CONSENT_FREE_KEYS`, spec §19 Q25, W2-02) but never after an opt-out (SMS STOP; on WhatsApp a
+ * revoked WhatsApp consent, which is what its STOP records), in the reporter's language, through
+ * the pack's driver (`pickMessageTransport`: the pack's provider once its sender is set here, else
+ * `console`). A WhatsApp refusal for good falls back to SMS (§19 Q22). The Notifier writes the
+ * `messages` row and its audit.
  *
  * Demo orgs only get a console code (the Demo phone shows it): `console` on a real org reaches no
  * phone and the stored text would hand the office the reporter's code, so the Notifier answers

@@ -29,6 +29,7 @@ import type {
   JobRow,
   JobType,
   MessageRow,
+  LastWhatsappOutbound,
   MsgStatus,
   MsgType,
   OutboundMessageRow,
@@ -967,6 +968,11 @@ export interface Db {
    * start of its 24-hour window there. Console (Demo phone) rows and other senders never count.
    */
   lastInboundWhatsapp(phone: string, sender: string): Promise<string | null>;
+  /**
+   * §19 Q372: the latest outbound WhatsApp message Twilio took for the phone (provider twilio),
+   * its status and when, or null (`whatsappFailedSinceInbound`).
+   */
+  lastOutboundWhatsapp(phone: string): Promise<LastWhatsappOutbound | null>;
   insertSmsMessage(row: OutboundMessageRow): Promise<void>;
   updateSmsMessage(
     id: string,
@@ -2182,6 +2188,23 @@ export function createDb(sql: Sql): Db {
         order by created_at desc limit 1`;
       const at = rows[0]?.at;
       return at === undefined ? null : new Date(at).toISOString();
+    },
+    async lastOutboundWhatsapp(phone) {
+      const rows = await sql<
+        Array<{ status: MsgStatus; provider_message_id: string | null; at: Date | string }>
+      >`
+        select status, provider_message_id, created_at as at from messages
+        where phone_e164 = ${phone} and channel = 'whatsapp' and direction = 'out'
+          and provider = 'twilio'
+        order by created_at desc limit 1`;
+      const row = rows[0];
+      return row
+        ? {
+            status: row.status,
+            provider_message_id: row.provider_message_id,
+            created_at: new Date(row.at).toISOString(),
+          }
+        : null;
     },
     async pushSubscriptionGone(id, status) {
       const rows = await sql<

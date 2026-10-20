@@ -80,8 +80,9 @@ describe('the channel order a message walks (§4.5)', () => {
     expect(order(noLinks, 'site_paused')).toEqual(['sms', 'whatsapp']);
   });
 
-  it('keeps the device code on SMS whatever the order', () => {
-    expect(order(WA_THEN_SMS, 'verify_code')).toEqual(['sms']);
+  it('sends the device code on the order kept to SMS and WhatsApp (§19 Q372)', () => {
+    expect(order(WA_THEN_SMS, 'verify_code')).toEqual(['whatsapp', 'sms']);
+    expect(order(SMS_THEN_WA, 'verify_code')).toEqual(['sms', 'whatsapp']);
   });
 });
 

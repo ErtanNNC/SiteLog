@@ -29,7 +29,13 @@ export interface FakeMessaging {
   waSent: URLSearchParams[];
 }
 
-export function fakeMessaging(opts: { fail?: Error } = {}): FakeMessaging {
+export function fakeMessaging(
+  opts: {
+    fail?: Error;
+    /** The person's last inbound WhatsApp message (the 24-hour window); default: just now. */
+    lastInbound?: string | null;
+  } = {},
+): FakeMessaging {
   const rows: OutboundMessageRow[] = [];
   const audits: NotifierAuditEntry[] = [];
   const sent: FakeMessaging['sent'] = [];
@@ -99,8 +105,9 @@ export function fakeMessaging(opts: { fail?: Error } = {}): FakeMessaging {
     },
     twilio: () => ({ accountSid: 'AC1', authToken: 'tok' }),
     statusCallbackUrl: null,
-    // The message being answered opened the window.
-    lastInbound: () => Promise.resolve(new Date().toISOString()),
+    // The message being answered opened the window, unless a test closes it.
+    lastInbound: () =>
+      Promise.resolve(opts.lastInbound === undefined ? new Date().toISOString() : opts.lastInbound),
     randomUUID: () => crypto.randomUUID(),
   });
   const notifier = createNotifier({

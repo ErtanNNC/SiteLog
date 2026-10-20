@@ -679,7 +679,11 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
       const check = registrationOf(channel).reachable;
       if (!check || (await check(recipient, key))) reachable.push(channel);
     }
-    if (reachable.length === 0) return skip(recipient, key, 'no_channel');
+    if (reachable.length === 0) {
+      // Nothing left but channels that cannot carry the key here (§19 Q372: WhatsApp with no
+      // sender or template): an SMS opt-out is still why the person gets nothing.
+      return skip(recipient, key, reporter.status === 'opted_out' ? 'opted_out' : 'no_channel');
+    }
     order = reachable;
     if (!org.isDemo) {
       // Spec §19 Q84 (W2-15): a channel with no sender in this environment leaves a real org's

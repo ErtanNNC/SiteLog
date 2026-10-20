@@ -256,6 +256,11 @@ export type ReporterRow = {
   message_channel: MessageChannel | null;
   /** §19 Q129 (W3-14): no automated calls until this instant ("not today"). */
   no_calls_until: string | null;
+  /**
+   * §19 Q372 (20261020000200): the person's WhatsApp business-scoped user id (`CC.<id>`, without
+   * `whatsapp:`), learned by sms-webhook; service role only. Never logged, never sent to a model.
+   */
+  whatsapp_user_id: string | null;
 };
 
 export type SiteReporterRow = {
@@ -1198,6 +1203,7 @@ export type Database = {
         | 'opted_out_at'
         | 'message_channel'
         | 'no_calls_until'
+        | 'whatsapp_user_id'
       >;
       consents: Table<ConsentRow, 'id' | 'evidence' | 'given_at' | 'revoked_at'>;
       field_links: Table<
@@ -2172,6 +2178,11 @@ export type Database = {
       /** W2-16 (20261016000240): STOP / START on WhatsApp, the whatsapp consent (service role). */
       inbound_whatsapp_consent: {
         Args: { p_reporter_id: string; p_grant: boolean; p_message_id: string | null };
+        Returns: Json;
+      };
+      // §19 Q372 (20261020000200): a WhatsApp user id onto the number's reporters (service role).
+      record_whatsapp_user_id: {
+        Args: { p_phone_e164: string; p_user_id: string };
         Returns: Json;
       };
       claim_jobs: { Args: { p_worker: string; p_limit: number }; Returns: JobRow[] };

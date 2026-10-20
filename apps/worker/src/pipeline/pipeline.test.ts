@@ -17,7 +17,7 @@ import { PermanentJobError } from '../jobs/types';
 import { buildReportPdfInput, versionSignedOff } from '../pdf/render';
 import { postProcessExtraction } from '../ai/extract';
 import { compareReport, loadFixture } from '../ai/eval';
-import { createWorkerNotifier } from '../messaging';
+import { createWorkerNotifier, workerWhatsappRegistration } from '../messaging';
 import {
   createHarness,
   ORG_ID,
@@ -849,6 +849,12 @@ describe('jobs: welcome, template, retention', () => {
   it('send_welcome texts the welcome with the personal link: a demo org through console', async () => {
     const h = createHarness();
     h.db.data.orgs.get(h.org.id)!.is_demo = true;
+    // A pack that orders SMS first (the US pack orders WhatsApp first since §19 Q372).
+    h.db.data.countries.find((c) => c.code === 'US')!.message_channels = [
+      'push',
+      'sms',
+      'whatsapp',
+    ];
     const marco = h.db.data.reporters.get(h.marco.id)!;
     marco.status = 'invited';
     marco.invited_at = null;
@@ -891,6 +897,100 @@ describe('jobs: welcome, template, retention', () => {
     await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
     expect(h.sms).toHaveLength(1);
     expect(h.db.data.fieldLinks).toHaveLength(1);
+  });
+
+  it('§19 Q372: a demo org on the US order gets the welcome on WhatsApp (console, the Demo phone)', async () => {
+    const h = createHarness();
+    h.db.data.orgs.get(h.org.id)!.is_demo = true;
+    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.sms).toEqual([]);
+    const [message] = [...h.db.data.messages.values()];
+    expect(message).toMatchObject({
+      channel: 'whatsapp',
+      copy_key: 'welcome',
+      provider: 'console',
+      status: 'delivered',
+    });
+    expect(message!.body).toMatch(
+      /^Hi Marco, I'm TalkOlog.* - Reply STOP to opt out, HELP for help$/,
+    );
+    expect(h.db.data.audit.find((a) => a.action === 'reporter.invited')).toMatchObject({
+      diff: { channel: 'whatsapp' },
+    });
+  });
+
+  it('§19 Q372: a real org sends the welcome by its WhatsApp template, and by SMS without one', async () => {
+    const SID = `HX${'b'.repeat(32)}`;
+    const h = createHarness();
+    const us = h.db.data.countries.find((c) => c.code === 'US')!;
+    us.sms_sender_id = '+18885550142';
+    us.whatsapp_sender_id = '+17752628262';
+    us.whatsapp_templates = { welcome: { en: SID } };
+    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
+    const forms: URLSearchParams[] = [];
+    const config = { ...h.ctx.config, TWILIO_ACCOUNT_SID: 'AC1', TWILIO_AUTH_TOKEN: 'tok' };
+    const smsSent: string[] = [];
+    h.ctx.notifier = createWorkerNotifier(
+      config,
+      h.db,
+      () => ({
+        driver: 'twilio',
+        send: (_to, body) => {
+          smsSent.push(body);
+          return Promise.resolve({ providerId: 'SMs1' });
+        },
+      }),
+      () => new Date('2026-10-20T15:00:00Z'),
+      [
+        workerWhatsappRegistration(config, h.db, ((_url: string, init: RequestInit) => {
+          forms.push(new URLSearchParams(String(init.body)));
+          return Promise.resolve(new Response(JSON.stringify({ sid: 'SMwa1' }), { status: 201 }));
+        }) as typeof fetch),
+      ],
+    );
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(forms).toHaveLength(1);
+    expect(forms[0]!.get('From')).toBe('whatsapp:+17752628262');
+    expect(forms[0]!.get('To')).toBe(`whatsapp:${PHONE_MARCO}`);
+    expect(forms[0]!.get('ContentSid')).toBe(SID);
+    const vars = JSON.parse(forms[0]!.get('ContentVariables')!) as Record<string, string>;
+    expect(vars['1']).toBe('Marco');
+    expect(vars['5']).toMatch(/^https:\/\/go\.talkolog\.com\/r\/[A-Z0-9]{12}$/);
+    expect(smsSent).toEqual([]);
+    const [message] = [...h.db.data.messages.values()];
+    expect(message).toMatchObject({ channel: 'whatsapp', provider: 'twilio', status: 'sent' });
+    expect(message!.body).toContain(`/r/${MASKED_CODE}`);
+    expect(h.db.data.reporters.get(h.marco.id)!.invited_at).not.toBeNull();
+    // The check of the WhatsApp welcome, 10 min on (the number may not be on WhatsApp).
+    const recheck = [...h.db.data.jobs.values()].find(
+      (j) => j.type === 'send_welcome' && (j.payload as { recheck?: unknown }).recheck,
+    );
+    expect(recheck).toMatchObject({
+      dedupe_key: 'welcome_recheck:send_welcome:0',
+      payload: { recheck: { messageKey: 'send_welcome:0', messageId: message!.id } },
+    });
+    // Still on its way: the check sends nothing.
+    await h.runJob('send_welcome', recheck!.payload);
+    expect([forms.length, smsSent.length]).toEqual([1, 0]);
+    // Twilio failed it late (63003, not a WhatsApp user): the check hands it to SMS, once.
+    Object.assign(message!, { status: 'failed', error: 'twilio failed 63003' });
+    await h.runJob('send_welcome', recheck!.payload);
+    await h.runJob('send_welcome', recheck!.payload);
+    expect(forms).toHaveLength(1);
+    expect(smsSent).toHaveLength(1);
+    expect(smsSent[0]).toMatch(/^Hi Marco, I'm TalkOlog/);
+    expect(h.db.data.audit.filter((a) => a.action === 'reporter.welcome_fallback')).toEqual([
+      expect.objectContaining({ diff: expect.objectContaining({ channel: 'sms' }) }),
+    ]);
+    smsSent.length = 0;
+    // Jorge speaks Spanish: no approved Spanish welcome, so SMS carries it.
+    h.db.data.reporters.get(h.jorge.id)!.status = 'invited';
+    h.db.data.reporters.get(h.jorge.id)!.locale = 'es-US';
+    await h.runJob('send_welcome', { reporterId: h.jorge.id, siteId: SITE_RIVERSIDE });
+    expect(forms).toHaveLength(1);
+    expect(smsSent).toHaveLength(1);
+    expect(smsSent[0]).toMatch(/^Hola Jorge/);
   });
 
   it("send_welcome on a real org: the pack's provider and sender, the link masked in messages", async () => {
@@ -1318,7 +1418,7 @@ describe('jobs: welcome, template, retention', () => {
       expect.objectContaining({
         kind: 'reporter_invite_failed',
         title: 'Marco Ruiz: the welcome text was not sent',
-        body: expect.stringMatching(/no SMS sender is set for its country pack/),
+        body: expect.stringMatching(/no SMS or WhatsApp sender is set for its country pack/),
       }),
     ]);
   });

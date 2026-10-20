@@ -225,7 +225,7 @@ describeInvite('api-invite-reporter on the local stack', () => {
       contact_pref: 'link',
       status: 'invited',
       phone_opted_out: false,
-      sms_attestation: 'team.invite_sms.v1',
+      sms_attestation: 'team.invite_sms.v2',
     });
 
     const jobs = await sql<

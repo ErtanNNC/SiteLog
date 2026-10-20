@@ -62,7 +62,7 @@ export const uiEs: UiResources = {
     },
     device: {
       title: '¿Este es el teléfono de {{name}}?',
-      body: 'Enviamos un código de 6 dígitos al número que nos dio la oficina, para que solo usted pueda reportar desde aquí.',
+      body: 'Enviamos un código de 6 dígitos por SMS o WhatsApp al número que nos dio la oficina, para que solo usted pueda reportar desde aquí.',
       send: 'Sí, envíenme un código',
       sending: 'Enviando el código…',
       sent: 'Código enviado. Vence en 10 minutos.',
@@ -76,7 +76,7 @@ export const uiEs: UiResources = {
         code_expired: 'Ese código venció. Pida uno nuevo.',
         no_code: 'Primero pida un código.',
         code_undeliverable:
-          'No pudimos enviar un mensaje a este número. Pida a la oficina que lo revise.',
+          'No pudimos enviar un SMS ni un WhatsApp a este número. Pida a la oficina que lo revise.',
         rate_limited: 'Demasiados intentos. Intente de nuevo en {{minutes}} min.',
         offline: 'Sin conexión. Revise su señal e intente de nuevo.',
         generic: 'Algo salió mal. Intente de nuevo.',

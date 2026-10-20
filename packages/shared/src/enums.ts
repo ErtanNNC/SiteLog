@@ -185,12 +185,14 @@ export function isActiveReporterStatus(status: string): boolean {
 
 /**
  * Owner decision 2026-10-20 (Twilio toll-free verification, opt-in type "Verbal"): the office
- * attests that a person it adds agreed to get daily report texts from TalkOlog. This is the
+ * attests that a person it adds agreed to get daily report messages from TalkOlog. This is the
  * attestation's wording version, kept in the `reporter.invited` audit entry (`sms_attestation`)
- * with the office user as its actor. It is not a `consents` row: the reporter's own SMS consent is
- * still asked in the field app.
+ * with the office user as its actor. It is not a `consents` row: the reporter's own SMS and
+ * WhatsApp consents are still asked in the field app. v1 named texts only; v2 (spec §19 Q372, the
+ * same day) "by text or WhatsApp", since the welcome and the device code may go by WhatsApp: it is
+ * the opt-in for that first message on either channel (`PRE_CONSENT_KEYS`).
  */
-export const INVITE_SMS_ATTESTATION = 'team.invite_sms.v1';
+export const INVITE_MESSAGES_ATTESTATION = 'team.invite_sms.v2';
 
 /** A version the site manager wrote (§6.2 `reporter`), not the agent or the office. */
 export function isReporterAuthor(author: string): boolean {

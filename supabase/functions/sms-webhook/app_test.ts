@@ -1054,3 +1054,133 @@ Deno.test(
     );
   },
 );
+
+// ── §19 Q372: WhatsApp business-scoped user ids (Meta's usernames, 2026) ──────────────────────────
+
+const BSUID = 'TR.968122199252486';
+
+/** Runs `fn` with console output captured: the lines it logged. */
+async function captureLogs(fn: () => Promise<void>): Promise<string> {
+  const lines: string[] = [];
+  const saved = { log: console.log, warn: console.warn, error: console.error };
+  const keep = (...a: unknown[]) => void lines.push(a.map(String).join(' '));
+  console.log = keep;
+  console.warn = keep;
+  console.error = keep;
+  try {
+    await fn();
+  } finally {
+    Object.assign(console, saved);
+  }
+  return lines.join('\n');
+}
+
+Deno.test(
+  'Q372: a WhatsApp message with the number and ExternalUserId records the id on the reporter',
+  async () => {
+    const h = setupWa();
+    const logs = await captureLogs(async () => {
+      const res = await h.twilio(
+        '',
+        wa('+905321234567', 'OK', {
+          ExternalUserId: `whatsapp:${BSUID}`,
+          ParentExternalUserId: `whatsapp:${BSUID}`,
+        }),
+      );
+      assertEquals([res.status, await res.text()], [200, EMPTY_TWIML]);
+    });
+    const emre = h.store.reporters.find((r) => r.id === EMRE)!;
+    assertEquals(emre.whatsappUserId, BSUID);
+    assertEquals(h.store.inbound[0]!.phone_e164, '+905321234567');
+    const set = h.store.audits.filter((a) => a.action === 'reporter.whatsapp_user_id_set');
+    assertEquals(
+      set.map((a) => a.entityId),
+      [EMRE],
+    );
+    // The id is never logged nor audited.
+    assert(!logs.includes('968122199252486'));
+    assert(!JSON.stringify(h.store.audits).includes('968122199252486'));
+    // The same id again changes nothing.
+    await h.twilio('', wa('+905321234567', 'OK', { ExternalUserId: `whatsapp:${BSUID}` }));
+    assertEquals(
+      h.store.audits.filter((a) => a.action === 'reporter.whatsapp_user_id_set').length,
+      1,
+    );
+    // A malformed id is ignored; the message is handled by the number as before.
+    await h.twilio('', wa('+905321234567', 'HELP', { ExternalUserId: 'whatsapp:tr.12' }));
+    assertEquals([h.store.inbound.length, emre.whatsappUserId], [3, BSUID]);
+  },
+);
+
+Deno.test(
+  "Q372: a WhatsApp message from the user id only is the reporter's, as if from their number (STOP)",
+  async () => {
+    const h = setupWa();
+    h.store.reporters.find((r) => r.id === EMRE)!.whatsappUserId = BSUID;
+    const params = wa(BSUID, 'STOP', {
+      ExternalUserId: `whatsapp:${BSUID}`,
+      ParentExternalUserId: `whatsapp:${BSUID}`,
+    });
+    const logs = await captureLogs(async () => {
+      const res = await h.twilio('', params);
+      assertEquals([res.status, await res.text()], [200, EMPTY_TWIML]);
+    });
+    const [inbound] = h.store.inbound;
+    assertEquals(
+      [inbound!.channel, inbound!.phone_e164, inbound!.reporter_id, inbound!.org_id],
+      ['whatsapp', '+905321234567', EMRE, DEMIR],
+    );
+    assertEquals(inbound!.payload.keyword, 'stop');
+    assertEquals(inbound!.payload.pack, 'TR');
+    // The worker's sms_inbound job runs STOP on the number, as for any WhatsApp message.
+    assertEquals(h.store.jobs, [
+      { id: 1, messageId: inbound!.id, dedupeKey: `sms_inbound:${params.MessageSid}` },
+    ]);
+    assert(!logs.includes('968122199252486'));
+    // Nothing to record: the message had no number.
+    assertEquals(
+      h.store.audits.filter((a) => a.action.startsWith('reporter.whatsapp_user_id')),
+      [],
+    );
+  },
+);
+
+Deno.test(
+  'Q372: an id seen with a new number moves to it; the old number no longer answers to it',
+  async () => {
+    const h = setupWa();
+    h.store.reporters.find((r) => r.id === EMRE)!.whatsappUserId = BSUID;
+    await h.twilio('', wa('+905329876543', 'OK', { ExternalUserId: `whatsapp:${BSUID}` }));
+    assertEquals(h.store.reporters.find((r) => r.id === EMRE)!.whatsappUserId, null);
+    assertEquals(
+      h.store.audits
+        .filter((a) => a.action === 'reporter.whatsapp_user_id_cleared')
+        .map((a) => a.entityId),
+      [EMRE],
+    );
+  },
+);
+
+Deno.test(
+  'Q372: a user id no reporter has: 200, audited without the id, nothing stored or sent',
+  async () => {
+    const h = setupWa();
+    // A demo org's reporter with the id never matches a real sender.
+    h.store.reporters.find((r) => r.id === MARCO)!.whatsappUserId = BSUID;
+    const logs = await captureLogs(async () => {
+      const res = await h.twilio('', wa(BSUID, 'Hello', { ExternalUserId: `whatsapp:${BSUID}` }));
+      assertEquals([res.status, await res.text()], [200, EMPTY_TWIML]);
+    });
+    assertEquals([h.store.inbound, h.store.jobs, h.store.unknown], [[], [], []]);
+    assertEquals([h.messaging.sent, h.messaging.waSent], [[], []]);
+    const unmatched = h.store.audits.filter((a) => a.action === 'whatsapp.inbound_unmatched');
+    assertEquals(unmatched.length, 1);
+    assertEquals([unmatched[0]!.orgId, unmatched[0]!.entityId], [null, null]);
+    assert(!JSON.stringify(h.store.audits).includes('968122199252486'));
+    assert(!logs.includes('968122199252486'));
+    // A malformed id in From is no message at all.
+    const bad = await h.twilio('', wa('TR.12-34', 'Hello'));
+    assertEquals(bad.status, 200);
+    assertEquals(h.store.inbound, []);
+  },
+);

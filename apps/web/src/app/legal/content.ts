@@ -80,9 +80,15 @@ export function sampleText(text: string): string {
 export const SAMPLE_WELCOME = sampleText(smsEn.welcome.withoutNumber + smsReplyHintEn);
 
 export const VERBAL_SCRIPT =
-  'We use TalkOlog for daily site reports. If you agree, TalkOlog will text you on behalf of [Company name] about your daily report for [Site]: your daily report link, up to two reminders if the report is missing, a question if something is unclear, and a confirmation when the report is filed. Usually 1 to 4 texts per workday. Message and data rates may apply. You can reply HELP for help or STOP to opt out at any time. Our terms are at talkolog.com/terms and our privacy policy at talkolog.com/privacy. Do you agree to receive these texts from TalkOlog at this number? Yes or no?';
+  'We use TalkOlog for daily site reports. If you agree, TalkOlog will text you or message you on WhatsApp on behalf of [Company name] about your daily report for [Site]: your daily report link, up to two reminders if the report is missing, a question if something is unclear, and a confirmation when the report is filed. Usually 1 to 4 messages per workday. Message and data rates may apply. You can reply HELP for help or STOP to opt out at any time. Our terms are at talkolog.com/terms and our privacy policy at talkolog.com/privacy. Do you agree to receive these messages from TalkOlog at this number? Yes or no?';
 
-export const OPT_IN_CHECKBOX = '<Name> agreed to get daily report texts from TalkOlog';
+/** The panel's required box (`team.invite.smsAttest`, version `team.invite_sms.v2`). */
+export const OPT_IN_CHECKBOX =
+  '<Name> agreed to get daily report messages from TalkOlog by text or WhatsApp';
+
+/** §19 Q372: the program's messages go by SMS or WhatsApp. */
+const CHANNELS =
+  'TalkOlog sends these messages by SMS or by WhatsApp, as one program: the same messages, at the same frequency, from the same TalkOlog number. A message may come on WhatsApp first and by SMS when WhatsApp cannot reach you.';
 
 const FREQUENCY = 'Usually 1 to 4 messages per workday.';
 const RATES = 'Message and data rates may apply.';
@@ -107,9 +113,9 @@ const sms: LegalDoc = {
   title: 'TalkOlog SMS program',
   documentTitle: 'SMS program · TalkOlog',
   effective: EFFECTIVE,
-  version: 1,
+  version: 2,
   intro: [
-    `TalkOlog is a service of ${COMPANY}. This page describes the text messages TalkOlog sends to field staff in the United States, how people agree to receive them and how to stop them.`,
+    `TalkOlog is a service of ${COMPANY}. This page describes the text messages TalkOlog sends to field staff in the United States, by SMS or WhatsApp, how people agree to receive them and how to stop them.`,
   ],
   sections: [
     {
@@ -146,7 +152,7 @@ const sms: LegalDoc = {
           'The number cannot be added without that box. TalkOlog records the agreement with the office manager’s name and the time it was given.',
         ),
         p(
-          'The first text identifies TalkOlog and the employer and says how to opt out and get help:',
+          'The first message identifies TalkOlog and the employer and says how to opt out and get help:',
         ),
         { type: 'quote', label: 'Sample first message', text: SAMPLE_WELCOME },
         p(
@@ -159,6 +165,7 @@ const sms: LegalDoc = {
       heading: 'Messages you may receive',
       blocks: [
         ul(...MESSAGE_TYPES),
+        p(CHANNELS),
         p(
           'The same program also sends the replies to your HELP, STOP, START, CALL or TEXT messages and short service notes about your report, such as a confirmation when a change to a filed report is saved. All texts are about your daily site report.',
         ),
@@ -184,6 +191,7 @@ const sms: LegalDoc = {
           'Reply STOP to opt out. You will get one confirmation and no further texts.',
           'Reply START to resume.',
           'Reply HELP for help.',
+          'On WhatsApp, STOP works the same way: reply STOP to the TalkOlog chat and TalkOlog sends you no further WhatsApp messages.',
         ),
         { type: 'quote', label: 'Reply to STOP', text: sampleText(smsEn.stop_confirm) },
         { type: 'quote', label: 'Reply to HELP', text: sampleText(smsEn.help.withoutNumber) },
@@ -214,7 +222,7 @@ const termsDoc: LegalDoc = {
   title: 'Terms of Service',
   documentTitle: 'Terms of Service · TalkOlog',
   effective: EFFECTIVE,
-  version: 1,
+  version: 2,
   intro: [
     `These terms govern the use of TalkOlog, a service operated by ${COMPANY}, a Wyoming (USA) limited liability company (“we”, “us”). By creating an account, using the TalkOlog panel or the field app, or receiving TalkOlog messages, you agree to them.`,
   ],
@@ -256,7 +264,7 @@ const termsDoc: LegalDoc = {
       heading: '4. SMS messaging terms',
       blocks: [
         p(
-          'TalkOlog texts field users on behalf of their employer about their daily site report. The messages are:',
+          'TalkOlog texts field users, by SMS or WhatsApp, on behalf of their employer about their daily site report. The messages are:',
         ),
         ul(...MESSAGE_TYPES),
         p(FREQUENCY, ' ', RATES),
@@ -382,7 +390,7 @@ const privacyDoc: LegalDoc = {
   title: 'Privacy Policy',
   documentTitle: 'Privacy Policy · TalkOlog',
   effective: EFFECTIVE,
-  version: 1,
+  version: 2,
   intro: [
     `This policy explains how ${COMPANY}, a Wyoming (USA) limited liability company, handles personal information in TalkOlog. TalkOlog is used by employers (our customers) for the daily reports of their construction sites. For the data of field workers, the employer decides why it is collected and we process it on the employer’s behalf.`,
   ],
@@ -464,7 +472,7 @@ const privacyDoc: LegalDoc = {
       heading: 'Text messages',
       blocks: [
         p(
-          'Field workers receive TalkOlog texts only after agreeing to them with their employer (see our ',
+          'Field workers receive TalkOlog texts (SMS or WhatsApp) only after agreeing to them with their employer (see our ',
           smsPage,
           '). Reply STOP to opt out and HELP for help.',
         ),

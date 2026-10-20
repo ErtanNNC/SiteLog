@@ -79,8 +79,8 @@ export const uiEn = {
     /** Device check (F4 step 2): new phones only. */
     device: {
       title: 'Is this {{name}}’s phone?',
-      body: 'We text a 6-digit code to the number the office gave us, so only you can report from here.',
-      send: 'Yes, text me a code',
+      body: 'We send a 6-digit code by text or WhatsApp to the number the office gave us, so only you can report from here.',
+      send: 'Yes, send me a code',
       sending: 'Sending the code…',
       sent: 'Code sent. It expires in 10 minutes.',
       codeLabel: '6-digit code',
@@ -93,7 +93,8 @@ export const uiEn = {
         code_invalid: 'That code isn’t right. Tries left: {{attemptsLeft}}.',
         code_expired: 'That code has expired. Ask for a new one.',
         no_code: 'Ask for a code first.',
-        code_undeliverable: 'We couldn’t text this number. Ask the office to check it.',
+        code_undeliverable:
+          'We couldn’t reach this number by text or WhatsApp. Ask the office to check it.',
         rate_limited: 'Too many tries. Try again in {{minutes}} min.',
         offline: 'No connection. Check your signal and try again.',
         generic: 'Something went wrong. Try again.',
@@ -738,7 +739,7 @@ export const uiEn = {
       signOut: 'Sign out this phone',
       signOutSheet: {
         title: 'Sign out this phone?',
-        body: 'To report from this phone again, open your link and enter a new code we text you.',
+        body: 'To report from this phone again, open your link and enter a new code we send you.',
         confirm: 'Sign out',
         cancel: 'Cancel',
       },

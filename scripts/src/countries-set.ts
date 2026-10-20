@@ -282,9 +282,12 @@ export function describeWhatsappTemplates(row: PackEndpoints): string[] {
   return whatsappTemplatesFor({
     voiceNumber: row.voice_number === null ? null : assertE164(row.voice_number),
     fieldLocales: row.field_locales,
-  }).map(({ key, language, body, variables }) => {
+  }).map(({ key, language, body, variables, category, footer }) => {
     const sid = set[key]?.[language];
-    return `${key}.${language} [${variables.map((v, i) => `{{${i + 1}}}=${v}`).join(', ')}]${sid ? ` (${sid})` : ' (not set)'}: ${body}`;
+    // §19 Q372: the device code is an Authentication template (Meta's fixed text, a copy-code
+    // button); every other key is Utility.
+    const kind = category === 'authentication' ? ' AUTHENTICATION' : '';
+    return `${key}.${language}${kind} [${variables.map((v, i) => `{{${i + 1}}}=${v}`).join(', ')}]${sid ? ` (${sid})` : ' (not set)'}: ${body}${footer ? ` [footer: ${footer}]` : ''}`;
   });
 }
 

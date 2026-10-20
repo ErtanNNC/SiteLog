@@ -93,6 +93,7 @@ function reporter(
     opted_out_at: null,
     message_channel: null,
     no_calls_until: null,
+    whatsapp_user_id: null,
     ...extra,
   };
 }

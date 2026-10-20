@@ -64,8 +64,12 @@ describe('a revoked sms consent (F15 Settings)', () => {
     );
     expect(skipped!.diff).toMatchObject({ copy_key: 'daily_link', reason: 'no_consent' });
 
+    // Consent-free: on the US order (WhatsApp first since §19 Q372; console for this demo org).
     const code = await n.send(MARCO, 'verify_code', { code: '042917' });
-    expect(code.channel).toBe('sms');
+    expect(code.channel).toBe('whatsapp');
+    expect(
+      (await n.send(MARCO, 'verify_code', { code: '042918' }, { channels: ['sms'] })).channel,
+    ).toBe('sms');
   });
 
   it('Turn on (spec §19 Q86) brings texts back; an opted-out phone stays opted out', async () => {

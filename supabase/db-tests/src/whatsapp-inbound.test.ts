@@ -191,13 +191,13 @@ describe('field_answer_question with the answer’s channel (§19 Q26)', () => {
 });
 
 describe('the real channel orders (§19 Q19, Q107)', () => {
-  it('US SMS then WhatsApp, TR WhatsApp then SMS, push first in both', async () => {
+  it('WhatsApp then SMS in both packs since §19 Q372 (US was SMS first), push first in both', async () => {
     const rows = await db.query<{ code: string; message_channels: string }>(
       `select code, message_channels::text from countries order by code`,
     );
     expect(rows.rows).toEqual([
       { code: 'TR', message_channels: '{push,whatsapp,sms}' },
-      { code: 'US', message_channels: '{push,sms,whatsapp}' },
+      { code: 'US', message_channels: '{push,whatsapp,sms}' },
     ]);
   });
 });

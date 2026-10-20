@@ -182,6 +182,7 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
     // null = the country pack's order (§4.5); a preference comes with week 2.
     message_channel: null,
     no_calls_until: null,
+    whatsapp_user_id: null,
   }));
 
   const siteReporters = SITES.map((s) => ({

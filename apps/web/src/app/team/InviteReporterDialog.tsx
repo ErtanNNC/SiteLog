@@ -52,7 +52,7 @@ interface Props {
 /**
  * P10 "Invite reporter": name, mobile (W4-01's picker and warning), role, sites, the languages they
  * speak, the language TalkOlog uses with them and the preferred channel (W4-03) → the welcome
- * text (F3, by SMS, §19 Q25). The office attests the person agreed to get daily report texts
+ * text (F3, by SMS, §19 Q25). The office attests the person agreed to get daily report messages (text or WhatsApp)
  * (owner decision 2026-10-20); the invite cannot be sent without it.
  */
 export function InviteReporterDialog({

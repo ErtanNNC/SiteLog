@@ -8,7 +8,9 @@ import {
 import type { E164 } from '../format.ts';
 import { languageOf } from '../locale.ts';
 import { isServiceWindowOpen } from '../messaging/window.ts';
+import type { MsgStatus } from '../enums.ts';
 import type { ChannelRegistration } from '../notify/notifier.ts';
+import { attemptIsFinal } from '../notify/walk.ts';
 import { TWILIO_API_BASE, type FetchLike, type TwilioCredentials } from '../sms/transports.ts';
 import {
   isWhatsappKey,
@@ -81,6 +83,13 @@ export interface WhatsappTransportDeps {
    */
   lastInbound(phone: E164, sender: string): Promise<string | null>;
   now?: () => Date;
+}
+
+/** The latest outbound WhatsApp message Twilio took for a phone (`lastOutbound`). */
+export interface LastWhatsappOutbound {
+  status: MsgStatus;
+  provider_message_id: string | null;
+  created_at: string;
 }
 
 function refusal(
@@ -215,6 +224,26 @@ export interface WhatsappRegistrationDeps extends WhatsappTransportDeps {
   randomUUID: () => string;
   /** Tests point the driver at a mock server. */
   apiBase?: string;
+  /**
+   * §19 Q372: the latest outbound Twilio WhatsApp message to the phone (`messages`, channel
+   * whatsapp, out, provider twilio), or null. Optional: without it the check below is skipped.
+   */
+  lastOutbound?(phone: E164): Promise<LastWhatsappOutbound | null>;
+}
+
+/**
+ * Whether the person's latest WhatsApp message failed for good after Twilio took it (a late
+ * `failed` / `undeliverable` status: 63003 not a WhatsApp user, a blocked or unregistered number)
+ * and they have not written on WhatsApp since (§19 Q372). WhatsApp is then not reachable for them,
+ * so the next message, a re-sent welcome or a new device code goes by SMS instead of failing the
+ * same way: the first contact goes by WhatsApp before anyone knows the number is on WhatsApp.
+ */
+export function whatsappFailedSinceInbound(
+  last: LastWhatsappOutbound | null,
+  lastInbound: string | null,
+): boolean {
+  if (!last || !attemptIsFinal(last) || last.provider_message_id === null) return false;
+  return lastInbound === null || Date.parse(lastInbound) < Date.parse(last.created_at);
 }
 
 /**
@@ -252,6 +281,9 @@ export function createWhatsappRegistration(deps: WhatsappRegistrationDeps): Chan
       if (recipient.pack.whatsappSenderId === null) return false;
       const phone = recipient.reporter.phone_e164 as E164;
       const window = await deps.lastInbound(phone, recipient.pack.whatsappSenderId);
+      if (deps.lastOutbound && whatsappFailedSinceInbound(await deps.lastOutbound(phone), window)) {
+        return false;
+      }
       if (isServiceWindowOpen(window, (deps.now ?? (() => new Date()))())) return true;
       return (
         key !== undefined &&

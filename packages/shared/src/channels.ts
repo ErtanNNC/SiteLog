@@ -87,12 +87,18 @@ export const PUSH_KEYS = [
 ] as const satisfies readonly NotifierKey[];
 
 /**
- * The keys WhatsApp carries (W2-15, spec §19 Q25): every Notifier key but the two first-contact
- * ones. The welcome goes before any consent, so before the WhatsApp opt-in that only the welcome's
- * link reaches; the device code always goes by SMS (`SMS_ONLY_KEYS`). Each is a business-initiated
- * message: outside the 24-hour window it needs an approved template (`whatsapp/templates.ts`).
+ * The keys WhatsApp carries (W2-15, spec §19 Q25; §19 Q372, 2026-10-20): every Notifier key. The
+ * welcome and the device code joined when the owner chose WhatsApp before SMS until the SMS
+ * senders are registered (Turkish carriers drop link-bearing texts from the US long code, US SMS
+ * waits for 10DLC): the welcome by a WhatsApp template when the pack orders WhatsApp first (Q25's
+ * alternative), the device code by an authentication template, so a WhatsApp-only worker can
+ * verify a new phone (F4 step 2). Each is a business-initiated message: outside the 24-hour window
+ * it needs an approved template (`whatsapp/templates.ts`); without one in the reporter's language
+ * the channel is not reachable for the key and SMS carries it (§19 Q22, `ChannelRegistration`).
  */
 export const WHATSAPP_KEYS = [
+  'welcome',
+  'verify_code',
   'daily_link',
   'call_coming',
   'weather_headsup',
@@ -122,35 +128,42 @@ export function channelCarriesKey(channel: MessageChannel, key: NotifierKey): bo
 }
 
 /**
- * Keys the spec sends before the person has consented: the welcome at invite (F3 step 1, before
- * the consent screen of F4) and the device code (F4 step 2, before step 3's consent). Their SMS
- * skips the consent check only while the person has no consent of any type, given or revoked:
- * once they have answered a consent prompt, a missing SMS consent (declined, or revoked in the
- * field app's Settings, §9.3) blocks every SMS, so the office's "Re-send welcome" (§11 Team) does
- * not text them. The opt-out always applies. Every other key needs the channel's consent. Spec
- * §19 Q25 asks the owner to confirm this with the device code's channel.
+ * The channels a first-contact key may go on before, or without, their consent (§19 Q25, Q372):
+ * SMS and WhatsApp, the two that reach a phone number. Never push, which needs the installed app
+ * (and carries neither key, `PUSH_KEYS`).
  */
-export const PRE_CONSENT_SMS_KEYS = [
+export const PRE_CONSENT_CHANNELS = [
+  'sms',
+  'whatsapp',
+] as const satisfies readonly MessageChannel[];
+
+/**
+ * Keys the spec sends before the person has consented: the welcome at invite (F3 step 1, before
+ * the consent screen of F4) and the device code (F4 step 2, before step 3's consent). On SMS and
+ * WhatsApp (`PRE_CONSENT_CHANNELS`, §19 Q372) they skip the channel's consent only while the person
+ * has no consent of any type, given or revoked: the office's attestation at invite
+ * (`INVITE_MESSAGES_ATTESTATION`) is the opt-in for that first message. Once they have answered a
+ * consent prompt, a missing consent of the channel (declined, or revoked in the field app's
+ * Settings, §9.3) blocks the channel, so the office's "Re-send welcome" (§11 Team) does not reach
+ * them there. The opt-out always applies. Every other key needs the channel's consent.
+ */
+export const PRE_CONSENT_KEYS = [
   'welcome',
   'verify_code',
 ] as const satisfies readonly NotifierKey[];
 
 /**
- * Keys that go by SMS on every pack, whatever its `message_channels` and the person's preference:
- * the device code, a one-time code by SMS (F4 step 2, §6.3 `field_devices.verified_at`; spec §19
- * Q25). Every pack has an SMS sender (`sms_provider`, `sms_sender_type`), even one that lists no
- * SMS for its messages.
+ * Keys that need no consent at all on SMS and WhatsApp, even after the person declined or revoked
+ * it: the device code, which the person asks for on the recorder to prove the number (spec §19
+ * Q25; W2-02: revoking texts in Settings blocks every SMS but this one, so a reporter who turned
+ * texts off can still sign in on a new phone; §19 Q372: the same on WhatsApp). Only an opt-out of
+ * the channel stops it: SMS STOP (`optedOut`, the provider's list), and on WhatsApp a revoked
+ * `whatsapp` consent, which is what WhatsApp's STOP records (§19 Q40; the Settings untick reads
+ * the same, so it stops the code there too). It follows the person's order like any key, kept to
+ * `PRE_CONSENT_CHANNELS`; SMS stays at the end of it even on a pack that lists no SMS for its
+ * messages (every pack has an SMS sender, `sms_provider`).
  */
-export const SMS_ONLY_KEYS = ['verify_code'] as const satisfies readonly NotifierKey[];
-
-/**
- * Keys whose SMS needs no SMS consent at all, even after the person declined or revoked it: the
- * device code, which the person asks for on the recorder to prove the number (spec §19 Q25: "the
- * device code goes by SMS whatever the channel order … needs no prior opt-in"; W2-02: revoking
- * texts in Settings blocks every SMS but this one, so a reporter who turned texts off can still
- * sign in on a new phone). The opt-out (STOP, the provider's list) still applies.
- */
-export const CONSENT_FREE_SMS_KEYS = ['verify_code'] as const satisfies readonly NotifierKey[];
+export const CONSENT_FREE_KEYS = ['verify_code'] as const satisfies readonly NotifierKey[];
 
 /**
  * The message channels Settings offers as a preference (F15, spec §19 Q21; W2-02): the pack's, in
@@ -423,13 +436,14 @@ export function messageChannelOrder(
 
 /**
  * The channels a Notifier message may go on, in order (§4.5). The order is computed here, so no
- * caller can step outside the pack's allow-list: `messageChannelOrder(pack, preferred)`, or
- * `['sms']` for `SMS_ONLY_KEYS`, kept to the channels in `narrow` when given. A channel then stays
- * only if it is built (`implemented`, default `IMPLEMENTED_MESSAGE_CHANNELS`); its consent label
- * exists and is held (`PRE_CONSENT_SMS_KEYS` skip the SMS consent while the person has none,
- * given or revoked); the person has not opted out of it; and, for SMS, the pack allows links when
- * the key carries one (spec §19 Q24). Throws on a two-way key: those replies are sms-webhook's
- * (`smsReplyAllowed`).
+ * caller can step outside the pack's allow-list: `messageChannelOrder(pack, preferred)` (with SMS
+ * appended for `CONSENT_FREE_KEYS` when the pack lists none), kept to the channels in `narrow` when
+ * given. A channel then stays only if it is built (`implemented`, default
+ * `IMPLEMENTED_MESSAGE_CHANNELS`) and carries the key (`CHANNEL_KEYS`); its consent label exists
+ * and is held (`PRE_CONSENT_KEYS` skip it on `PRE_CONSENT_CHANNELS` while the person has none,
+ * given or revoked; `CONSENT_FREE_KEYS` always, short of a revoked WhatsApp consent); the person
+ * has not opted out of it; and, for SMS, the pack allows links when the key carries one (spec §19
+ * Q24). Throws on a two-way key: those replies are sms-webhook's (`smsReplyAllowed`).
  */
 export function deliverableChannels(input: {
   pack: CountryPack;
@@ -455,24 +469,25 @@ export function deliverableChannels(input: {
     throw new Error(`SMS "${key}" answers an inbound text: sms-webhook sends it, not the Notifier`);
   }
   const implemented: readonly MessageChannel[] = input.implemented ?? IMPLEMENTED_MESSAGE_CHANNELS;
-  const base: MessageChannel[] = (SMS_ONLY_KEYS as readonly MessageKey[]).includes(key)
-    ? ['sms']
-    : messageChannelOrder(input.pack, input.preferred);
+  const consentFree = (CONSENT_FREE_KEYS as readonly MessageKey[]).includes(key);
+  const ordered = messageChannelOrder(input.pack, input.preferred);
+  const base: MessageChannel[] =
+    consentFree && !ordered.includes('sms') ? [...ordered, 'sms'] : ordered;
   const narrow = input.narrow;
   const order = narrow ? base.filter((c) => narrow.includes(c)) : base;
   const neverConsented = input.consents.size === 0 && input.revoked.size === 0;
-  const preConsent =
-    (neverConsented && (PRE_CONSENT_SMS_KEYS as readonly MessageKey[]).includes(key)) ||
-    (CONSENT_FREE_SMS_KEYS as readonly MessageKey[]).includes(key);
+  const preConsent = neverConsented && (PRE_CONSENT_KEYS as readonly MessageKey[]).includes(key);
   return order.filter((channel) => {
     if (!implemented.includes(channel)) return false;
     if (!channelCarriesKey(channel, input.key)) return false;
     const consent = input.consentFor?.[channel] ?? CONSENT_FOR_CHANNEL[channel];
     if (consent === null) return false;
     if (input.optedOut.has(channel)) return false;
-    if (channel !== 'sms') return input.consents.has(consent);
-    if (!preConsent && !input.consents.has(consent)) return false;
-    if (messageKeyHasLink(key) && !input.pack.smsLinksAllowed) return false;
+    const firstContact = (PRE_CONSENT_CHANNELS as readonly MessageChannel[]).includes(channel);
+    // WhatsApp's STOP is a revoked `whatsapp` consent (§19 Q40): its opt-out.
+    const free = consentFree && (channel === 'sms' || !input.revoked.has(consent));
+    if (!(firstContact && (preConsent || free)) && !input.consents.has(consent)) return false;
+    if (channel === 'sms' && messageKeyHasLink(key) && !input.pack.smsLinksAllowed) return false;
     return true;
   });
 }
@@ -487,7 +502,7 @@ export function deliverableChannels(input: {
  * is the one text after STOP). Only the pack decides: it must have two-way SMS, and allow links in
  * SMS for a key that carries one (`help`). The webhook renders with `smsRenderOptions(pack)`,
  * sends through `pickMessageTransport()` with `smsSendOptionsFor(pack)` and audits the reply
- * (`SmsNotifier.reply`). Confirmed by the owner with `PRE_CONSENT_SMS_KEYS` (spec §19 Q25,
+ * (`SmsNotifier.reply`). Confirmed by the owner with `PRE_CONSENT_KEYS` (spec §19 Q25,
  * 2026-10-15).
  */
 export function smsReplyAllowed(pack: CountryPack, key: ReplySmsKey): boolean {

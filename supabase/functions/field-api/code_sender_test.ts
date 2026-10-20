@@ -1,12 +1,12 @@
 import { assertEquals, assertRejects } from '@std/assert';
 import {
-  MASKED_CODE,
-  MessageSendError,
-  SmsSendError,
-  toCountryPack,
   type ConsentType,
   type CountryRow,
+  MASKED_CODE,
+  MessageSendError,
   type ReporterRow,
+  SmsSendError,
+  toCountryPack,
 } from '@sitelog/shared';
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import { fakeMessaging } from '../_shared/fake_messaging.ts';
@@ -31,6 +31,8 @@ function message(
     country?: 'US' | 'TR';
     isDemo?: boolean;
     sender?: string;
+    /** The pack's row values (WhatsApp sender, templates, order). */
+    pack?: Partial<CountryRow>;
   } = {},
 ): VerifyCodeMessage {
   const country = opts.country ?? 'US';
@@ -44,7 +46,7 @@ function message(
       is_demo: opts.isDemo ?? true,
       units: 'imperial',
     },
-    pack: pack(country, opts.sender ? { sms_sender_id: opts.sender } : {}),
+    pack: pack(country, { ...(opts.sender ? { sms_sender_id: opts.sender } : {}), ...opts.pack }),
     reporter: {
       id: 'r',
       org_id: 'o',
@@ -63,6 +65,7 @@ function message(
       opted_out_at: null,
       message_channel: null,
       no_calls_until: null,
+      whatsapp_user_id: null,
       ...over,
     },
     consents: { held: new Set(opts.held ?? []), revoked: new Set(opts.revoked ?? []) },
@@ -71,46 +74,110 @@ function message(
 }
 
 Deno.test(
-  'verify_code goes by SMS before any consent answer, whatever the preferred channel',
+  'verify_code follows the order kept to SMS and WhatsApp, the preferred channel first (§19 Q372)',
   async () => {
     const m = fakeMessaging();
     const send = notifierCodeSender(m.notifier);
-    assertEquals((await send(message())).channel, 'sms');
-    assertEquals((await send(message({ message_channel: 'whatsapp' }))).channel, 'sms');
+    // The US order puts WhatsApp first (a demo org: console, the Demo phone).
+    assertEquals((await send(message())).channel, 'whatsapp');
+    assertEquals((await send(message({ message_channel: 'sms' }))).channel, 'sms');
+    assertEquals((await send(message({ message_channel: 'whatsapp' }))).channel, 'whatsapp');
     assertEquals(
-      m.rows.map((r) => [r.copy_key, r.provider, r.status]),
+      m.rows.map((r) => [r.copy_key, r.channel, r.provider, r.status]),
       [
-        ['verify_code', 'console', 'delivered'],
-        ['verify_code', 'console', 'delivered'],
+        ['verify_code', 'whatsapp', 'console', 'delivered'],
+        ['verify_code', 'sms', 'console', 'delivered'],
+        ['verify_code', 'whatsapp', 'console', 'delivered'],
       ],
     );
   },
 );
 
 Deno.test(
-  'verify_code is not sent after an opt-out; a refused or revoked SMS consent does not stop it (Q25, W2-02)',
+  'a real org: verify_code by the WhatsApp authentication template, consent-free; SMS without one',
+  async () => {
+    const SID = `HX${'c'.repeat(32)}`;
+    const live = {
+      isDemo: false,
+      sender: '+18885550142',
+      pack: {
+        whatsapp_sender_id: '+17752628262',
+        whatsapp_templates: { verify_code: { en: SID } },
+      },
+    };
+    // Outside the 24-hour window: the approved template with the code as {{1}}.
+    const m = fakeMessaging({ lastInbound: null });
+    const send = notifierCodeSender(m.notifier);
+    // Declined WhatsApp at F4 (never given): the code still goes there.
+    assertEquals(
+      (await send(message({}, { ...live, held: ['sms', 'recording'] }))).channel,
+      'whatsapp',
+    );
+    assertEquals(m.waSent.length, 1);
+    assertEquals(m.waSent[0]!.get('ContentSid'), SID);
+    assertEquals(JSON.parse(m.waSent[0]!.get('ContentVariables')!), { '1': '042917' });
+    assertEquals(m.waSent[0]!.get('From'), 'whatsapp:+17752628262');
+    assertEquals(m.rows[0]!.body, `TalkOlog code: ${MASKED_CODE}. It expires in 10 minutes.`);
+    assertEquals(m.sent, []);
+    // WhatsApp's STOP (a revoked WhatsApp consent) stops it there: SMS.
+    assertEquals((await send(message({}, { ...live, revoked: ['whatsapp'] }))).channel, 'sms');
+    // No approved template in the reporter's language: SMS, nothing tried on WhatsApp.
+    assertEquals((await send(message({ locale: 'es-US' }, live))).channel, 'sms');
+    assertEquals(m.waSent.length, 1);
+    assertEquals(m.sent.length, 2);
+  },
+);
+
+Deno.test(
+  'verify_code is not sent after an opt-out; a refused or revoked consent does not stop it (Q25, W2-02, Q372)',
   async () => {
     const send = notifierCodeSender(fakeMessaging().notifier);
-    assertEquals(await send(message({ status: 'opted_out' })), {
-      channel: null,
-      reason: 'opted_out',
-    });
+    // SMS STOP stops texts only; the code goes on WhatsApp (US order, demo console).
+    assertEquals((await send(message({ status: 'opted_out' }))).channel, 'whatsapp');
+    assertEquals(
+      await send(
+        message(
+          { status: 'opted_out', message_channel: 'sms' },
+          {
+            pack: { message_channels: ['push', 'sms'] },
+          },
+        ),
+      ),
+      {
+        channel: null,
+        reason: 'opted_out',
+      },
+    );
     // The person asks for the code on the recorder to prove the number: texts turned off in
     // Settings must not lock them out of a new phone.
     assertEquals(
-      (await send(message({}, { held: ['recording', 'data_processing'] }))).channel,
+      (await send(message({ message_channel: 'sms' }, { held: ['recording', 'data_processing'] })))
+        .channel,
       'sms',
     );
-    assertEquals((await send(message({}, { held: ['recording', 'sms'] }))).channel, 'sms');
-    assertEquals((await send(message({}, { revoked: ['sms'] }))).channel, 'sms');
+    assertEquals(
+      (await send(message({}, { held: ['recording', 'data_processing'] }))).channel,
+      'whatsapp',
+    );
+    assertEquals((await send(message({}, { held: ['recording', 'sms'] }))).channel, 'whatsapp');
+    assertEquals((await send(message({}, { revoked: ['sms'] }))).channel, 'whatsapp');
+    assertEquals(
+      (await send(message({ message_channel: 'sms' }, { revoked: ['sms'] }))).channel,
+      'sms',
+    );
+    // An SMS opt-out leaves WhatsApp (§19 Q40); both opt-outs leave nothing.
+    assertEquals(
+      (await send(message({ status: 'opted_out' }, { revoked: ['whatsapp'] }))).channel,
+      null,
+    );
   },
 );
 
 Deno.test('the text is the §9.2 verify_code in the reporter language', async () => {
   const m = fakeMessaging();
   const send = notifierCodeSender(m.notifier);
-  await send(message());
-  await send(message({ locale: 'tr-TR' }, { country: 'TR' }));
+  await send(message({ message_channel: 'sms' }));
+  await send(message({ locale: 'tr-TR', message_channel: 'sms' }, { country: 'TR' }));
   assertEquals(
     m.sent.map((s) => s.body),
     [

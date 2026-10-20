@@ -1,6 +1,6 @@
 import { assertEquals } from '@std/assert';
 import { demoPack } from '@sitelog/shared/demo/countries.ts';
-import { INVITE_SMS_ATTESTATION, type E164 } from '@sitelog/shared';
+import { INVITE_MESSAGES_ATTESTATION, type E164 } from '@sitelog/shared';
 import {
   ATTESTATION_REQUIRED,
   canResend,
@@ -173,7 +173,7 @@ Deno.test('invitedAuditDiff: the reporter.invited entry carries the attestation 
     status: 'invited',
     phone_opted_out: false,
     jobId: 7,
-    sms_attestation: 'team.invite_sms.v1',
+    sms_attestation: 'team.invite_sms.v2',
   });
-  assertEquals(INVITE_SMS_ATTESTATION, 'team.invite_sms.v1');
+  assertEquals(INVITE_MESSAGES_ATTESTATION, 'team.invite_sms.v2');
 });

@@ -53,9 +53,9 @@ import {
  * (422 `landline_text` for a text link; `landline_unreachable` where TalkOlog cannot reach it by
  * phone either), before anything is written. Owner decision 2026-10-20 (Twilio toll-free
  * verification, opt-in "Verbal"): an invite needs `smsAttested: true`, the office's attestation
- * that the person agreed to get daily report texts from TalkOlog; without it 400
+ * that the person agreed to get daily report messages from TalkOlog by text or WhatsApp; without it 400
  * `attestation_required`, nothing written. It is kept in the `reporter.invited` audit entry
- * (`sms_attestation: INVITE_SMS_ATTESTATION`, the actor and time are the entry's), never as a
+ * (`sms_attestation: INVITE_MESSAGES_ATTESTATION`, the actor and time are the entry's), never as a
  * `consents` row: the reporter's own consent is still asked in the field app.
  */
 

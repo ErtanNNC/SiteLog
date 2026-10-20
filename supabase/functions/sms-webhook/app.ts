@@ -234,6 +234,14 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
    * webhook with `whatsapp:` addresses. The pack is the one whose WhatsApp sender received it; the
    * row (`channel 'whatsapp'`) opens the person's 24-hour window, and the worker's `sms_inbound`
    * job runs the keywords (on every pack), the answers and the media reply.
+   *
+   * §19 Q372 (Meta's usernames, 2026): Twilio adds the person's business-scoped user id
+   * (`ExternalUserId`) and puts it in `From` when WhatsApp hides the number. A message with both
+   * records the id on the number's reporters (real orgs); a message with the id only is the
+   * message of the number whose reporters have it, handled from then on exactly as if it had come
+   * from that number (pack, window, STOP, keywords, answers). An id no reporter has is audited
+   * (`whatsapp.inbound_unmatched`, without the id) and acknowledged: there is no number to store it
+   * under, to reply to, or to make an unknown contact of. The id is never logged.
    */
   async function whatsappInbound(params: URLSearchParams): Promise<Response> {
     const message = parseTwilioWhatsappInbound(params);
@@ -241,12 +249,33 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
       logWarn('whatsapp.inbound.unreadable');
       return twiml();
     }
-    const row = await packFor(
-      await store.packsByWhatsappSender(message.to),
-      message.from,
-      message.to,
-      'whatsapp',
-    );
+    const rows = await store.packsByWhatsappSender(message.to);
+    if (rows.length === 0) {
+      logWarn('whatsapp.inbound.unknown_sender_id', { to: message.to });
+      return twiml();
+    }
+    const from =
+      message.from ?? (message.userId ? await store.phoneByWhatsappUserId(message.userId) : null);
+    if (!from) {
+      await store.audit({
+        orgId: null,
+        actorType: 'system',
+        actorId: null,
+        action: 'whatsapp.inbound_unmatched',
+        entity: 'message',
+        entityId: null,
+        diff: {
+          provider: 'twilio',
+          provider_message_id: message.messageSid,
+          packs: rows.map((r) => r.code),
+          reason: 'unknown_user_id',
+          num_media: message.numMedia,
+        },
+      });
+      logWarn('whatsapp.inbound.unmatched_user_id', { packs: rows.map((r) => r.code) });
+      return twiml();
+    }
+    const row = await packFor(rows, from, message.to, 'whatsapp');
     if (!row) {
       logWarn('whatsapp.inbound.unknown_sender_id', { to: message.to });
       return twiml();
@@ -255,7 +284,7 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
     const stored = await storeInbound(
       {
         providerId: message.messageSid,
-        from: message.from,
+        from,
         to: message.to,
         body: message.body,
         optOutType: null,
@@ -265,6 +294,20 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
       pack,
       { provider: 'twilio', scope: { realOnly: true } },
     );
+    // After the row and its job: a failure here loses no message (Twilio never retries a 5xx).
+    let userIdRecorded: { set: number; cleared: number } | null = null;
+    if (message.from && message.userId) {
+      try {
+        userIdRecorded = await store.recordWhatsappUserId(message.from, message.userId);
+      } catch (err) {
+        // The error's code only: a database message may quote the row (the number, the id).
+        const code = (err as { code?: unknown } | null)?.code;
+        logError('whatsapp.inbound.user_id_not_recorded', 'record_whatsapp_user_id failed', {
+          messageId: stored.id,
+          code: typeof code === 'string' ? code : null,
+        });
+      }
+    }
     logInfo('whatsapp.inbound.queued', {
       messageId: stored.id,
       jobId: stored.jobId,
@@ -272,6 +315,10 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
       pack: pack.code,
       media: message.numMedia,
       redelivered: stored.duplicate,
+      byUserId: message.from === null,
+      ...(userIdRecorded && (userIdRecorded.set > 0 || userIdRecorded.cleared > 0)
+        ? { userIdSet: userIdRecorded.set, userIdCleared: userIdRecorded.cleared }
+        : {}),
     });
     return twiml();
   }

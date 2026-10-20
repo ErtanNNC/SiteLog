@@ -56,6 +56,8 @@ const AUDITED: Record<string, string> = {
     'the Notifier key of a send_welcome job (messages.payload, not jobs): send_welcome:<job> per job, so a retry never texts twice; the automatic re-send (W4-12, §19 Q241) uses welcome_resend:<reporter>, one per reporter ever, so a retried or moved re-send never texts twice',
   'jobKeys.welcomeAutoResend':
     "welcome_resend:<reporter> (send_welcome, W4-12, §19 Q241): the one automatic re-send per reporter, queued by every welcome that went; the first takes the key for good, so later welcomes (the office's Re-send, a retry) queue nothing more",
+  'jobKeys.welcomeRecheck':
+    "welcome_recheck:<welcome Notifier key> (send_welcome, §19 Q372): the one check of a welcome that went by WhatsApp, 10 min on; per welcome, so a retry finds the key taken, and the check itself re-runs the walk under the welcome's own key, so it never sends twice",
   'jobKeys.welcomeAutoResendDeferred':
     "welcome_resend:<reporter>:<site date> (send_welcome, W4-12): the automatic re-send moved to the site's next 09:00 when it ran outside the daytime; per site date, so a retry of the night run finds the key taken and the move happens at most once a day",
   'office_daily_link:{}':

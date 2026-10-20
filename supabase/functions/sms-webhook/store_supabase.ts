@@ -1,4 +1,5 @@
 import {
+  assertE164,
   JobPayloadSchemas,
   jobKeys,
   type CountryRow,
@@ -95,6 +96,36 @@ export function supabaseSmsStore(admin: AppClient): SmsWebhookStore {
           },
         ];
       });
+    },
+
+    async phoneByWhatsappUserId(userId) {
+      const { data: reporters } = await admin
+        .from('reporters')
+        .select('org_id, phone_e164')
+        .eq('whatsapp_user_id', userId)
+        .throwOnError();
+      if (reporters.length === 0) return null;
+      // A real sender never reaches a demo org's reporters.
+      const { data: orgs } = await admin
+        .from('orgs')
+        .select('id')
+        .in('id', [...new Set(reporters.map((r) => r.org_id))])
+        .eq('is_demo', false)
+        .throwOnError();
+      const real = new Set(orgs.map((o) => o.id));
+      const phones = [
+        ...new Set(reporters.filter((r) => real.has(r.org_id)).map((r) => r.phone_e164)),
+      ];
+      return phones.length === 1 ? assertE164(phones[0]!) : null;
+    },
+
+    async recordWhatsappUserId(phone, userId) {
+      // 20261020000200: one transaction, audited per row without the value.
+      const { data } = await admin
+        .rpc('record_whatsapp_user_id', { p_phone_e164: phone, p_user_id: userId })
+        .throwOnError();
+      const r = (data ?? {}) as { set?: number; cleared?: number };
+      return { set: r.set ?? 0, cleared: r.cleared ?? 0 };
     },
 
     async receiveInbound(row) {

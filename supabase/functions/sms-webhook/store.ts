@@ -1,6 +1,7 @@
 import type {
   MessageChannel,
   CountryRow,
+  E164,
   InboundSmsAudit,
   InboundSmsStore,
   JobPayloads,
@@ -78,6 +79,16 @@ export interface SmsWebhookStore extends InboundSmsStore {
     channel: 'sms' | 'whatsapp',
     since: string,
   ): Promise<string | null>;
+  /**
+   * §19 Q372: the phone number of the reporters (real orgs only) who have this WhatsApp
+   * business-scoped user id, or null when none has it, or reporters of more than one number do.
+   */
+  phoneByWhatsappUserId(userId: string): Promise<E164 | null>;
+  /**
+   * §19 Q372 (`record_whatsapp_user_id()`): the id onto every reporter row of the number in real
+   * orgs, off the rows of any other number, each change audited without the value.
+   */
+  recordWhatsappUserId(phone: E164, userId: string): Promise<{ set: number; cleared: number }>;
   /**
    * `receive_sms_inbound()`, one transaction: writes the inbound row and its `sms.received` audit
    * (actor: the reporter, or the system for an unknown number), and for a Twilio text not yet

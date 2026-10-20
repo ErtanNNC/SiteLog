@@ -17,7 +17,15 @@ import { LANGUAGES, type Language } from '../locale.ts';
  * `{<key>: {<language>: <content sid>}}`.
  *
  * Meta refuses a body that starts or ends with a variable, so such a text gets "TalkOlog: " in front
- * or " - TalkOlog" at the end (spec §19 Q110). A template is tied to the pack's variant: a voice
+ * or " - TalkOlog" at the end (spec §19 Q110).
+ *
+ * Categories (§19 Q372): every key is a Utility template but `verify_code`, an Authentication
+ * template (`WHATSAPP_AUTH_KEYS`). Meta fixes an authentication template's text: the body
+ * "{{1}} is your verification code." in the chosen language, with the security recommendation
+ * and the code-expiry footer as options, and a copy-code button; nothing of ours goes in it but
+ * the code. Twilio models it as the `whatsapp/authentication` content type; a send is the same
+ * `ContentSid` and `ContentVariables` (`{"1": "<code>"}`) as any template, so the transport needs
+ * nothing special. `whatsappTemplate` gives its body as Meta shows it, for the owner's reference. A template is tied to the pack's variant: a voice
  * number set or cleared later changes the "or call {number}" clause, so the templates of the keys
  * with that clause are submitted again.
  */
@@ -30,11 +38,53 @@ export function whatsappRenderOptions(pack: Pick<CountryPack, 'voiceNumber'>): R
   return { hasVoiceNumber: pack.voiceNumber !== null, twoWay: true, linksAllowed: true };
 }
 
+/** Meta's template categories that TalkOlog uses. */
+export type WhatsappTemplateCategory = 'utility' | 'authentication';
+
+/** The keys sent by an Authentication template (Meta's fixed one-time-code format). */
+export const WHATSAPP_AUTH_KEYS = ['verify_code'] as const satisfies readonly WhatsappKey[];
+
+/** How long a device code lives (F4 step 2, `verify_code`: "It expires in 10 minutes."). */
+export const VERIFY_CODE_EXPIRY_MINUTES = 10;
+
 export interface WhatsappTemplate {
-  /** The body to submit, with `{{1}}`, `{{2}}` … */
+  /** The body to submit, with `{{1}}`, `{{2}}` … (an authentication template's: Meta's text). */
   body: string;
   /** The §9.2 variable of each number, in order: `variables[0]` is `{{1}}`. */
   variables: string[];
+  category: WhatsappTemplateCategory;
+  /**
+   * Twilio's content type to create it with: `twilio/text` for Utility, `whatsapp/authentication`
+   * (security recommendation on, code expiry `VERIFY_CODE_EXPIRY_MINUTES`, a copy-code button)
+   * for Authentication.
+   */
+  contentType: 'twilio/text' | 'whatsapp/authentication';
+  /** Authentication only: Meta's code-expiry footer, as it shows it. */
+  footer?: string;
+}
+
+/**
+ * Meta's fixed authentication text in each template language, with the security recommendation
+ * and the expiry footer (Meta renders these; listed so the owner sees what the reporter gets).
+ */
+const AUTH_BODY: Readonly<Record<Language, { body: string; footer: string }>> = {
+  en: {
+    body: '{{1}} is your verification code. For your security, do not share this code.',
+    footer: `This code expires in ${VERIFY_CODE_EXPIRY_MINUTES} minutes.`,
+  },
+  es: {
+    body: 'Tu código de verificación es {{1}}. Por tu seguridad, no lo compartas.',
+    footer: `Este código caduca en ${VERIFY_CODE_EXPIRY_MINUTES} minutos.`,
+  },
+  tr: {
+    body: 'Doğrulama kodunuz {{1}}. Güvenliğiniz için bu kodu kimseyle paylaşmayın.',
+    footer: `Bu kodun süresi ${VERIFY_CODE_EXPIRY_MINUTES} dakika içinde dolar.`,
+  },
+};
+
+/** Whether a key goes by an Authentication template. */
+export function isWhatsappAuthKey(key: string): boolean {
+  return (WHATSAPP_AUTH_KEYS as readonly string[]).includes(key);
 }
 
 const PREFIX = 'TalkOlog: ';
@@ -46,6 +96,16 @@ export function whatsappTemplate(
   language: Language,
   options: RenderSmsOptions,
 ): WhatsappTemplate {
+  if (isWhatsappAuthKey(key)) {
+    const auth = AUTH_BODY[language];
+    return {
+      body: auth.body,
+      variables: ['code'],
+      category: 'authentication',
+      contentType: 'whatsapp/authentication',
+      footer: auth.footer,
+    };
+  }
   const text = smsTemplate(key, language, options);
   const variables: string[] = [];
   let body = text.replace(/\{([a-z0-9_]+)\}/g, (_m, name: string) => {
@@ -55,7 +115,7 @@ export function whatsappTemplate(
   });
   if (/^\{\{\d+\}\}/.test(body)) body = PREFIX + body;
   if (/\{\{\d+\}\}$/.test(body)) body = body + SUFFIX;
-  return { body, variables };
+  return { body, variables, category: 'utility', contentType: 'twilio/text' };
 }
 
 /** Every template of a pack (its field languages), for the owner to submit. */

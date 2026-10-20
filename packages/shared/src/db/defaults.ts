@@ -47,6 +47,8 @@ export const V12_ROW_DEFAULTS = {
     message_channel: null,
     /** §19 Q129 (W3-14, 20261016000370). */
     no_calls_until: null,
+    /** §19 Q372 (20261020000200): the WhatsApp user id sms-webhook learns. */
+    whatsapp_user_id: null,
   },
   messages: {
     reporter_id: null,

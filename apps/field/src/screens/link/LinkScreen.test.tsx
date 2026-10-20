@@ -53,7 +53,7 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
       await screen.findByRole('heading', { level: 1, name: 'Is this Marco Ruiz’s phone?' }),
     ).toBeInTheDocument();
     expect(routes.resolve).toHaveBeenCalledWith('K7Q2MX');
-    fireEvent.click(screen.getByRole('button', { name: 'Yes, text me a code' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, send me a code' }));
     const input = await screen.findByLabelText('6-digit code');
     expect(routes.sendCode).toHaveBeenCalledWith('K7Q2MX');
     expect(input).toHaveAttribute('autocomplete', 'one-time-code');
@@ -362,7 +362,7 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
       verify: vi.fn().mockRejectedValueOnce(apiError(400, 'code_invalid', { attemptsLeft: 3 })),
     });
     renderApp('/r/K7Q2MX', { session: null, routes });
-    fireEvent.click(await screen.findByRole('button', { name: 'Yes, text me a code' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Yes, send me a code' }));
     const input = await screen.findByLabelText('6-digit code');
     fireEvent.change(input, { target: { value: '000000' } });
     expect(await screen.findByRole('alert')).toHaveTextContent(

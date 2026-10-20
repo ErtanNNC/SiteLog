@@ -8,6 +8,7 @@ import {
   toCountryPack,
   type CountryRow,
   type Json,
+  type LastWhatsappOutbound,
   type NotifierStore,
   type PersonalLinkStore,
   type SmsDriver,
@@ -254,6 +255,28 @@ export async function lastInboundWhatsapp(
 }
 
 /**
+ * §19 Q372: the latest outbound WhatsApp message Twilio took for the phone, or null
+ * (`whatsappFailedSinceInbound`: a late failure since the person last wrote moves them to SMS).
+ */
+export async function lastOutboundWhatsapp(
+  admin: AppClient,
+  phone: string,
+): Promise<LastWhatsappOutbound | null> {
+  const { data } = await admin
+    .from('messages')
+    .select('status, provider_message_id, created_at')
+    .eq('phone_e164', phone)
+    .eq('channel', 'whatsapp')
+    .eq('direction', 'out')
+    .eq('provider', 'twilio')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+    .throwOnError();
+  return data ?? null;
+}
+
+/**
  * The WhatsApp channel of an edge function (W2-15): Twilio with the env's account (the SMS one),
  * the window read with the service role. sms-webhook's replies on WhatsApp (W2-16), field-api's and
  * the panel's inline texts go through it.
@@ -270,6 +293,7 @@ export function edgeWhatsappRegistration(
     }),
     statusCallbackUrl: statusCallbackUrl(),
     lastInbound: (phone, sender) => lastInboundWhatsapp(admin, phone, sender),
+    lastOutbound: (phone) => lastOutboundWhatsapp(admin, phone),
     randomUUID: () => crypto.randomUUID(),
     get apiBase() {
       return smsApiBasesFromEnv().twilio;

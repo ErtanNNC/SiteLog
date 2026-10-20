@@ -1,5 +1,5 @@
 import {
-  INVITE_SMS_ATTESTATION,
+  INVITE_MESSAGES_ATTESTATION,
   isActiveReporterStatus,
   languageOf,
   parseE164,
@@ -151,7 +151,7 @@ export function lineCheckRefusal(
 export const ATTESTATION_REQUIRED = {
   code: 'attestation_required',
   message:
-    'Tick the box first: the person must have agreed to get daily report texts from TalkOlog.',
+    'Tick the box first: the person must have agreed to get daily report messages from TalkOlog by text or WhatsApp.',
 } as const;
 
 /**
@@ -168,7 +168,7 @@ export function missingSmsAttestation(raw: unknown): boolean {
 
 /**
  * The `reporter.invited` audit entry's diff. `sms_attestation` is the wording version the office
- * user (the entry's actor, at its time) attested to: the person agreed to get daily report texts.
+ * user (the entry's actor, at its time) attested to: the person agreed to get daily report messages by text or WhatsApp.
  */
 export function invitedAuditDiff(input: {
   siteIds: string[];
@@ -189,6 +189,6 @@ export function invitedAuditDiff(input: {
     status: input.status,
     phone_opted_out: input.phoneOptedOut,
     jobId: input.jobId,
-    sms_attestation: INVITE_SMS_ATTESTATION,
+    sms_attestation: INVITE_MESSAGES_ATTESTATION,
   };
 }

@@ -829,6 +829,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
     // null = the country pack's order (§4.5); a preference comes with week 2.
     message_channel: null,
     no_calls_until: null,
+    whatsapp_user_id: null,
   }));
   // §18.1: backup for Riverside B and Pier 9, ES, Text link, invite sent (no consent yet).
   reporters.push({
@@ -850,6 +851,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
     // null = the country pack's order (§4.5); a preference comes with week 2.
     message_channel: null,
     no_calls_until: null,
+    whatsapp_user_id: null,
   });
   const reporterById = new Map(reporters.map((r) => [r.id, r]));
 

@@ -280,6 +280,15 @@ export const JobPayloadSchemas = {
      * (no consent, no link opened, still `invited`, the phone not opted out).
      */
     auto: z.boolean().optional(),
+    /**
+     * §19 Q372: the check of a welcome that went by WhatsApp on a real org, queued by it
+     * (`jobKeys.welcomeRecheck`, `WELCOME_WHATSAPP_RECHECK_MS` later). It runs the Notifier's walk
+     * again under the welcome's key (`messageKey`): when Twilio has since failed the WhatsApp
+     * message (63003, not a WhatsApp user), SMS carries the welcome; when it went (`messageId`
+     * still the walk's answer), nothing happens. The late-status route cannot do this itself: the
+     * welcome is not a `notify` job (`lateFallback`).
+     */
+    recheck: z.object({ messageKey: z.string().min(1), messageId: z.string().min(1) }).optional(),
   }),
   send_template: z.object({
     conversationId: uuid,
@@ -578,6 +587,8 @@ export const jobKeys = {
    */
   welcomeAutoResendDeferred: (reporterId: string, siteDate: string) =>
     `welcome_resend:${reporterId}:${siteDate}`,
+  /** §19 Q372: the one check of a WhatsApp welcome, per its Notifier key (`send_welcome.recheck`). */
+  welcomeRecheck: (messageKey: string) => `welcome_recheck:${messageKey}`,
   /** The welcome of a reporter linked from an unknown WhatsApp sender (api-link-unknown-sender). */
   welcomeLinked: (reporterId: string, unknownSenderId: string) =>
     `welcome:${reporterId}:linked:${unknownSenderId}`,

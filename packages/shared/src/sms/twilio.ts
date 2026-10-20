@@ -145,13 +145,34 @@ export interface TwilioInboundMedia {
 /** An inbound WhatsApp message as Twilio posts it (W2-16): `whatsapp:` addresses. */
 export interface TwilioInboundWhatsapp {
   messageSid: string;
-  /** The person's number, without `whatsapp:`. */
-  from: E164;
+  /**
+   * The person's number, without `whatsapp:`; null when WhatsApp hides it and `From` holds the
+   * person's business-scoped user id instead (§19 Q372; then `userId` is set).
+   */
+  from: E164 | null;
+  /**
+   * §19 Q372: the person's WhatsApp business-scoped user id (BSUID, `CC.<id>`, without
+   * `whatsapp:`), from `ExternalUserId`, or from `From` when it holds one; null when absent or
+   * malformed. Personal data like a phone number: never logged, never sent to a model.
+   */
+  userId: string | null;
   /** The receiving sender, without `whatsapp:`: the pack's `whatsapp_sender_id`. */
   to: E164;
   body: string;
   numMedia: number;
   media: TwilioInboundMedia[];
+}
+
+/** §19 Q372: a WhatsApp business-scoped user id, `CC.<id>` (Meta, 2026; `reporters.whatsapp_user_id`). */
+export const WHATSAPP_USER_ID_RE = /^[A-Z]{2}\.[A-Za-z0-9]{1,128}$/;
+
+/**
+ * The business-scoped user id in a Twilio field (`whatsapp:CC.<id>`, the prefix optional), or null
+ * when the field holds none (empty, a phone number, a malformed value).
+ */
+export function whatsappUserIdOf(value: string): string | null {
+  const id = value.trim().replace(/^whatsapp:/, '');
+  return WHATSAPP_USER_ID_RE.test(id) ? id : null;
 }
 
 /** Whether the form is a WhatsApp message (`From` is a `whatsapp:` address). */
@@ -166,9 +187,12 @@ export function isTwilioWhatsappForm(params: URLSearchParams): boolean {
  */
 export function parseTwilioWhatsappInbound(params: URLSearchParams): TwilioInboundWhatsapp | null {
   const messageSid = params.get('MessageSid') ?? params.get('SmsSid');
-  const from = /^whatsapp:(\+[1-9]\d{6,14})$/.exec(params.get('From')?.trim() ?? '')?.[1];
+  const rawFrom = params.get('From')?.trim() ?? '';
+  const from = /^whatsapp:(\+[1-9]\d{6,14})$/.exec(rawFrom)?.[1] ?? null;
+  const fromUserId = from ? null : whatsappUserIdOf(rawFrom);
   const to = /^whatsapp:(\+[1-9]\d{6,14})$/.exec(params.get('To')?.trim() ?? '')?.[1];
-  if (!messageSid || !from || !to) return null;
+  if (!messageSid || (!from && !fromUserId) || !to) return null;
+  const userId = fromUserId ?? whatsappUserIdOf(params.get('ExternalUserId') ?? '');
   const parsed = Number.parseInt(params.get('NumMedia') ?? '0', 10);
   const numMedia = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 10) : 0;
   const media: TwilioInboundMedia[] = [];
@@ -179,7 +203,8 @@ export function parseTwilioWhatsappInbound(params: URLSearchParams): TwilioInbou
   }
   return {
     messageSid,
-    from: from as E164,
+    from: from as E164 | null,
+    userId,
     to: to as E164,
     body: params.get('Body') ?? '',
     numMedia,

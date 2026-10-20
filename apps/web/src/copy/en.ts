@@ -156,11 +156,11 @@ export const copy = {
             opted_out:
               'They opted out of texts, so TalkOlog texts them nothing until they opt in again (START, on packs that take replies).',
             no_consent:
-              'They declined texts when asked for consent, so TalkOlog texts them nothing.',
+              'They declined messages when asked for consent, so TalkOlog sends them nothing by text or WhatsApp.',
             no_channel:
               'No message channel of their country can carry the welcome and its link. Contact them another way.',
             console_real_org:
-              'Texts to this country are not live in this environment yet: no SMS sender is set for its country pack, so the reporter got nothing. Once the sender is set, re-send the welcome from Team & numbers.',
+              'Messages to this country are not live in this environment yet: no SMS or WhatsApp sender is set for its country pack, so the reporter got nothing. Once a sender is set, re-send the welcome from Team & numbers.',
           },
         },
         welcome_carrier_undelivered: {
@@ -1932,15 +1932,16 @@ export const copy = {
       send: 'Send welcome text',
       /**
        * Owner decision 2026-10-20 (Twilio toll-free verification, opt-in "Verbal"): required to add
-       * a person, kept with its version (`team.invite_sms.v1`) in the `reporter.invited` log entry.
+       * a person, kept with its version (`team.invite_sms.v2`) in the `reporter.invited` log entry.
        * Also the setup wizard's, for the site manager and the backup.
        */
-      smsAttest: '{{first}} agreed to get daily report texts from TalkOlog',
+      smsAttest: '{{first}} agreed to get daily report messages from TalkOlog by text or WhatsApp',
       /** The same before a name is typed. */
-      smsAttestNoName: 'This person agreed to get daily report texts from TalkOlog',
+      smsAttestNoName:
+        'This person agreed to get daily report messages from TalkOlog by text or WhatsApp',
       smsAttestHint: 'Saved in the log with your name.',
       attestation_required:
-        'Tick the box first: the person must have agreed to get daily report texts.',
+        'Tick the box first: the person must have agreed to get daily report messages.',
       description:
         'Texts the reporter their personal link. They open it on their phone, confirm the number with a code and agree to recording.',
       namePlaceholder: 'Full name',

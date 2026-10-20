@@ -6,6 +6,10 @@ import { DEMO_COUNTRIES } from '../demo/countries.ts';
 import { assertE164 } from '../format.ts';
 import type { NotifyRecipient } from '../notify/notifier.ts';
 import {
+  isWhatsappAuthKey,
+  VERIFY_CODE_EXPIRY_MINUTES,
+  WHATSAPP_AUTH_KEYS,
+  WHATSAPP_TEMPLATE_LANGUAGES,
   whatsappContentSid,
   whatsappContentVariables,
   whatsappRenderOptions,
@@ -15,6 +19,8 @@ import {
 import {
   createTwilioWhatsappTransport,
   createWhatsappRegistration,
+  whatsappFailedSinceInbound,
+  type LastWhatsappOutbound,
   fromWhatsappAddress,
   whatsappAddress,
   WhatsappConfigError,
@@ -58,11 +64,15 @@ describe('WhatsApp templates (W2-15, §9.2)', () => {
     expect(tr).toEqual({
       body: 'TalkOlog: {{1}} bugünkü rapor: {{2}} - TalkOlog',
       variables: ['site', 'link'],
+      category: 'utility',
+      contentType: 'twilio/text',
     });
     const en = whatsappTemplate('filed', 'en', whatsappRenderOptions(TR_WA));
     expect(en).toEqual({
       body: 'Filed: Daily Report {{1}}. PDF: {{2}} - TalkOlog',
       variables: ['report_no', 'pdf_link'],
+      category: 'utility',
+      contentType: 'twilio/text',
     });
     // The pack's voice number decides the "or call {number}" clause.
     const withNumber = whatsappTemplate('reminder_2', 'en', {
@@ -77,15 +87,75 @@ describe('WhatsApp templates (W2-15, §9.2)', () => {
     expect(() => whatsappContentVariables(tr, { site: 'Kuzey' })).toThrow('{link}');
   });
 
-  it('lists every key WhatsApp carries in each field language of the pack, never the welcome', () => {
+  it('lists every key WhatsApp carries in each field language of the pack, the welcome and the code too', () => {
     const all = whatsappTemplatesFor(TR_WA);
     expect(all).toHaveLength(WHATSAPP_KEYS.length * 2);
     expect(new Set(all.map((t) => t.language))).toEqual(new Set(['tr', 'en']));
-    expect(all.some((t) => (t.key as string) === 'welcome')).toBe(false);
+    // §19 Q372: the first-contact keys have templates.
+    expect(all.filter((t) => t.key === 'welcome').map((t) => t.language)).toEqual(['tr', 'en']);
+    expect(all.filter((t) => t.key === 'verify_code').map((t) => t.language)).toEqual(['tr', 'en']);
     for (const t of all) {
-      expect(t.body, `${t.key}.${t.language}`).not.toMatch(/^\{\{|\}\}$/);
+      // Meta's own authentication text starts with the code: the start/end rule is for ours.
+      if (t.category === 'utility')
+        expect(t.body, `${t.key}.${t.language}`).not.toMatch(/^\{\{|\}\}$/);
       expect(t.body).not.toMatch(/\{[a-z_]+\}/);
     }
+  });
+
+  it('has a body for every key in every language, on both pack variants (§19 Q372)', () => {
+    for (const hasVoiceNumber of [false, true]) {
+      const options = { ...whatsappRenderOptions(TR_WA), hasVoiceNumber };
+      for (const key of WHATSAPP_KEYS) {
+        for (const language of WHATSAPP_TEMPLATE_LANGUAGES) {
+          const t = whatsappTemplate(key, language, options);
+          expect(t.body.trim().length, `${key}.${language}`).toBeGreaterThan(0);
+          expect(t.body, `${key}.${language}`).not.toMatch(/\{[a-z_]+\}/);
+          if (t.category === 'utility')
+            expect(t.body, `${key}.${language}`).not.toMatch(/^\{\{|\}\}$/);
+          expect(t.category, key).toBe(isWhatsappAuthKey(key) ? 'authentication' : 'utility');
+          // Numbered from 1 with no gap, each variable once.
+          const numbers = [...t.body.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]));
+          expect([...new Set(numbers)].sort(), `${key}.${language}`).toEqual(
+            t.variables.map((_v, i) => i + 1),
+          );
+        }
+      }
+    }
+  });
+
+  it('the welcome: Utility, the SMS welcome with the reply clause, in EN, ES and TR', () => {
+    const options = whatsappRenderOptions(TR_WA);
+    const en = whatsappTemplate('welcome', 'en', options);
+    expect(en.variables).toEqual(['first', 'company', 'site', 'deadline', 'link']);
+    expect(en.body).toBe(
+      "Hi {{1}}, I'm TalkOlog, the daily report assistant for {{2}} at {{3}}. Each workday before {{4}}, tap your link and talk for ~3 min: {{5}} - Reply STOP to opt out, HELP for help",
+    );
+    expect(whatsappTemplate('welcome', 'tr', options).body).toBe(
+      'Merhaba {{1}}, ben TalkOlog, {{2}} için {{3}} günlük rapor asistanıyım. Her iş günü {{4}} öncesi linke dokunup ~3 dk anlatın: {{5}} - Durdurmak için STOP, yardım için HELP yazın',
+    );
+    expect(whatsappTemplate('welcome', 'es', options).body).toMatch(/^Hola \{\{1\}\}/);
+    // With a voice number, the "or call" clause adds the number.
+    expect(
+      whatsappTemplate('welcome', 'en', { ...options, hasVoiceNumber: true }).variables,
+    ).toEqual(['first', 'company', 'site', 'deadline', 'number', 'link']);
+  });
+
+  it('the device code: an Authentication template, Meta’s fixed text, the code as {{1}}', () => {
+    expect([...WHATSAPP_AUTH_KEYS]).toEqual(['verify_code']);
+    for (const language of WHATSAPP_TEMPLATE_LANGUAGES) {
+      const t = whatsappTemplate('verify_code', language, whatsappRenderOptions(TR_WA));
+      expect(t).toMatchObject({
+        category: 'authentication',
+        contentType: 'whatsapp/authentication',
+        variables: ['code'],
+      });
+      expect(t.body).toContain('{{1}}');
+      expect(t.footer).toContain(String(VERIFY_CODE_EXPIRY_MINUTES));
+      expect(whatsappContentVariables(t, { code: '042917' })).toEqual({ '1': '042917' });
+    }
+    expect(whatsappTemplate('verify_code', 'en', whatsappRenderOptions(TR_WA)).body).toBe(
+      '{{1}} is your verification code. For your security, do not share this code.',
+    );
   });
 
   it('finds the approved content sid of a key and language, or null', () => {
@@ -253,5 +323,38 @@ describe('the WhatsApp channel registration (W2-15)', () => {
     expect(reg.statusCallback!('console')).toBeNull();
     expect(reg.transport('console').driver).toBe('console');
     expect(() => reg.transport('twilio')).toThrow(WhatsappConfigError);
+  });
+
+  it('§19 Q372: not reachable once the last WhatsApp message failed late, until the person writes', async () => {
+    let inbound: string | null = null;
+    let outbound: LastWhatsappOutbound | null = null;
+    const reg = createWhatsappRegistration({
+      fetch: async () => new Response('{}'),
+      twilio: () => ({}),
+      statusCallbackUrl: null,
+      lastInbound: async () => inbound,
+      lastOutbound: async () => outbound,
+      randomUUID: () => 'u',
+      now: () => NOW,
+    });
+    expect(await reg.reachable!(recipient(), 'daily_link')).toBe(true);
+    // Twilio took it and it is on its way, or delivered: still reachable.
+    outbound = { status: 'sent', provider_message_id: 'SM1', created_at: '2026-10-09T16:30:00Z' };
+    expect(await reg.reachable!(recipient(), 'daily_link')).toBe(true);
+    // 63003 (not a WhatsApp user) as a late failed status: SMS from now on.
+    outbound = { ...outbound, status: 'failed' };
+    expect(await reg.reachable!(recipient(), 'daily_link')).toBe(false);
+    outbound = { ...outbound, status: 'undeliverable' };
+    expect(await reg.reachable!(recipient(), 'daily_link')).toBe(false);
+    // A refusal at send time (no provider id: no template, outside the window) is the key's.
+    expect(whatsappFailedSinceInbound({ ...outbound, provider_message_id: null }, null)).toBe(
+      false,
+    );
+    // They wrote on WhatsApp since: reachable again (and inside the window).
+    inbound = '2026-10-09T16:45:00Z';
+    expect(await reg.reachable!(recipient(), 'filed')).toBe(true);
+    // Demo orgs are never affected (console).
+    inbound = null;
+    expect(await reg.reachable!(recipient({ org: { id: 'o', isDemo: true } }), 'filed')).toBe(true);
   });
 });

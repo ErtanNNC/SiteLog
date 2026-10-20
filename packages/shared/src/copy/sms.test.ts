@@ -80,8 +80,8 @@ describe('SMS catalog (§9.2)', () => {
       'whatsapp_use_link',
       'whatsapp_stop_confirm',
     ]);
-    // The reply hint is EN and ES only: the TR pack is one-way.
-    expect(Object.keys(SMS_REPLY_HINT).sort()).toEqual(['en', 'es']);
+    // Every language has the reply hint: TR's for WhatsApp (§19 Q372), the TR pack's SMS is one-way.
+    expect(Object.keys(SMS_REPLY_HINT).sort()).toEqual(['en', 'es', 'tr']);
   });
 
   it('keeps reply wording out of the catalogue: only the two-way keys and the hint have it', () => {
@@ -193,8 +193,11 @@ describe('SMS catalog (§9.2)', () => {
         for (const ch of nonGsm) expect(ch, `${locale}.${key}`).toMatch(/^\p{L}$/u);
       }
     }
-    for (const [locale, hint] of Object.entries(SMS_REPLY_HINT))
-      expect(countSmsSegments(hint).nonGsm, locale).toEqual([]);
+    for (const [locale, hint] of Object.entries(SMS_REPLY_HINT)) {
+      const { nonGsm } = countSmsSegments(hint);
+      if (locale === 'en') expect(nonGsm, locale).toEqual([]);
+      for (const ch of nonGsm) expect(ch, locale).toMatch(/^\p{L}$/u);
+    }
   });
 
   it('uses no emoji in any language', () => {
@@ -467,7 +470,7 @@ describe('the pack variant: two-way SMS (spec §4.6, §9.2)', () => {
     expect(checked).toBe(3 * 15 * 2);
   });
 
-  it('refuses the two-way texts on a one-way pack, and a two-way welcome in Turkish', () => {
+  it('refuses the two-way texts on a one-way pack; a two-way welcome has its clause in Turkish too', () => {
     for (const key of TWO_WAY_SMS_KEYS) {
       for (const locale of ['en', 'es'] as const) {
         expect(() => smsTemplate(key, locale, ONE_WAY), `${locale}.${key}`).toThrow(
@@ -476,17 +479,18 @@ describe('the pack variant: two-way SMS (spec §4.6, §9.2)', () => {
         expect(smsTemplate(key, locale, TWO_WAY).length, `${locale}.${key}`).toBeGreaterThan(0);
       }
     }
-    expect(() =>
-      renderSms('welcome', 'tr', { ...vars, number: '+90 850 123 4567' }, TWO_WAY),
-    ).toThrow('SMS "welcome" has no "tr" reply hint for a pack with two-way SMS');
+    // §19 Q372: the Turkish welcome has its reply clause for a two-way variant (WhatsApp).
+    expect(renderSms('welcome', 'tr', { ...vars, number: '+90 850 123 4567' }, TWO_WAY)).toMatch(
+      / - Durdurmak için STOP, yardım için HELP yazın$/,
+    );
   });
 
   it('lists the copy a language lacks for a pack (packCopyGaps reads it)', () => {
     expect(smsCopyGaps('en', { twoWay: true })).toEqual([]);
     expect(smsCopyGaps('es', { twoWay: true })).toEqual([]);
     expect(smsCopyGaps('tr', { twoWay: false })).toEqual([]);
-    // W2-16: Turkish has the two-way texts (WhatsApp); a two-way TR SMS sender lacks the hint only.
-    expect(smsCopyGaps('tr', { twoWay: true })).toEqual(['welcome.replyHint']);
+    // W2-16 and §19 Q372: Turkish has the two-way texts and the reply hint (for WhatsApp).
+    expect(smsCopyGaps('tr', { twoWay: true })).toEqual([]);
     const shared = SMS_KEYS.filter((k) => !isTwoWaySmsKey(k));
     expect(smsCopyGaps('de', { twoWay: false })).toEqual(shared);
     expect(smsCopyGaps('constructor', { twoWay: true })).toEqual([

@@ -142,11 +142,11 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
               opted_out:
                 'Mesajlardan çıktı; yeniden kabul edene kadar (yanıt alan paketlerde START) TalkOlog ona mesaj göndermez.',
               no_consent:
-                'Onay sorulduğunda mesajları reddetti, bu yüzden TalkOlog ona mesaj göndermez.',
+                'Onay sorulduğunda mesajları reddetti, bu yüzden TalkOlog ona SMS veya WhatsApp ile mesaj göndermez.',
               no_channel:
                 'Ülkesinin hiçbir mesaj kanalı karşılama mesajını ve linkini taşıyamıyor. Kendisine başka bir yoldan ulaşın.',
               console_real_org:
-                'Bu ülkeye mesajlar bu ortamda henüz canlı değil: ülke paketi için SMS göndericisi tanımlı değil, bu yüzden rapor verene bir şey ulaşmadı. Gönderici tanımlanınca karşılama mesajını Ekip ve numaralar sayfasından yeniden gönderin.',
+                'Bu ülkeye mesajlar bu ortamda henüz canlı değil: ülke paketi için SMS veya WhatsApp göndericisi tanımlı değil, bu yüzden rapor verene bir şey ulaşmadı. Bir gönderici tanımlanınca karşılama mesajını Ekip ve numaralar sayfasından yeniden gönderin.',
             },
           },
           welcome_carrier_undelivered: {
@@ -1488,8 +1488,10 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         preferenceHint: 'Diğerini de her zaman kullanabilir.',
         callTalkNow: 'Kayıt ekranındaki Şimdi konuş ile arar.',
         send: 'Karşılama mesajını gönder',
-        smsAttest: '{{first}}, TalkOlog’dan günlük rapor mesajları almayı kabul etti',
-        smsAttestNoName: 'Bu kişi, TalkOlog’dan günlük rapor mesajları almayı kabul etti',
+        smsAttest:
+          '{{first}}, TalkOlog’dan günlük rapor mesajlarını SMS veya WhatsApp ile almayı kabul etti',
+        smsAttestNoName:
+          'Bu kişi, TalkOlog’dan günlük rapor mesajlarını SMS veya WhatsApp ile almayı kabul etti',
         smsAttestHint: 'Adınızla birlikte kayda geçer.',
         attestation_required:
           'Önce kutuyu işaretleyin: kişi günlük rapor mesajları almayı kabul etmiş olmalı.',
@@ -2462,7 +2464,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
     },
     device: {
       title: 'Bu {{name}} adlı kişinin telefonu mu?',
-      body: 'Ofisin verdiği numaraya 6 haneli bir kod gönderiyoruz; böylece buradan yalnızca siz rapor verebilirsiniz.',
+      body: 'Ofisin verdiği numaraya SMS veya WhatsApp ile 6 haneli bir kod gönderiyoruz; böylece buradan yalnızca siz rapor verebilirsiniz.',
       send: 'Evet, kodu gönderin',
       sending: 'Kod gönderiliyor…',
       sent: 'Kod gönderildi. 10 dakika geçerlidir.',
@@ -2476,7 +2478,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         code_expired: 'Bu kodun süresi doldu. Yeni kod isteyin.',
         no_code: 'Önce bir kod isteyin.',
         code_undeliverable:
-          'Bu numaraya mesaj gönderemedik. Ofisten numarayı kontrol etmesini isteyin.',
+          'Bu numaraya SMS veya WhatsApp ile ulaşamadık. Ofisten numarayı kontrol etmesini isteyin.',
         rate_limited: 'Çok fazla deneme. {{minutes}} dakika sonra tekrar deneyin.',
         offline: 'Bağlantı yok. Sinyalinizi kontrol edip tekrar deneyin.',
         generic: 'Bir sorun oluştu. Tekrar deneyin.',

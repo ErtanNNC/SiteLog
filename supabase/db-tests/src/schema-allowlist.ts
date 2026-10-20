@@ -339,4 +339,15 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
       'constraint missing: transcripts CHECK (((upload_id IS NOT NULL) <> (call_id IS NOT NULL)))',
     ],
   },
+  {
+    id: 'q372-whatsapp-user-id',
+    reason:
+      "§19 Q372 WhatsApp BSUID, spec write-back pending (lead). reporters.whatsapp_user_id: the person's WhatsApp business-scoped user id (`CC.<id>`, Meta's usernames, 2026) that sms-webhook learns from Twilio's ExternalUserId and matches a message by when From carries no number (20261020000200).",
+    closes: 'kept',
+    decision: '§19 Q372 (spec §6 write-back pending, lead)',
+    diffs: [
+      'column extra: reporters.whatsapp_user_id (text)',
+      "constraint extra: reporters CHECK ((whatsapp_user_id ~ '^[A-Z]{2}\\.[A-Za-z0-9]{1,128}$'::text))",
+    ],
+  },
 ];

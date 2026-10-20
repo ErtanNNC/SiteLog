@@ -196,8 +196,10 @@ export async function applyLateStatus(
   if (to !== 'undeliverable' && to !== 'failed') return to;
   if (whatsapp) {
     // W2-15: a WhatsApp message Twilio took and then could not deliver: never a texts-account
-    // notice nor "Can't reach this number" (the welcome is never on WhatsApp); the message goes on
-    // the person's next channel (W2-01), and the office hears only if every channel fails.
+    // notice nor "Can't reach this number"; the message goes on the person's next channel (W2-01),
+    // and the office hears only if every channel fails. A WhatsApp welcome or device code (§19
+    // Q372) is no `notify` job, so no fallback is queued here: send_welcome's recheck hands the
+    // welcome to SMS, and the next code goes by SMS (`whatsappFailedSinceInbound`).
     await fallBack(to);
     return to;
   }
