@@ -915,6 +915,7 @@ jobs:
           LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
           LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
           # The connection string as preview-worker builds it: the pooler address `supabase link`
           # saved, in session mode (5432, which also delivers the worker's LISTEN), with the password
@@ -958,7 +959,7 @@ jobs:
           names=(SUPABASE_URL SUPABASE_DB_URL SUPABASE_SERVICE_ROLE_KEY)
           for n in TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN ANTHROPIC_API_KEY DEEPGRAM_API_KEY \
             VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT STRIPE_SECRET_KEY \
-            LIVEKIT_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET SENTRY_DSN; do
+            LIVEKIT_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET SENTRY_DSN RESEND_API_KEY; do
             if [ -n "${!n}" ]; then names+=("$n"); fi
           done
           if [[ " $existing " == *" LINK_SIGNING_SECRET "* ]]; then
@@ -1015,7 +1016,7 @@ jobs:
             else
               echo "- Texts: console only (no TWILIO_* in the preview Environment): the panel's Demo phone."
             fi
-            echo "- Email: **console** (no Resend on preview): the worker log only."
+            if has RESEND_API_KEY; then echo "- Email: **Resend** for real orgs (from \`reports@talkolog.com\`, the domain verified in Resend); demo orgs stay console (the Demo phone's Email tab)."; else echo "- Email: **console** (no RESEND_API_KEY in the preview Environment): the Demo phone's Email tab and the worker log."; fi
             if has VAPID_PRIVATE_KEY; then echo "- Web push: real for real orgs; console for demo orgs."; else echo "- Web push: console (no VAPID pair)."; fi
             if has LIVEKIT_API_SECRET; then echo "- Reminder calls: LiveKit for a real org whose pack has an outbound trunk; demo orgs ring the Demo phone."; else echo "- Reminder calls: none placed for real orgs (no LIVEKIT_*); demo orgs ring the Demo phone."; fi
             if has STRIPE_SECRET_KEY; then echo "- billing_sync: Stripe (the preview Environment's key, test mode)."; else echo "- billing_sync: no Stripe key, the job logs and ends."; fi

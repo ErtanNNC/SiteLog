@@ -1360,7 +1360,7 @@ describe('deploy.yml preview-worker-fly job', () => {
     expect(JOBS.get('plan')!.text).toContain('[ "$1" != preview-worker-fly ]');
   });
 
-  it('deploys fly.preview.toml as one always-on machine in production mode, console email', () => {
+  it('deploys fly.preview.toml as one always-on machine in production mode, Resend email', () => {
     expect(job.text).toContain('uses: superfly/flyctl-actions/setup-flyctl@master');
     expect(job.text).toContain('FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}');
     expect(job.text).toContain('FLY_APP: ${{ vars.FLY_APP }}');
@@ -1376,7 +1376,7 @@ describe('deploy.yml preview-worker-fly job', () => {
     const toml = readFileSync(join(ROOT, 'apps', 'worker', 'fly.preview.toml'), 'utf8');
     for (const line of [
       'NODE_ENV = "production"',
-      'EMAIL_PROVIDER = "console"',
+      'EMAIL_PROVIDER = "resend"',
       'TRANSCRIBE_PROVIDER = "deepgram"',
       'EXTRACT_PROVIDER = "claude"',
       'WEATHER_API_BASE = "https://api.open-meteo.com/v1/forecast"',
@@ -1387,7 +1387,7 @@ describe('deploy.yml preview-worker-fly job', () => {
     ])
       expect(toml).toContain(line);
     // Nothing that production refuses (the worker would not start), and no Resend on preview.
-    expect(toml).not.toMatch(/SMS_PROVIDER_STUB|WORKER_CLOCK_OVERRIDE|= "fake"|RESEND_/);
+    expect(toml).not.toMatch(/SMS_PROVIDER_STUB|WORKER_CLOCK_OVERRIDE|= "fake"|RESEND_API_KEY *=/);
     // The health check waits for the LISTEN, as preview-worker's.
     expect(stepScript('preview-worker-fly', 'Health check and summary')).toContain(
       `*'"listening":true'*`,
@@ -1404,7 +1404,10 @@ describe('deploy.yml preview-worker-fly job', () => {
       /\$\{?(!n|SUPABASE_DB_URL|SUPABASE_SERVICE_ROLE_KEY|LINK_SIGNING_SECRET)\b.*GITHUB_ENV/,
     );
     expect(secrets).toContain('echo "FLY_STAGED_SECRETS=${names[*]}" >> "$GITHUB_ENV"');
-    expect(job.text).not.toMatch(/ILETIMERKEZI_|RESEND_/);
+    // Resend is the Fly worker's (real orgs only; demo orgs stay console in the worker), staged
+    // like the other keys; never İletimerkezi (TR texts go through Twilio, §19 Q370).
+    expect(job.text).not.toMatch(/ILETIMERKEZI_/);
+    expect(job.text).toContain('RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}');
     expect(job.text).not.toMatch(/SMS_PROVIDER_STUB|WORKER_CLOCK_OVERRIDE/);
   });
 

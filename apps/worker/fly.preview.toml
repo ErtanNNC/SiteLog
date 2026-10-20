@@ -3,7 +3,7 @@
 # Fly.io"). Never deploy it by hand to the staging or production app: those use fly.toml.
 #
 # Secrets (SUPABASE_*, TWILIO_*, ANTHROPIC_API_KEY, DEEPGRAM_API_KEY, VAPID_*, STRIPE_SECRET_KEY,
-# LIVEKIT_*, SENTRY_DSN, LINK_SIGNING_SECRET) are staged by the job from the preview Environment.
+# LIVEKIT_*, SENTRY_DSN, RESEND_API_KEY, LINK_SIGNING_SECRET) are staged by the job from the preview Environment.
 # APP_URL, FIELD_APP_URL, CLAUDE_MODEL and CLAUDE_MODEL_FAST come from the job as
 # `flyctl deploy --env` (they follow the preview Environment's variables).
 app = "talkolog-worker-preview"
@@ -24,8 +24,9 @@ primary_region = "iad"
   TRANSCRIBE_PROVIDER = "deepgram"
   TRANSCRIBE_MODEL = "nova-3"
   EXTRACT_PROVIDER = "claude"
-  # No Resend on preview: office email goes to the worker log only.
-  EMAIL_PROVIDER = "console"
+  # Resend once RESEND_API_KEY is a secret (preview-worker-fly stages it from the preview
+  # Environment); without the key the worker falls back to console. Demo orgs always stay console.
+  EMAIL_PROVIDER = "resend"
   # Open-Meteo's free endpoint (no key; the worker's default is the commercial one).
   WEATHER_API_BASE = "https://api.open-meteo.com/v1/forecast"
   LOG_LEVEL = "info"

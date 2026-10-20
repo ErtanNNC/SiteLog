@@ -72,6 +72,7 @@ export function buildContext(config: Config): Ctx {
       { provider: config.EMAIL_PROVIDER, apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM },
       log,
       { insertConsoleEmail: (row) => db.insertConsoleEmail(row) },
+      async (orgId) => (await db.getOrg(orgId))?.is_demo === true,
     ),
     notifier: createWorkerNotifier(config, db, undefined, now),
     telephony: createTelephony(config, { fetch: abortableFetch(), now }),

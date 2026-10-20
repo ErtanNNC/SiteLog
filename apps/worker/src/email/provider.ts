@@ -150,11 +150,26 @@ export function createMemoryProvider(): EmailProvider & { sent: EmailMessage[] }
   };
 }
 
+/**
+ * Resend for real orgs only: an email about a demo org (`orgs.is_demo`, the §18 orgs with their
+ * `.example` addresses) goes to the console provider, the Demo phone's Email tab, as its texts go
+ * to the Demo phone. Without `isDemoOrg` (tests) every email takes Resend.
+ */
 export function createEmailProvider(
   cfg: { provider: 'resend' | 'console'; apiKey: string; from: string },
   log: Logger,
   store?: ConsoleEmailStore,
+  isDemoOrg?: (orgId: string) => Promise<boolean>,
 ): EmailProvider {
-  if (cfg.provider === 'resend' && cfg.apiKey) return createResendProvider(cfg.apiKey, cfg.from);
-  return createConsoleProvider(log, cfg.from, store);
+  const consoleProvider = createConsoleProvider(log, cfg.from, store);
+  if (cfg.provider !== 'resend' || !cfg.apiKey) return consoleProvider;
+  const resend = createResendProvider(cfg.apiKey, cfg.from);
+  if (!isDemoOrg) return resend;
+  return {
+    name: resend.name,
+    async send(msg) {
+      if (msg.orgId && (await isDemoOrg(msg.orgId))) return consoleProvider.send(msg);
+      return resend.send(msg);
+    },
+  };
 }

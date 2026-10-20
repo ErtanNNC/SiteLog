@@ -8,7 +8,7 @@ vi.mock(import('resend'), () => ({
   } as unknown as typeof Resend,
 }));
 
-const { createResendProvider } = await import('./provider');
+const { createEmailProvider, createResendProvider } = await import('./provider');
 
 const msg = {
   to: ['office@example.com'],
@@ -56,5 +56,29 @@ describe('Resend provider: idempotency conflicts (review of a5da973)', () => {
     send.mockResolvedValueOnce({ data: { id: 'em_1' }, error: null });
     const provider = createResendProvider('re_test', 'TalkOlog <r@x.y>');
     await expect(provider.send(msg)).resolves.toEqual({ id: 'em_1' });
+  });
+});
+
+describe('createEmailProvider: demo orgs stay on the console', () => {
+  beforeEach(() => send.mockReset());
+
+  it("files a demo org's email for the Demo phone and sends a real org's through Resend", async () => {
+    send.mockResolvedValue({ data: { id: 're_1' }, error: null });
+    const filed: string[] = [];
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+    const provider = createEmailProvider(
+      { provider: 'resend', apiKey: 're_test', from: 'TalkOlog <r@x.y>' },
+      log as never,
+      { insertConsoleEmail: async (row) => (filed.push(row.org_id), 'c1') },
+      async (orgId) => orgId === 'demo-org',
+    );
+    expect(provider.name).toBe('resend');
+    await expect(provider.send({ ...msg, orgId: 'demo-org' })).resolves.toEqual({
+      id: 'console:c1',
+    });
+    expect(send).not.toHaveBeenCalled();
+    expect(filed).toEqual(['demo-org']);
+    await expect(provider.send({ ...msg, orgId: 'real-org' })).resolves.toEqual({ id: 're_1' });
+    expect(send).toHaveBeenCalledTimes(1);
   });
 });
