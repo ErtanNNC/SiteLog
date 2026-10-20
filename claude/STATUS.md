@@ -4,8 +4,8 @@
 
 - **Panelde onay kutusu:** Team'de kişi eklerken ve kurulum sihirbazında "{isim} TalkOlog'dan günlük rapor mesajları almayı kabul etti" kutusu zorunlu. Kutu işaretlenmeden davet gitmez; sunucu da reddeder. Kayıt, ekleyen ofis kullanıcısının adı ve saatiyle audit log'a düşer (`team.invite_sms.v1`).
 - **Herkese açık sayfalar:** `talkolog.com/sms` (program, sözlü izin metni, örnek mesajlar), `talkolog.com/terms`, `talkolog.com/privacy`. Şirket: Yalp LLC, Wyoming, ertan@yalpllc.com. Metinler taslak; okuyup onaylamanız gerekir (mümkünse bir avukat).
-- **Fly.io test worker'ı:** Deploy hedefi `preview-worker-fly` hazır. Sizin adımlarınız RUNBOOK "Preview worker on Fly.io" bölümünde (hesap, uygulama `talkolog-worker-preview`, deploy token, GitHub preview ortamına `FLY_API_TOKEN` ve `FLY_APP`).
-- **Sıra önemli:** yeni panel sürümünü Netlify'da yayınlayın, sonra `api-invite-reporter` preview'e kurulsun. Tersi olursa eski panel kişi ekleyemez.
+- **Fly.io test worker'ı çalışıyor (2026-10-20 11:53 UTC):** `talkolog-worker-preview` (iad, 1 makine, sürekli açık), preview projesine bağlı; `/health` dinliyor. Artık her test öncesi `preview-worker` başlatmak gerekmiyor. Worker değişince Deploy → preview → `preview-worker-fly` yeniden çalıştırılır.
+- **Yayında:** yeni panel talkolog.com'da (sizin yayınınız), `api-invite-reporter` preview'e kuruldu (kutusuz davet reddediliyor).
 - **US SMS gelmemesi:** worker 3 welcome'ı hatasız Twilio'ya verdi. Twilio loglarında hata kodu (muhtemelen 30034, A2P 10DLC kaydı yok) kontrol edilmeli.
 
 **2026-10-19 (19:00 UTC) — Tek numara, bütün ülkeler (§19 Q370, onayınızla).**
