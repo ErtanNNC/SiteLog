@@ -8,7 +8,9 @@
  * Settings (W4-05), New report (W4-09), the not-found page and the placeholders speak the panel's
  * language (EN/TR). A page wrapped in `<EnglishOnly>` still reads `copy/en.ts` directly and renders
  * in English inside the translated shell: since W4-09 only `/try` and `/ops` (spec §19 Q240,
- * README "Deliberate deviations"; `routes.english-only.test.ts` holds it so).
+ * README "Deliberate deviations"; `routes.english-only.test.ts` holds it so). The public legal
+ * pages `/sms`, `/terms` and `/privacy` sit outside the shell and its language: English documents
+ * of the US SMS program in their own `lang="en"` root (legal/content.ts, owner decision 2026-10-20).
  */
 import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router';
@@ -39,6 +41,8 @@ const DevPhonePage = page(() => import('./dev-phone/Page'));
 const OpsPage = page(() => import('./ops/Page'));
 const TryPage = page(() => import('./try/Page'));
 const NotFoundPage = page(() => import('./not-found/Page'));
+/** `/sms`, `/terms`, `/privacy`: public, English only (the US SMS program's documents, legal/content.ts). */
+const LegalPage = lazy(() => import('./legal/Page'));
 
 /** The role guard of a shell page; its "No access" state names the page by its nav label. */
 function guard(key: Exclude<RouteKey, 'setup'>, node: ReactNode) {
@@ -62,6 +66,9 @@ export function AppRoutes() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/sms" element={<LegalPage doc="sms" />} />
+        <Route path="/terms" element={<LegalPage doc="terms" />} />
+        <Route path="/privacy" element={<LegalPage doc="privacy" />} />
         <Route element={<RequireAuth />}>
           <Route path="/setup" element={<SetupPage />} />
           <Route path="/setup/:step" element={<SetupPage />} />

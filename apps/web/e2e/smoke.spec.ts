@@ -409,3 +409,29 @@ test.describe('language switch', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   });
 });
+
+test.describe('public legal pages', () => {
+  test('/sms, /terms and /privacy open directly without signing in', async ({ page }) => {
+    await page.goto('/sms');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'TalkOlog SMS program' }),
+    ).toBeVisible();
+    await expect(page).toHaveTitle('SMS program · TalkOlog');
+    await expect(page.getByText('Reply START to resume.', { exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/sms$/);
+
+    const legal = page.getByRole('navigation', { name: 'Legal' });
+    await legal.getByRole('link', { name: 'Terms of Service' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Terms of Service' })).toBeVisible();
+    await legal.getByRole('link', { name: 'Privacy Policy' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Privacy Policy' })).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/privacy');
+    await expect(page.getByRole('heading', { level: 1, name: 'Privacy Policy' })).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+});
