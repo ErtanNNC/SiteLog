@@ -1464,11 +1464,12 @@ describe('deploy.yml preview-worker-fly job', () => {
       LIVEKIT_API_SECRET: 'lk-secret-0000',
     };
 
-    function run(existing: string[], extra: Record<string, string> = {}) {
+    function run(existing: string[], extra: Record<string, string> = {}, appExists = true) {
       return runStep(
         secrets,
         {
           FLY_APP: 'talkolog-worker-preview',
+          FLY_ORG: 'personal',
           SUPABASE_PROJECT_REF: REF,
           SUPABASE_DB_PASSWORD: 'p@ss word/1',
           VAPID_PUBLIC_KEY: '',
@@ -1495,6 +1496,8 @@ describe('deploy.yml preview-worker-fly job', () => {
           flyctl: [
             'echo "$*" >> argv.log',
             'case "$1 $2" in',
+            `  "status --app") exit ${appExists ? 0 : 1} ;;`,
+            '  "apps create") ;;',
             '  "secrets list") cat existing.json ;;',
             '  "secrets import") cat > stdin.txt ;;',
             'esac',
@@ -1502,6 +1505,17 @@ describe('deploy.yml preview-worker-fly job', () => {
         },
       );
     }
+
+    it('creates the app in FLY_ORG on the first run, and leaves an existing one alone', () => {
+      const created = run([], {}, false);
+      expect(created.status, created.log).toBe(0);
+      expect(readFileSync(join(created.dir, 'argv.log'), 'utf8')).toContain(
+        'apps create talkolog-worker-preview --org personal',
+      );
+      const kept = run([]);
+      expect(kept.status, kept.log).toBe(0);
+      expect(readFileSync(join(kept.dir, 'argv.log'), 'utf8')).not.toContain('apps create');
+    });
 
     it('stages the non-empty values on stdin only, and a new link secret when the app has none', () => {
       const r = run([]);

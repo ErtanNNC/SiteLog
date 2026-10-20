@@ -111,8 +111,8 @@ An always-on worker for the preview project, so the field flow, the reminders an
 **Owner's one-time steps:**
 
 1. Create a Fly.io account at fly.io and add a payment method.
-2. Create the app, e.g. `talkolog-worker-preview`: `fly apps create talkolog-worker-preview` (or in the Fly.io dashboard). The name must contain `preview`; the job refuses any other, so staging's worker app is never redeployed against the preview project.
-3. Create a deploy token for that app only: `fly tokens create deploy -a talkolog-worker-preview` (or dashboard → the app → Tokens → Create token). Not an organization token.
+2. Create an organization token in the Fly.io dashboard (Tokens → Create token, organization `personal`), or `fly tokens create org`. Do not use the dashboard's "Launch an App from GitHub": it builds the repository's default branch with its own settings and redeploys on every push. The job creates the app itself on its first run (`flyctl apps create`, in the variable `FLY_ORG`, default `personal`). With an existing app, its deploy token (`fly tokens create deploy -a <app>`) also works.
+3. Choose the app's name, e.g. `talkolog-worker-preview`. It must contain `preview`; the job refuses any other, so staging's worker app is never redeployed against the preview project.
 4. GitHub → Settings → Environments → `preview`: secret `FLY_API_TOKEN` (the token), variable `FLY_APP` (`talkolog-worker-preview`). Set them on the `preview` Environment, never at repository level (a repository value would reach the staging Environment too).
 5. Actions → **Deploy** → Run workflow → branch `spec-v1.2`, environment `preview`, target `preview-worker-fly`. Rerun it after a worker change on `spec-v1.2`, or after changing a secret or variable below.
 
