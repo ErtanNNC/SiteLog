@@ -10,7 +10,9 @@ app = "talkolog-worker-preview"
 primary_region = "iad"
 
 [build]
-  dockerfile = "apps/worker/Dockerfile"
+  # Relative to this file (flyctl resolves it from the config's folder); the build context is the
+  # repository root, the deploy's working directory.
+  dockerfile = "Dockerfile"
 
 [env]
   # Production mode: no .env files read, and the fake transcriber and extractor are refused (the

@@ -986,7 +986,7 @@ jobs:
           # The values that follow the preview Environment's variables (fly.preview.toml's [env] is
           # static); none of them is a secret. --ha=false: one machine, not Fly's default two.
           flyctl deploy . --remote-only --ha=false --app "$FLY_APP" \
-            --config apps/worker/fly.preview.toml --dockerfile apps/worker/Dockerfile \
+            --config apps/worker/fly.preview.toml --dockerfile "$GITHUB_WORKSPACE/apps/worker/Dockerfile" \
             --env "APP_URL=$PANEL_URL" --env "FIELD_APP_URL=$FIELD_APP_URL" \
             --env "CLAUDE_MODEL=$CLAUDE_MODEL" --env "CLAUDE_MODEL_FAST=$CLAUDE_MODEL_FAST"
       - name: Health check and summary
