@@ -36,6 +36,7 @@ async function submitSite(code: string, manager: string, phone: string) {
   await userEvent.type(screen.getByLabelText('Site address'), '1 Test St');
   await userEvent.type(screen.getByLabelText('Name'), manager);
   await userEvent.type(screen.getByTestId('manager-phone'), phone);
+  await userEvent.click(screen.getByTestId('mgr-sms-attest'));
   await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
   expect(await screen.findByRole('heading', { name: 'Reports & reminders' })).toBeInTheDocument();
 }
@@ -87,6 +88,7 @@ describe('SetupPage (demo org)', () => {
       await userEvent.type(screen.getByLabelText('Longitude'), '-87.6136');
       await userEvent.type(screen.getByLabelText('Name'), 'Elena Vasquez');
       await userEvent.type(screen.getByTestId('manager-phone'), '555 014 8001');
+      await userEvent.click(screen.getByTestId('mgr-sms-attest'));
 
       // W4-02: the §9.2 welcome as sent, by SMS, with the US pack's reply clause (two-way) and no
       // "or call" (no voice number in the demo pack); the v1.0 template and its buttons are gone.
@@ -125,6 +127,10 @@ describe('SetupPage (demo org)', () => {
       const elena = store.data.reporters.find((r) => r.name === 'Elena Vasquez')!;
       expect(elena.phone_e164).toBe('+15550148001');
       expect(elena).toMatchObject({ locale: 'en-US', contact_pref: 'link', status: 'invited' });
+      expect(
+        store.data.audit.find((a) => a.action === 'reporter.invited' && a.entity_id === elena.id)
+          ?.diff,
+      ).toMatchObject({ sms_attestation: 'team.invite_sms.v1' });
       expect(store.data.siteReporters.find((sr) => sr.reporter_id === elena.id)).toMatchObject({
         site_id: site.id,
         is_primary: true,
@@ -168,6 +174,17 @@ describe('SetupPage (demo org)', () => {
       expect(
         screen.getByText('Enter a valid mobile number for the chosen country.'),
       ).toBeInTheDocument();
+      // Owner decision 2026-10-20: the office attests the manager agreed to get texts.
+      expect(
+        screen.getByText(
+          'Tick the box first: the person must have agreed to get daily report texts.',
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('checkbox', {
+          name: 'This person agreed to get daily report texts from TalkOlog',
+        }),
+      ).toHaveAttribute('aria-invalid', 'true');
       expect(store.data.sites).toHaveLength(6);
     },
   );
@@ -181,6 +198,7 @@ describe('SetupPage (demo org)', () => {
     await userEvent.type(screen.getByLabelText('Site address'), '12 West St, Chicago, IL');
     await userEvent.type(screen.getByLabelText('Name'), 'Omar Haddad');
     await userEvent.type(screen.getByTestId('manager-phone'), '5550149001');
+    await userEvent.click(screen.getByTestId('mgr-sms-attest'));
     await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
     expect(await screen.findByRole('heading', { name: 'Sites landing' })).toBeInTheDocument();
     await waitFor(() =>
@@ -362,6 +380,7 @@ describe('SetupPage (demo org)', () => {
       await userEvent.type(screen.getByLabelText('Site address'), '400 Harbor Dr, Chicago, IL');
       await userEvent.type(screen.getByLabelText('Name'), 'Elena Vasquez');
       await userEvent.type(screen.getByTestId('manager-phone'), '555 014 8001');
+      await userEvent.click(screen.getByTestId('mgr-sms-attest'));
       await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
 
       expect(
@@ -495,6 +514,7 @@ describe('SetupPage site step on v1.2 (W4-02)', () => {
       await fillSite('HV-5122', EN_LABELS);
       await userEvent.type(screen.getByLabelText('Name'), 'Luis Ortega');
       await userEvent.type(screen.getByTestId('manager-phone'), '555 014 8002');
+      await userEvent.click(screen.getByTestId('mgr-sms-attest'));
       expect(screen.getByText('They can always use the other one.')).toBeInTheDocument();
       await userEvent.click(screen.getByRole('radio', { name: 'Call' }));
       // The US demo pack has no voice number: Talk now in the recorder (§19 Q33).
@@ -515,6 +535,18 @@ describe('SetupPage site step on v1.2 (W4-02)', () => {
           { name: 'Call' },
         ),
       );
+      // The backup needs the office's SMS attestation too (owner decision 2026-10-20).
+      await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
+      expect(
+        await screen.findByText(
+          'Tick the box first: the person must have agreed to get daily report texts.',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId('bk-sms-attest')).toHaveAccessibleName(
+        'Ana agreed to get daily report texts from TalkOlog',
+      );
+      expect(store.data.sites.some((s) => s.project_code === 'HV-5122')).toBe(false);
+      await userEvent.click(screen.getByTestId('bk-sms-attest'));
       await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
       expect(
         await screen.findByRole('heading', { name: 'Reports & reminders' }),
@@ -551,6 +583,7 @@ describe('SetupPage site step on v1.2 (W4-02)', () => {
       await fillSite('KK-1301', EN_LABELS);
       await userEvent.type(screen.getByLabelText('Name'), 'Emre Yıldız');
       await userEvent.type(screen.getByTestId('manager-phone'), '0212 222 33 44');
+      await userEvent.click(screen.getByTestId('mgr-sms-attest'));
       await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
       expect(
         await screen.findByText(
@@ -583,6 +616,7 @@ describe('SetupPage site step on v1.2 (W4-02)', () => {
     await fillSite('KK-1302', EN_LABELS);
     await userEvent.type(screen.getByLabelText('Name'), 'Emre Yıldız');
     await userEvent.type(screen.getByTestId('manager-phone'), '0212 222 33 44');
+    await userEvent.click(screen.getByTestId('mgr-sms-attest'));
     await userEvent.click(screen.getByRole('radio', { name: 'Call' }));
     await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
     expect(
@@ -625,6 +659,7 @@ describe('SetupPage site step on v1.2 (W4-02)', () => {
       await userEvent.type(screen.getByLabelText('Şantiye adresi'), 'Kartal, İstanbul');
       await userEvent.type(screen.getByLabelText('Ad'), 'Emre Yıldız');
       await userEvent.type(screen.getByTestId('manager-phone'), '532 000 0599');
+      await userEvent.click(screen.getByTestId('mgr-sms-attest'));
       expect(screen.getByTestId('mgr-locale')).toHaveTextContent('Türkçe');
       await userEvent.click(screen.getByRole('radio', { name: 'Arama' }));
       expect(screen.getByText('Kayıt ekranındaki Şimdi konuş ile arar.')).toBeInTheDocument();
@@ -636,6 +671,9 @@ describe('SetupPage site step on v1.2 (W4-02)', () => {
       expect(text).not.toHaveTextContent(/STOP|arayın/);
       expect(text).toHaveAttribute('lang', 'tr');
       expect(screen.getByText('Önizleme · Emre ne alacak')).toBeInTheDocument();
+      expect(screen.getByTestId('mgr-sms-attest')).toHaveAccessibleName(
+        'Emre, TalkOlog’dan günlük rapor mesajları almayı kabul etti',
+      );
       // No TRY price yet (§19 Q9): Billing's line instead of a number.
       expect(screen.getByTestId('pricing-card')).toHaveTextContent(
         'Şantiye başına fiyatınızı TalkOlog belirler.',

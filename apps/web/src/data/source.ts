@@ -96,6 +96,12 @@ export interface InviteReporterInput {
   locale?: ReporterLocale;
   /** Preferred channel (F3, P10 invite dialog); default `link`. */
   contactPref?: ContactPref;
+  /**
+   * The office attests the person agreed to get daily report texts from TalkOlog (owner decision
+   * 2026-10-20, `INVITE_SMS_ATTESTATION`); kept in the `reporter.invited` audit entry. Must be
+   * true: api-invite-reporter (and the demo store) refuse an invite without it.
+   */
+  smsAttested: boolean;
 }
 
 /**

@@ -27,6 +27,7 @@ import type {
   WorkItemRow,
 } from '@sitelog/shared/db/types.ts';
 import {
+  INVITE_SMS_ATTESTATION,
   isActiveReporterStatus,
   type InvoiceStatus,
   type MemberRole,
@@ -1400,7 +1401,20 @@ export class DemoStore {
     this.emit({ table: 'all' });
   }
 
+  /**
+   * Team's invite and the setup wizard (as api-invite-reporter): refused without the office's SMS
+   * attestation (owner decision 2026-10-20); its version goes into the `reporter.invited` entry.
+   */
   inviteReporter(input: InviteReporterInput, userId: string): string {
+    if (input.smsAttested !== true) throw new Error(copy.team.invite.attestation_required);
+    return this.addReporter(input, userId, { sms_attestation: INVITE_SMS_ATTESTATION });
+  }
+
+  private addReporter(
+    input: Omit<InviteReporterInput, 'smsAttested'>,
+    userId: string,
+    auditDiff: Record<string, unknown> = {},
+  ): string {
     const id = localId('reporter');
     // As api-invite-reporter: the first pack locale among the "Speaks" languages, else the pack's.
     const pack = demoOrgPack(this.data);
@@ -1440,7 +1454,7 @@ export class DemoStore {
       action: 'reporter.invited',
       entity: 'reporter',
       entity_id: id,
-      diff: { sites: input.siteIds },
+      diff: { sites: input.siteIds, ...auditDiff },
     });
     // The worker's send_welcome (F3): a demo org's welcome text lands in the Demo phone.
     demoWelcome(this.data, this.data.reporters.at(-1)!, input.siteIds[0], this.nowIso());
@@ -1489,7 +1503,8 @@ export class DemoStore {
       }
       demoWelcome(this.data, existing, input.siteId, this.nowIso());
     } else {
-      id = this.inviteReporter(
+      // As api-link-unknown-contact: the person reached TalkOlog first, so no office attestation.
+      id = this.addReporter(
         {
           name: input.name,
           phone: u.phone_e164,
@@ -2257,6 +2272,10 @@ export class DemoStore {
   }
 
   createSite(input: CreateSiteInput, userId: string): string {
+    // Checked before the site exists, so a refused manager invite never leaves half a site.
+    if (input.reporter && input.reporter.smsAttested !== true) {
+      throw new Error(copy.team.invite.attestation_required);
+    }
     const id = localId('site');
     const today = formatDateInTz(this.now, input.timezone);
     this.data.sites.push({

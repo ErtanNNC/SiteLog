@@ -1,7 +1,16 @@
 import { assertEquals } from '@std/assert';
 import { demoPack } from '@sitelog/shared/demo/countries.ts';
-import type { E164 } from '@sitelog/shared';
-import { canResend, invitePhone, inviteProfile, lineCheckRefusal, linkRows } from './logic.ts';
+import { INVITE_SMS_ATTESTATION, type E164 } from '@sitelog/shared';
+import {
+  ATTESTATION_REQUIRED,
+  canResend,
+  invitedAuditDiff,
+  invitePhone,
+  inviteProfile,
+  lineCheckRefusal,
+  linkRows,
+  missingSmsAttestation,
+} from './logic.ts';
 
 Deno.test('canResend: one re-send, 48 h after the first invite, only while still invited', () => {
   const now = new Date('2026-10-12T12:00:00Z');
@@ -123,4 +132,48 @@ Deno.test('lineCheckRefusal: a landline per §19 Q229 (W4-02)', () => {
   assertEquals(lineCheckRefusal(landline, 'link', real, withNumber)?.problem, 'landline_text');
   // A demo org places its calls on the console telephony.
   assertEquals(lineCheckRefusal(landline, 'call', { is_demo: true }, tr), null);
+});
+
+Deno.test(
+  'missingSmsAttestation: an invite needs smsAttested true (owner decision 2026-10-20)',
+  () => {
+    const invite = { orgId: 'o', name: 'Ray', phone: '+15550143378', siteIds: ['s'] };
+    assertEquals(missingSmsAttestation(invite), true);
+    assertEquals(missingSmsAttestation({ ...invite, smsAttested: false }), true);
+    assertEquals(missingSmsAttestation({ ...invite, smsAttested: 'true' }), true);
+    assertEquals(missingSmsAttestation({ ...invite, action: 'invite' }), true);
+    assertEquals(missingSmsAttestation({ ...invite, smsAttested: true }), false);
+    assertEquals(missingSmsAttestation({ ...invite, action: 'invite', smsAttested: true }), false);
+    // Re-send and disable add nobody; a body that is not an object is the schema's to refuse.
+    assertEquals(missingSmsAttestation({ action: 'resend', reporterId: 'r' }), false);
+    assertEquals(missingSmsAttestation({ action: 'disable', reporterId: 'r' }), false);
+    assertEquals(missingSmsAttestation(null), false);
+    assertEquals(missingSmsAttestation([]), false);
+    assertEquals(ATTESTATION_REQUIRED.code, 'attestation_required');
+  },
+);
+
+Deno.test('invitedAuditDiff: the reporter.invited entry carries the attestation version', () => {
+  const diff = invitedAuditDiff({
+    siteIds: ['s1'],
+    role: 'site_manager',
+    reused: false,
+    locale: 'en-US',
+    contactPref: 'link',
+    status: 'invited',
+    phoneOptedOut: false,
+    jobId: 7,
+  });
+  assertEquals(diff, {
+    siteIds: ['s1'],
+    role: 'site_manager',
+    reused: false,
+    locale: 'en-US',
+    contact_pref: 'link',
+    status: 'invited',
+    phone_opted_out: false,
+    jobId: 7,
+    sms_attestation: 'team.invite_sms.v1',
+  });
+  assertEquals(INVITE_SMS_ATTESTATION, 'team.invite_sms.v1');
 });

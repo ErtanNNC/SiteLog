@@ -1,5 +1,13 @@
 # TalkOlog · Durum
 
+**2026-10-20 — Twilio toll-free doğrulaması için hazırlık (§19 Q371, onayınızla).**
+
+- **Panelde onay kutusu:** Team'de kişi eklerken ve kurulum sihirbazında "{isim} TalkOlog'dan günlük rapor mesajları almayı kabul etti" kutusu zorunlu. Kutu işaretlenmeden davet gitmez; sunucu da reddeder. Kayıt, ekleyen ofis kullanıcısının adı ve saatiyle audit log'a düşer (`team.invite_sms.v1`).
+- **Herkese açık sayfalar:** `talkolog.com/sms` (program, sözlü izin metni, örnek mesajlar), `talkolog.com/terms`, `talkolog.com/privacy`. Şirket: Yalp LLC, Wyoming, ertan@yalpllc.com. Metinler taslak; okuyup onaylamanız gerekir (mümkünse bir avukat).
+- **Fly.io test worker'ı:** Deploy hedefi `preview-worker-fly` hazır. Sizin adımlarınız RUNBOOK "Preview worker on Fly.io" bölümünde (hesap, uygulama `talkolog-worker-preview`, deploy token, GitHub preview ortamına `FLY_API_TOKEN` ve `FLY_APP`).
+- **Sıra önemli:** yeni panel sürümünü Netlify'da yayınlayın, sonra `api-invite-reporter` preview'e kurulsun. Tersi olursa eski panel kişi ekleyemez.
+- **US SMS gelmemesi:** worker 3 welcome'ı hatasız Twilio'ya verdi. Twilio loglarında hata kodu (muhtemelen 30034, A2P 10DLC kaydı yok) kontrol edilmeli.
+
 **2026-10-19 (19:00 UTC) — Tek numara, bütün ülkeler (§19 Q370, onayınızla).**
 
 - **Değişen:** Bir SMS/WhatsApp numarası artık birden fazla ülke paketine tanımlanabiliyor. Gelen mesajın ülkesi sırayla şöyle bulunuyor: o kişiye son 30 günde gönderilen son mesaj, kişinin kayıtlı olduğu şirket, kişinin telefonunun ülke kodu, numaranın kendi ülkesi. STOP numarayı paylaşan bütün paketlerde geçerli; START hepsinden kaldırıyor.

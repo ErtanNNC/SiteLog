@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { sitePriceFor } from '../sites/price';
 import { LANGUAGES, languageLabel } from '../team/labels';
 import { PreferenceField } from '../team/PreferenceField';
+import { SmsAttestField } from '../team/SmsAttestField';
 import { reportLanguageName } from './countries';
 import { Field, TimezoneSelect } from './fields';
 import { geocodeAddress, type GeocodeResult } from './geocode';
@@ -166,10 +167,19 @@ export function SiteStep({
     if (!draft.managerName.trim()) next.managerName = t('setup.site.managerNameRequired');
     const managerError = phoneError(manager, draft.contactPref);
     if (managerError) next.managerPhone = managerError;
+    if (!draft.smsAttested) next.smsAttest = t('team.invite.attestation_required');
     if (draft.hasBackup && draft.backupPhone.trim()) {
       const backupError = phoneError(backup, draft.backupContactPref);
       if (backupError) next.backupPhone = backupError;
     }
+    // The backup is invited only with a name and a number (Page's submitSite): then the box too.
+    if (
+      draft.hasBackup &&
+      draft.backupName.trim() &&
+      draft.backupPhone.trim() &&
+      !draft.backupSmsAttested
+    )
+      next.backupSmsAttest = t('team.invite.attestation_required');
     setErrors(next);
     if (Object.keys(next).length) return;
     onSubmit(
@@ -431,6 +441,13 @@ export function SiteStep({
                   })}
                 </p>
               </fieldset>
+              <SmsAttestField
+                id="mgr-sms-attest"
+                name={draft.managerName}
+                checked={draft.smsAttested}
+                onCheckedChange={(smsAttested) => set({ smsAttested })}
+                error={errors.smsAttest}
+              />
 
               {draft.hasBackup ? (
                 <div className="grid gap-5 rounded-card border border-rebar p-4">
@@ -439,7 +456,14 @@ export function SiteStep({
                     <Button
                       variant="subtle"
                       size="dense"
-                      onClick={() => set({ hasBackup: false, backupName: '', backupPhone: '' })}
+                      onClick={() =>
+                        set({
+                          hasBackup: false,
+                          backupName: '',
+                          backupPhone: '',
+                          backupSmsAttested: false,
+                        })
+                      }
                     >
                       <X aria-hidden="true" />
                       {t('setup.site.removeBackup')}
@@ -477,6 +501,13 @@ export function SiteStep({
                       hint={preferenceHint(draft.backupContactPref)}
                     />
                   </div>
+                  <SmsAttestField
+                    id="bk-sms-attest"
+                    name={draft.backupName}
+                    checked={draft.backupSmsAttested}
+                    onCheckedChange={(backupSmsAttested) => set({ backupSmsAttested })}
+                    error={errors.backupSmsAttest}
+                  />
                 </div>
               ) : (
                 <div>

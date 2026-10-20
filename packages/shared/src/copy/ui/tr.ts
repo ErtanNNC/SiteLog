@@ -1488,6 +1488,11 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         preferenceHint: 'Diğerini de her zaman kullanabilir.',
         callTalkNow: 'Kayıt ekranındaki Şimdi konuş ile arar.',
         send: 'Karşılama mesajını gönder',
+        smsAttest: '{{first}}, TalkOlog’dan günlük rapor mesajları almayı kabul etti',
+        smsAttestNoName: 'Bu kişi, TalkOlog’dan günlük rapor mesajları almayı kabul etti',
+        smsAttestHint: 'Adınızla birlikte kayda geçer.',
+        attestation_required:
+          'Önce kutuyu işaretleyin: kişi günlük rapor mesajları almayı kabul etmiş olmalı.',
         description:
           'Raporcuya kişisel linkini mesajla gönderir. Linki telefonunda açar, numarasını bir kodla doğrular ve kaydı kabul eder.',
         namePlaceholder: 'Ad soyad',

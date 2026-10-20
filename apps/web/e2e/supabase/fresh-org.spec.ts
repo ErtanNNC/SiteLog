@@ -307,6 +307,12 @@ test.describe('in a tr-TR browser', { tag: ['@m11', '@F2'] }, () => {
     );
     await expect(welcome).not.toContainText('STOP');
     await expect(welcome).not.toContainText('arayın');
+    // The office's SMS attestation (owner decision 2026-10-20): required to send the welcome.
+    await page
+      .getByRole('checkbox', {
+        name: 'Emre, TalkOlog’dan günlük rapor mesajları almayı kabul etti',
+      })
+      .check();
     await page.getByRole('button', { name: 'Karşılama mesajını gönder' }).click();
     await expect(page.getByRole('heading', { name: 'Raporlar ve hatırlatmalar' })).toBeVisible({
       timeout: 30_000,
@@ -351,6 +357,15 @@ test.describe('in a tr-TR browser', { tag: ['@m11', '@F2'] }, () => {
       .eq('org_id', member.org_id)
       .single();
     if (emreError) throw emreError;
+    const { data: invitedAudit, error: invitedError } = await admin()
+      .from('audit_log')
+      .select('diff')
+      .eq('org_id', member.org_id)
+      .eq('action', 'reporter.invited')
+      .eq('actor_type', 'user') // the office's invite, not the worker's "welcome sent" row
+      .single();
+    if (invitedError) throw invitedError;
+    expect(invitedAudit.diff).toMatchObject({ sms_attestation: 'team.invite_sms.v1' });
     expect(emre).toEqual({
       name: 'Emre Yıldız',
       phone_e164: '+905320000599',

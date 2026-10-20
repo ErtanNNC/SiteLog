@@ -36,6 +36,7 @@ import { useCopy } from '@/i18n/useCopy';
 import { reportLanguageFor } from '@sitelog/shared/locale.ts';
 import { LANGUAGES, languageLabel } from './labels';
 import { PreferenceField } from './PreferenceField';
+import { SmsAttestField } from './SmsAttestField';
 
 export { LANGUAGES } from './labels';
 
@@ -51,7 +52,8 @@ interface Props {
 /**
  * P10 "Invite reporter": name, mobile (W4-01's picker and warning), role, sites, the languages they
  * speak, the language TalkOlog uses with them and the preferred channel (W4-03) → the welcome
- * text (F3, by SMS, §19 Q25).
+ * text (F3, by SMS, §19 Q25). The office attests the person agreed to get daily report texts
+ * (owner decision 2026-10-20); the invite cannot be sent without it.
  */
 export function InviteReporterDialog({
   open,
@@ -81,6 +83,7 @@ export function InviteReporterDialog({
   // null until the user picks one: the default follows the settings once they load.
   const [chosenPref, setContactPref] = useState<ContactPref | null>(null);
   const contactPref = chosenPref ?? orgDefaultPref;
+  const [smsAttested, setSmsAttested] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const reset = () => {
@@ -91,6 +94,7 @@ export function InviteReporterDialog({
     setLanguages(['en']);
     setLocale(locales[0]!);
     setContactPref(null);
+    setSmsAttested(false);
     setErrors({});
   };
 
@@ -103,6 +107,7 @@ export function InviteReporterDialog({
     if (!name.trim()) next.name = t('team.invite.nameRequired');
     if (!phone.e164) next.phone = t('phone.invalid');
     if (siteIds.length === 0) next.sites = t('team.invite.sitesRequired');
+    if (!smsAttested) next.smsAttest = t('team.invite.attestation_required');
     setErrors(next);
     if (Object.keys(next).length) return;
     invite.mutate(
@@ -114,6 +119,7 @@ export function InviteReporterDialog({
         languages: languages.length ? languages : ['en'],
         locale,
         contactPref,
+        smsAttested,
       },
       {
         onSuccess: () => {
@@ -274,6 +280,13 @@ export function InviteReporterDialog({
               })}
             </p>
           </fieldset>
+          <SmsAttestField
+            id="invite-sms-attest"
+            name={name}
+            checked={smsAttested}
+            onCheckedChange={setSmsAttested}
+            error={errors.smsAttest}
+          />
           <DialogFooter className="mt-2">
             <DialogClose asChild>
               <Button variant="ghost">{t('common.cancel')}</Button>

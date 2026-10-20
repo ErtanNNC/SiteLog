@@ -130,7 +130,8 @@ describeInvite('api-invite-reporter on the local stack', () => {
         'content-type': 'application/json',
         accept: 'application/json',
       },
-      body: JSON.stringify({ orgId: f.orgId, ...body }),
+      // The office's SMS attestation (owner decision 2026-10-20) unless a case leaves it out.
+      body: JSON.stringify({ orgId: f.orgId, smsAttested: true, ...body }),
     });
     const text = await res.text();
     return { status: res.status, text, json: JSON.parse(text) as Record<string, unknown> };
@@ -224,6 +225,7 @@ describeInvite('api-invite-reporter on the local stack', () => {
       contact_pref: 'link',
       status: 'invited',
       phone_opted_out: false,
+      sms_attestation: 'team.invite_sms.v1',
     });
 
     const jobs = await sql<
@@ -318,6 +320,22 @@ describeInvite('api-invite-reporter on the local stack', () => {
       select diff from audit_log where org_id = ${f.orgId} and action = 'reporter.invited'
         and entity_id = ${(res.json.reporter as { id: string }).id}`;
     expect(audits[0]!.diff).toMatchObject({ phone_opted_out: true, status: 'opted_out' });
+  });
+
+  it('refuses an invite without the SMS attestation, before anything is written', async () => {
+    const quiet = phone();
+    phones.push(quiet);
+    for (const smsAttested of [undefined, false]) {
+      const res = await invite({
+        name: 'Unattested',
+        phone: quiet,
+        siteIds: [f.siteId],
+        smsAttested,
+      });
+      expect(res.status, res.text).toBe(400);
+      expect(res.json).toMatchObject({ details: { code: 'attestation_required' } });
+    }
+    expect(await sql`select id from reporters where phone_e164 = ${quiet}`).toEqual([]);
   });
 
   it('refuses a phone the org country cannot read and a site of another org', async () => {

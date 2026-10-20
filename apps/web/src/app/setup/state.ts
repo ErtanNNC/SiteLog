@@ -34,12 +34,19 @@ export interface SiteDraft {
   locale: ReporterLocale;
   /** W4-02 (F2): the manager's preferred channel, Text link or Call. */
   contactPref: ContactPref;
+  /**
+   * The office attests the manager agreed to get daily report texts from TalkOlog (owner decision
+   * 2026-10-20); required to create the site. Never resumed from saved progress.
+   */
+  smsAttested: boolean;
   hasBackup: boolean;
   backupName: string;
   backupCountry: string;
   backupPhone: string;
   backupLocale: ReporterLocale;
   backupContactPref: ContactPref;
+  /** The same attestation for the backup; required when a backup is added. */
+  backupSmsAttested: boolean;
 }
 
 export interface ReportsDraft {
@@ -93,12 +100,14 @@ export function emptySite(
     languages: [...defaults.languages],
     locale: defaults.locale,
     contactPref: defaults.contactPref ?? 'link',
+    smsAttested: false,
     hasBackup: false,
     backupName: '',
     backupCountry: defaults.phoneCountry,
     backupPhone: '',
     backupLocale: defaults.locale,
     backupContactPref: defaults.contactPref ?? 'link',
+    backupSmsAttested: false,
   };
 }
 
@@ -157,7 +166,8 @@ export function loadProgress(
         company.timezoneTouched ??
         (company.timezone !== undefined && company.timezone !== base.company.timezone),
     },
-    site: { ...base.site, ...saved.site },
+    // An attestation is given when the site is created, never resumed from a saved draft.
+    site: { ...base.site, ...saved.site, smsAttested: false, backupSmsAttested: false },
     reports: { ...base.reports, ...saved.reports },
     createdSites: saved.createdSites ?? [],
   };

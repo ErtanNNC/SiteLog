@@ -183,6 +183,15 @@ export function isActiveReporterStatus(status: string): boolean {
   return status === 'active';
 }
 
+/**
+ * Owner decision 2026-10-20 (Twilio toll-free verification, opt-in type "Verbal"): the office
+ * attests that a person it adds agreed to get daily report texts from TalkOlog. This is the
+ * attestation's wording version, kept in the `reporter.invited` audit entry (`sms_attestation`)
+ * with the office user as its actor. It is not a `consents` row: the reporter's own SMS consent is
+ * still asked in the field app.
+ */
+export const INVITE_SMS_ATTESTATION = 'team.invite_sms.v1';
+
 /** A version the site manager wrote (§6.2 `reporter`), not the agent or the office. */
 export function isReporterAuthor(author: string): boolean {
   return author === 'reporter';

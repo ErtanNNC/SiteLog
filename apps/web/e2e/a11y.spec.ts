@@ -623,6 +623,10 @@ test.describe('no sideways scroll on narrow phones', () => {
       await expect44(dialog.getByRole('textbox', { name: 'Name' }), 'invite: name');
       await expect44(dialog.getByRole('textbox', { name: 'Mobile number' }), 'invite: phone');
       await expect44(dialog.getByRole('button', { name: /^Country code: / }), 'invite: country');
+      await expect44(
+        dialog.locator('label').filter({ has: dialog.getByTestId('invite-sms-attest') }),
+        'invite: SMS attestation',
+      );
       await expect44(dialog.getByRole('button', { name: 'Send welcome text' }), 'invite: send');
     });
   }

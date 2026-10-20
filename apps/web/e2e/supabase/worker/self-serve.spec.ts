@@ -270,6 +270,8 @@ for (const run of RUNS) {
           siteIds: [siteId],
           locale: run.locale,
           contactPref: 'link',
+          // The office's SMS attestation, as the wizard's box sends it (owner decision 2026-10-20).
+          smsAttested: true,
         }),
       });
       const invited = (await res.json()) as { reporter?: { id: string } };

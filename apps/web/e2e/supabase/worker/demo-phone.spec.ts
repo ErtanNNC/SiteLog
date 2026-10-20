@@ -66,6 +66,8 @@ test('inviting Marco to another site shows the welcome text with a working perso
   await dialog.getByTestId('invite-phone').fill(MARCO.national);
   await dialog.getByRole('checkbox', { name: ELM }).check();
   await dialog.getByRole('checkbox', { name: 'Spanish' }).check();
+  // The office's SMS attestation (owner decision 2026-10-20): required to send the welcome.
+  await dialog.getByTestId('invite-sms-attest').check();
   await dialog.getByRole('button', { name: 'Send welcome text' }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByText(`Welcome text queued for ${MARCO.name}.`)).toBeVisible();

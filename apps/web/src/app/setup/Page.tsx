@@ -409,6 +409,7 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
           languages,
           locale: s.locale,
           contactPref: s.contactPref,
+          smsAttested: s.smsAttested,
         },
       });
     } catch {
@@ -440,6 +441,7 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
           languages,
           locale: s.backupLocale,
           contactPref: s.backupContactPref,
+          smsAttested: s.backupSmsAttested,
         });
       } catch {
         invited = false; // toasted by the mutation hook

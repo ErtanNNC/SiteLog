@@ -22,11 +22,20 @@ import {
 import { enqueueJob } from '../_shared/jobs.ts';
 import { logInfo } from '../_shared/log.ts';
 import { adminClient, type AppClient, type TableRow } from '../_shared/supabase.ts';
-import { canResend, invitePhone, inviteProfile, lineCheckRefusal, linkRows } from './logic.ts';
+import {
+  ATTESTATION_REQUIRED,
+  canResend,
+  invitedAuditDiff,
+  invitePhone,
+  inviteProfile,
+  lineCheckRefusal,
+  linkRows,
+  missingSmsAttestation,
+} from './logic.ts';
 
 /**
  * api-invite-reporter (§F2 step 2, §F3, §P10) — admin|ops.
- * POST { orgId, name, phone, role?, siteIds[], languages?, locale?, contactPref? }
+ * POST { orgId, name, phone, role?, siteIds[], languages?, locale?, contactPref?, smsAttested: true }
  *      → reporter `invited` + site links + its personal field link + the welcome job
  * POST { action: 'resend', reporterId }                         → one re-send after 48 h
  * POST { action: 'disable', reporterId }                        → status 'disabled'
@@ -42,7 +51,12 @@ import { canResend, invitePhone, inviteProfile, lineCheckRefusal, linkRows } fro
  * the welcome job then skips it and tells the office why (§13). The answer never holds the link
  * code. W4-02 (§19 Q229 `delivery`): a number libphonenumber knows to be a fixed line is refused
  * (422 `landline_text` for a text link; `landline_unreachable` where TalkOlog cannot reach it by
- * phone either), before anything is written.
+ * phone either), before anything is written. Owner decision 2026-10-20 (Twilio toll-free
+ * verification, opt-in "Verbal"): an invite needs `smsAttested: true`, the office's attestation
+ * that the person agreed to get daily report texts from TalkOlog; without it 400
+ * `attestation_required`, nothing written. It is kept in the `reporter.invited` audit entry
+ * (`sms_attestation: INVITE_SMS_ATTESTATION`, the actor and time are the entry's), never as a
+ * `consents` row: the reporter's own consent is still asked in the field app.
  */
 
 const InviteSchema = z.object({
@@ -55,6 +69,7 @@ const InviteSchema = z.object({
   languages: z.array(z.string().trim().min(2).max(8)).min(1).max(5).optional(),
   locale: z.enum(REPORTER_LOCALES).optional(),
   contactPref: z.enum(CONTACT_PREFS).optional(),
+  smsAttested: z.literal(true),
 });
 const ResendSchema = z.object({ action: z.literal('resend'), reporterId: z.uuid() });
 const DisableSchema = z.object({ action: z.literal('disable'), reporterId: z.uuid() });
@@ -66,7 +81,11 @@ Deno.serve(
   withHandler('api-invite-reporter', async (req) => {
     requireMethod(req, 'POST');
     const user = await requireUser(req);
-    const body = parseWith(BodySchema, await readJson(req));
+    const raw = await readJson(req);
+    if (missingSmsAttestation(raw)) {
+      throw new HttpError(400, ATTESTATION_REQUIRED.message, { code: ATTESTATION_REQUIRED.code });
+    }
+    const body = parseWith(BodySchema, raw);
     const admin = adminClient();
     if (body.action === 'resend') return json(req, await resend(admin, user, body.reporterId));
     if (body.action === 'disable') return json(req, await disable(admin, user, body.reporterId));
@@ -213,16 +232,16 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
     action: 'reporter.invited',
     entity: 'reporter',
     entityId: reporter.id,
-    diff: {
+    diff: invitedAuditDiff({
       siteIds: body.siteIds,
       role: body.role,
       reused: existing !== null,
       locale: reporter.locale,
-      contact_pref: reporter.contact_pref,
+      contactPref: reporter.contact_pref,
       status: reporter.status,
-      phone_opted_out: phoneOptOut,
+      phoneOptedOut: phoneOptOut,
       jobId,
-    },
+    }),
   });
   logInfo('reporter.invited', {
     orgId: body.orgId,

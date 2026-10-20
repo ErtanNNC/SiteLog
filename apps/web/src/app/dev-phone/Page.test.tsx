@@ -187,6 +187,7 @@ describe('Demo phone', () => {
         role: 'backup',
         siteIds: [store.data.sites[0]!.id],
         languages: ['es'],
+        smsAttested: true,
       },
       'user',
     );
@@ -197,6 +198,7 @@ describe('Demo phone', () => {
         role: 'backup',
         siteIds: [store.data.sites[0]!.id],
         languages: ['en', 'es'],
+        smsAttested: true,
       },
       'user',
     );
@@ -298,6 +300,7 @@ describe('Demo phone', () => {
         role: 'backup',
         siteIds: [store.data.sites[0]!.id],
         languages: ['en'],
+        smsAttested: true,
       },
       'user',
     );

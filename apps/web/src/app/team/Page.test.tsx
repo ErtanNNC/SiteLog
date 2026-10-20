@@ -262,6 +262,7 @@ describe('TeamPage (demo data)', () => {
     await userEvent.type(within(dialog).getByLabelText('Name'), 'Nora Haddad');
     await userEvent.type(within(dialog).getByTestId('invite-phone'), '(555) 014-8800');
     await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Elm St. Townhomes' }));
+    await userEvent.click(within(dialog).getByTestId('invite-sms-attest'));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Send welcome text' }));
     await waitFor(() =>
       expect(success).toHaveBeenCalledWith(
@@ -342,9 +343,26 @@ describe('TeamPage (demo data)', () => {
     await userEvent.click(await screen.findByRole('option', { name: 'Spanish' }));
     expect(dialog).toHaveTextContent('They can always use the other one.');
     await userEvent.click(within(dialog).getByRole('radio', { name: 'Call' }));
+    // Owner decision 2026-10-20: the office attests the person agreed to texts, or nothing is sent.
+    const attest = within(dialog).getByRole('checkbox', {
+      name: 'Nora agreed to get daily report texts from TalkOlog',
+    });
+    expect(attest).not.toBeChecked();
+    expect(dialog).toHaveTextContent('Saved in the log with your name.');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Send welcome text' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      'Tick the box first: the person must have agreed to get daily report texts.',
+    );
+    expect(attest).toHaveAttribute('aria-invalid', 'true');
+    expect(store.data.reporters.find((r) => r.name === 'Nora Haddad')).toBeUndefined();
+    await userEvent.click(attest);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Send welcome text' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     const nora = store.data.reporters.find((r) => r.name === 'Nora Haddad')!;
+    expect(
+      store.data.audit.find((a) => a.action === 'reporter.invited' && a.entity_id === nora.id)
+        ?.diff,
+    ).toMatchObject({ sms_attestation: 'team.invite_sms.v1' });
     expect(nora).toMatchObject({
       phone_e164: '+15550148800',
       languages: ['en', 'es'],

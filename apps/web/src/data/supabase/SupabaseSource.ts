@@ -1980,6 +1980,7 @@ export class SupabaseSource implements DataSource {
         languages: input.languages,
         ...(input.locale ? { locale: input.locale } : {}),
         ...(input.contactPref ? { contactPref: input.contactPref } : {}),
+        smsAttested: input.smsAttested,
       },
     );
     return { status: result?.reporter?.status ?? ('invited' as const) };

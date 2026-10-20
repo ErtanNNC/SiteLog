@@ -1,4 +1,5 @@
 import {
+  INVITE_SMS_ATTESTATION,
   isActiveReporterStatus,
   languageOf,
   parseE164,
@@ -144,4 +145,50 @@ export function lineCheckRefusal(
     reachable: reachableByPhone({ isDemo: org.is_demo }, pack),
   });
   return check.ok ? null : { problem: check.problem, message: LINE_CHECK_MESSAGES[check.problem] };
+}
+
+/** The refusal of an invite without the office's SMS attestation (owner decision 2026-10-20). */
+export const ATTESTATION_REQUIRED = {
+  code: 'attestation_required',
+  message:
+    'Tick the box first: the person must have agreed to get daily report texts from TalkOlog.',
+} as const;
+
+/**
+ * An invite request (no `action`, or `invite`) without `smsAttested: true` is refused with
+ * `attestation_required` before anything is read or written. `resend` and `disable` add nobody and
+ * need no attestation; a body that is not an object is left to the schema.
+ */
+export function missingSmsAttestation(raw: unknown): boolean {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return false;
+  const body = raw as Record<string, unknown>;
+  if (body.action !== undefined && body.action !== 'invite') return false;
+  return body.smsAttested !== true;
+}
+
+/**
+ * The `reporter.invited` audit entry's diff. `sms_attestation` is the wording version the office
+ * user (the entry's actor, at its time) attested to: the person agreed to get daily report texts.
+ */
+export function invitedAuditDiff(input: {
+  siteIds: string[];
+  role: string;
+  reused: boolean;
+  locale: string;
+  contactPref: string;
+  status: string;
+  phoneOptedOut: boolean;
+  jobId: number;
+}) {
+  return {
+    siteIds: input.siteIds,
+    role: input.role,
+    reused: input.reused,
+    locale: input.locale,
+    contact_pref: input.contactPref,
+    status: input.status,
+    phone_opted_out: input.phoneOptedOut,
+    jobId: input.jobId,
+    sms_attestation: INVITE_SMS_ATTESTATION,
+  };
 }
