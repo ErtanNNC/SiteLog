@@ -160,7 +160,7 @@ describe('parseWhatsappTemplates', () => {
     expect(lines.find((l) => l.startsWith('daily_link.es'))).toMatch(/\(not set\)/);
     // §19 Q372: the welcome (Utility) and the device code (Authentication) are listed too.
     expect(lines.find((l) => l.startsWith('welcome.en '))).toMatch(
-      /^welcome\.en \[\{\{1\}\}=first, \{\{2\}\}=company, \{\{3\}\}=site, \{\{4\}\}=deadline, \{\{5\}\}=link\] \(not set\): Hi \{\{1\}\}/,
+      /^welcome\.en \[\{\{1\}\}=first, \{\{2\}\}=company, \{\{3\}\}=site, \{\{4\}\}=deadline, \{\{5\}\}=link\] \(not set\): TalkOlog: \{\{1\}\}, \{\{2\}\} added you/,
     );
     expect(lines.find((l) => l.startsWith('verify_code.en'))).toBe(
       'verify_code.en AUTHENTICATION [{{1}}=code] (not set): {{1}} is your verification code. For your security, do not share this code. [footer: This code expires in 10 minutes.]',

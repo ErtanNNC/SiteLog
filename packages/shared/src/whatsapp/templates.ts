@@ -90,6 +90,21 @@ export function isWhatsappAuthKey(key: string): boolean {
 const PREFIX = 'TalkOlog: ';
 const SUFFIX = ' - TalkOlog';
 
+/**
+ * Template texts that differ from the SMS copy (§19 Q373, owner 2026-10-21): Meta classed the
+ * welcome built from the SMS text ("Hi {first}, I'm TalkOlog, …") as Marketing, so its WhatsApp
+ * template is a notice of the invite instead, with the same variables in the same order. The SMS
+ * welcome is unchanged. No "or call {number}" clause: the template is the same with or without a
+ * voice number.
+ */
+const WHATSAPP_TEXT: Partial<Record<WhatsappKey, Readonly<Record<Language, string>>>> = {
+  welcome: {
+    en: 'TalkOlog: {first}, {company} added you as the daily reporter for {site}. Each workday before {deadline}, send your report from this link: {link} Reply STOP to opt out.',
+    es: 'TalkOlog: {first}, {company} le agregó como responsable del reporte diario de {site}. Cada día de trabajo antes de las {deadline}, envíe su reporte desde este enlace: {link} Responda STOP para darse de baja.',
+    tr: 'TalkOlog: {first}, {company} sizi {site} için günlük raporcu olarak ekledi. Her iş günü {deadline} öncesi raporunuzu bu linkten verin: {link} Durdurmak için STOP yazın.',
+  },
+};
+
 /** The template of a key in a language for the pack's variant. */
 export function whatsappTemplate(
   key: WhatsappKey,
@@ -106,7 +121,7 @@ export function whatsappTemplate(
       footer: auth.footer,
     };
   }
-  const text = smsTemplate(key, language, options);
+  const text = WHATSAPP_TEXT[key]?.[language] ?? smsTemplate(key, language, options);
   const variables: string[] = [];
   let body = text.replace(/\{([a-z0-9_]+)\}/g, (_m, name: string) => {
     let n = variables.indexOf(name);

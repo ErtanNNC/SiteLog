@@ -123,21 +123,24 @@ describe('WhatsApp templates (W2-15, §9.2)', () => {
     }
   });
 
-  it('the welcome: Utility, the SMS welcome with the reply clause, in EN, ES and TR', () => {
+  it('the welcome: Utility, a notice of the invite (§19 Q373), in EN, ES and TR', () => {
     const options = whatsappRenderOptions(TR_WA);
     const en = whatsappTemplate('welcome', 'en', options);
+    expect(en).toMatchObject({ category: 'utility', contentType: 'twilio/text' });
     expect(en.variables).toEqual(['first', 'company', 'site', 'deadline', 'link']);
     expect(en.body).toBe(
-      "Hi {{1}}, I'm TalkOlog, the daily report assistant for {{2}} at {{3}}. Each workday before {{4}}, tap your link and talk for ~3 min: {{5}} - Reply STOP to opt out, HELP for help",
+      'TalkOlog: {{1}}, {{2}} added you as the daily reporter for {{3}}. Each workday before {{4}}, send your report from this link: {{5}} Reply STOP to opt out.',
     );
     expect(whatsappTemplate('welcome', 'tr', options).body).toBe(
-      'Merhaba {{1}}, ben TalkOlog, {{2}} için {{3}} günlük rapor asistanıyım. Her iş günü {{4}} öncesi linke dokunup ~3 dk anlatın: {{5}} - Durdurmak için STOP, yardım için HELP yazın',
+      'TalkOlog: {{1}}, {{2}} sizi {{3}} için günlük raporcu olarak ekledi. Her iş günü {{4}} öncesi raporunuzu bu linkten verin: {{5}} Durdurmak için STOP yazın.',
     );
-    expect(whatsappTemplate('welcome', 'es', options).body).toMatch(/^Hola \{\{1\}\}/);
-    // With a voice number, the "or call" clause adds the number.
+    expect(whatsappTemplate('welcome', 'es', options).body).toMatch(
+      /^TalkOlog: \{\{1\}\}, \{\{2\}\}/,
+    );
+    // The same template with or without a voice number (no "or call" clause on WhatsApp).
     expect(
       whatsappTemplate('welcome', 'en', { ...options, hasVoiceNumber: true }).variables,
-    ).toEqual(['first', 'company', 'site', 'deadline', 'number', 'link']);
+    ).toEqual(['first', 'company', 'site', 'deadline', 'link']);
   });
 
   it('the device code: an Authentication template, Meta’s fixed text, the code as {{1}}', () => {
