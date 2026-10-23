@@ -679,6 +679,7 @@ describe('deploy.yml plan step, run under bash', () => {
       WA_MODE: 'submit',
       WA_LANGUAGES: 'tr,en',
       HAS_TWILIO: 'true',
+      RUNNER_TEMP: '.',
     };
     const ok = runStep(check, base);
     expect(ok.status, ok.log).toBe(0);
