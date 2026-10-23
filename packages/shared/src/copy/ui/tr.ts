@@ -2495,6 +2495,8 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       consentSms: 'Günlük rapor linkini mesajla gönderin',
       consentCall: 'Rapor saatinde beni arayın (otomatik arama)',
       consentWhatsapp: "Bana WhatsApp'tan mesaj gönderin",
+      whatsappNotice:
+        "Devam ederek günlük rapor linklerini ve hatırlatmaları WhatsApp'tan almayı kabul edersiniz. İstediğiniz zaman STOP yazarak durdurabilirsiniz.",
       prefLegend: 'Nasıl rapor vermek istersiniz?',
       prefLink: 'Mesajla link',
       prefLinkHint: 'Linke dokunun, anlatın, bitti. Fotoğraf ekleyin.',

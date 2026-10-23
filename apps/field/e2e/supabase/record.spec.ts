@@ -70,6 +70,8 @@ test(
       }),
     ).toBeVisible();
     await expectFieldScreen(page);
+    // §19 Q376: no WhatsApp box; the sentence above Continue says what Continue gives.
+    await expect(page.getByText(copy.welcome.whatsappNotice, { exact: true })).toBeVisible();
     await page.getByRole('checkbox', { name: copy.welcome.consentRequired }).check();
     await page.getByRole('button', { name: copy.welcome.continue }).click();
 
@@ -137,10 +139,13 @@ test(
     );
     // `order=type` would sort by the consent_type enum's declared order, not by name: sort here.
     consents.sort((a, b) => a.type.localeCompare(b.type));
+    // The run's packs list WhatsApp (`E2E_SMS_ORDER`): Continue gives it under the sentence above
+    // the button (§19 Q376), with the wording's version `field.consent.v2`.
     expect(consents).toEqual([
-      { type: 'data_processing', method: 'web_checkbox', text_version: 'field.consent.v1' },
-      { type: 'recording', method: 'web_checkbox', text_version: 'field.consent.v1' },
-      { type: 'sms', method: 'web_checkbox', text_version: 'field.consent.v1' },
+      { type: 'data_processing', method: 'web_checkbox', text_version: 'field.consent.v2' },
+      { type: 'recording', method: 'web_checkbox', text_version: 'field.consent.v2' },
+      { type: 'sms', method: 'web_checkbox', text_version: 'field.consent.v2' },
+      { type: 'whatsapp', method: 'web_checkbox', text_version: 'field.consent.v2' },
     ]);
     const [reporter] = await rest<{ status: string }[]>(
       'GET',

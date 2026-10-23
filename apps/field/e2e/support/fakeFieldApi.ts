@@ -349,7 +349,7 @@ export interface FakeOptions {
   fixAnswer?: 'one_more' | 'unclear';
   /** W2-14: this environment has a VAPID key pair and the pack lists push (the toggle shows). */
   push?: boolean;
-  /** W2-15: the pack lists WhatsApp (*Message me on WhatsApp* on Welcome and in Settings). */
+  /** W2-15: the pack lists WhatsApp (Welcome's sentence above Continue, §19 Q376; Settings' toggle). */
   whatsapp?: boolean;
   /**
    * W3-13: Talk now is offered (`talkNow` in resolve and today), and `voice/token` answers this
@@ -658,7 +658,7 @@ export async function installFakeFieldApi(
                   },
                 ]
               : []),
-            // W2-15: listed wherever the pack lists WhatsApp, held when ticked.
+            // W2-15: listed wherever the pack lists WhatsApp, held when Continue gave it (§19 Q376).
             ...(options.whatsapp
               ? [
                   {

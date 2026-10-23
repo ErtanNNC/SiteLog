@@ -180,7 +180,7 @@ describe('Settings (F15, §9.3; W2-02)', () => {
     );
     expect(routes.grantConsent).toHaveBeenCalledWith('K7Q2MX', {
       type: 'sms',
-      textVersion: 'field.consent.v1',
+      textVersion: 'field.consent.v2',
     });
     expect(await screen.findByText('Saved')).toBeInTheDocument();
     expect(screen.getAllByText('On')).toHaveLength(3);
@@ -216,7 +216,7 @@ describe('Settings (F15, §9.3; W2-02)', () => {
     fireEvent.click(within(sheet).getByRole('button', { name: 'Turn on' }));
     expect(routes.grantConsent).toHaveBeenCalledWith('K7Q2MX', {
       type: 'whatsapp',
-      textVersion: 'field.consent.v1',
+      textVersion: 'field.consent.v2',
     });
     fireEvent.click(
       await screen.findByRole('button', {
@@ -248,7 +248,7 @@ describe('Settings (F15, §9.3; W2-02)', () => {
     fireEvent.click(within(sheet).getByRole('button', { name: 'Turn on' }));
     expect(routes.grantConsent).toHaveBeenCalledWith('K7Q2MX', {
       type: 'auto_call',
-      textVersion: 'field.consent.v1',
+      textVersion: 'field.consent.v2',
     });
     fireEvent.click(
       await screen.findByRole('button', { name: 'Turn off: Automated calls at report time' }),

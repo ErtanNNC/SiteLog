@@ -91,6 +91,8 @@ export const uiEs: UiResources = {
       consentSms: 'Envíenme por texto el enlace del reporte diario',
       consentCall: 'Llámenme a la hora del reporte (llamada automática)',
       consentWhatsapp: 'Envíenme mensajes por WhatsApp',
+      whatsappNotice:
+        'Al continuar, acepta recibir por WhatsApp sus enlaces de reporte diario y recordatorios. Responda STOP en cualquier momento para dejar de recibirlos.',
       prefLegend: '¿Cómo quiere reportar?',
       prefLink: 'Enlace por texto',
       prefLinkHint: 'Toque el enlace, hable, listo. Agregue fotos.',

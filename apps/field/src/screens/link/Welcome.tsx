@@ -18,12 +18,15 @@ import { privacyNoticeHref } from '@/lib/legal';
 import { currentSite, type FieldSession } from '@/session/session';
 
 /**
- * F4 step 3 (Field-02), first open only: the notice, the required consent, one consent per message
- * channel the pack offers (SMS; *Message me on WhatsApp* where the pack lists WhatsApp, unticked,
- * W2-15, spec §19 Q25; push has its own toggle in Settings), the automated-call consent only where TalkOlog places
- * automated calls (`resolve`'s `placesCalls`, W3-17: spec §19 Q33, Q51), the preference, the language from the pack's field locales, then
- * `POST consent` with the wording's version (`FIELD_CONSENT_TEXT_VERSION`, or the pack's consent key
- * when it names one, spec §19 Q28). The optional 20-second test recording of F4 is M6.
+ * F4 step 3 (Field-02), first open only: the notice, the required consent, the SMS box where the
+ * pack sends texts, the automated-call consent only where TalkOlog places automated calls
+ * (`resolve`'s `placesCalls`, W3-17: spec §19 Q33, Q51), the preference, the language from the
+ * pack's field locales, then `POST consent` with the wording's version (`FIELD_CONSENT_TEXT_VERSION`,
+ * or the pack's consent key when it names one, spec §19 Q28). WhatsApp has no box (§19 Q376,
+ * 2026-10-23): where the pack lists WhatsApp, one sentence above Continue says that continuing
+ * gives it, and Continue sends the `whatsapp` consent with the others; where it does not, neither
+ * the sentence nor the consent. Push has its own toggle in Settings, and Settings keeps the
+ * WhatsApp toggle to turn it off. The optional 20-second test recording of F4 is M6.
  */
 export function Welcome({
   session,
@@ -36,18 +39,24 @@ export function Welcome({
   const { t, tc, language } = useFieldCopy();
   const { reporter, org, country } = session;
   const offersSms = country.messageChannels.includes('sms');
-  // W2-15 (spec §19 Q25): WhatsApp only after this explicit opt-in, unticked by default.
+  // §19 Q376: no box; where the pack lists WhatsApp, Continue gives it under the visible sentence.
   const offersWhatsapp = country.messageChannels.includes('whatsapp');
   const offersCalls = placesAutomatedCalls(session);
   const [required, setRequired] = useState(false);
   const [sms, setSms] = useState(true);
-  const [whatsapp, setWhatsapp] = useState(false);
   const [autoCall, setAutoCall] = useState(reporter.contactPref === 'call');
   const [pref, setPref] = useState<ContactPref>(reporter.contactPref);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<'required' | 'failed' | null>(null);
   const requiredBox = useRef<HTMLInputElement>(null);
-  const ids = { required: useId(), hint: useId(), pref: useId(), lang: useId(), title: useId() };
+  const ids = {
+    required: useId(),
+    hint: useId(),
+    pref: useId(),
+    lang: useId(),
+    title: useId(),
+    whatsapp: useId(),
+  };
 
   const locales = country.fieldLocales;
   const chosen: ReporterLocale =
@@ -69,7 +78,7 @@ export function Welcome({
     setError(null);
     const types: ConsentType[] = ['recording', 'data_processing'];
     if (offersSms && sms) types.push('sms');
-    if (offersWhatsapp && whatsapp) types.push('whatsapp');
+    if (offersWhatsapp) types.push('whatsapp');
     if (offersCalls && autoCall) types.push('auto_call');
     try {
       const res = await api.consent(session.code, {
@@ -146,17 +155,6 @@ export function Welcome({
                 className={check}
               />
               <span>{t('welcome.consentSms')}</span>
-            </label>
-          ) : null}
-          {offersWhatsapp ? (
-            <label className={row}>
-              <input
-                type="checkbox"
-                checked={whatsapp}
-                onChange={(e) => setWhatsapp(e.target.checked)}
-                className={check}
-              />
-              <span>{t('welcome.consentWhatsapp')}</span>
             </label>
           ) : null}
           {offersCalls ? (
@@ -237,9 +235,21 @@ export function Welcome({
         ) : null}
 
         <ActionBar>
-          <PrimaryButton type="submit" disabled={busy}>
-            {busy ? t('welcome.saving') : t('welcome.continue')}
-          </PrimaryButton>
+          <div className="flex w-full flex-col gap-2">
+            {offersWhatsapp ? (
+              // §19 Q376: in the sticky bar, directly above Continue, so it is seen with the button.
+              <p id={ids.whatsapp} className="m-0 text-[15px] leading-[21px] text-steel">
+                {t('welcome.whatsappNotice')}
+              </p>
+            ) : null}
+            <PrimaryButton
+              type="submit"
+              disabled={busy}
+              aria-describedby={offersWhatsapp ? ids.whatsapp : undefined}
+            >
+              {busy ? t('welcome.saving') : t('welcome.continue')}
+            </PrimaryButton>
+          </div>
         </ActionBar>
       </form>
     </Screen>

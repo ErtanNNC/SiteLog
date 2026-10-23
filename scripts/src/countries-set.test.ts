@@ -155,7 +155,7 @@ describe('parseWhatsappTemplates', () => {
       whatsapp_templates: { daily_link: { en: SID } },
     });
     expect(lines).toContain(
-      `daily_link.en [{{1}}=site, {{2}}=link] (${SID}): Today's report for {{1}}: {{2}} - TalkOlog`,
+      `daily_link.en [{{1}}=site, {{2}}=link] (${SID}): TalkOlog: the daily report for {{1}} is open. Your personal report link for today: {{2}} (please do not share it).`,
     );
     expect(lines.find((l) => l.startsWith('daily_link.es'))).toMatch(/\(not set\)/);
     // §19 Q372: the welcome (Utility) and the device code (Authentication) are listed too.

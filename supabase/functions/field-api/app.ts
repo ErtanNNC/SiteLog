@@ -634,8 +634,9 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
         offered: ctx.pack.fieldLocales,
       });
     }
-    // W2-15 (spec §19 Q25): *Message me on WhatsApp* only where the pack lists WhatsApp; push is
-    // given by its own toggle (W2-14), never here.
+    // WhatsApp only where the pack lists it: since §19 Q376 Welcome's Continue gives it under the
+    // sentence above the button (`field.consent.v2`; an older app's ticked box still sends it, W2-15);
+    // push is given by its own toggle (W2-14), never here.
     if (body.types.includes('whatsapp') && !ctx.pack.messageChannels.includes('whatsapp')) {
       throw new FieldError(400, 'channel_not_offered', undefined, {
         offered: settingsMessageChannels(ctx.pack),

@@ -81,8 +81,9 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
     });
     expect(required).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Text me the daily report link' })).toBeChecked();
-    // The pack lists no WhatsApp: no opt-in (W2-15).
+    // The pack lists no WhatsApp: no box, no sentence, no consent (§19 Q376).
     expect(screen.queryByRole('checkbox', { name: 'Message me on WhatsApp' })).toBeNull();
+    expect(screen.queryByText(/on WhatsApp/)).toBeNull();
     // No automated calls before M8 (spec §19 Q33, Q51): the auto_call box is not asked.
     expect(screen.queryByRole('checkbox', { name: /Call me at report time/ })).toBeNull();
     expect(screen.getByRole('radio', { name: /Text link/ })).toBeChecked();
@@ -99,7 +100,7 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
     await waitFor(() =>
       expect(routes.consent).toHaveBeenCalledWith('K7Q2MX', {
         types: ['recording', 'data_processing', 'sms'],
-        textVersion: 'field.consent.v1',
+        textVersion: 'field.consent.v2',
         contactPref: 'call',
         locale: 'en-US',
       }),
@@ -213,7 +214,7 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
     await waitFor(() =>
       expect(routes.consent).toHaveBeenCalledWith('K7Q2MX', {
         types: ['recording', 'data_processing', 'sms', 'auto_call'],
-        textVersion: 'field.consent.v1',
+        textVersion: 'field.consent.v2',
         contactPref: 'call',
         locale: 'en-US',
       }),
@@ -264,7 +265,7 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
     );
   });
 
-  it('offers Message me on WhatsApp, unticked, only where the pack lists it (W2-15, §19 Q25)', async () => {
+  it('gives WhatsApp with Continue under the visible sentence where the pack lists it, with no box (§19 Q376)', async () => {
     const routes = fakeRoutes({
       resolve: vi.fn().mockResolvedValue(
         resolved({
@@ -282,23 +283,73 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
       today: vi.fn().mockResolvedValue(todayResponse()),
     });
     renderApp('/r/K7Q2MX', { session: null, routes });
-    const wa = await screen.findByRole('checkbox', { name: 'Message me on WhatsApp' });
-    expect(wa).not.toBeChecked();
+    const sentence = await screen.findByText(
+      'By continuing, you agree to get your daily report links and reminders on WhatsApp. Reply STOP at any time to stop them.',
+    );
+    expect(screen.queryByRole('checkbox', { name: 'Message me on WhatsApp' })).toBeNull();
+    const continueButton = screen.getByRole('button', { name: 'Continue' });
+    // Directly above Continue, and Continue is described by it.
+    expect(sentence.nextElementSibling).toBe(continueButton);
+    expect(continueButton).toHaveAccessibleDescription(sentence.textContent ?? '');
     fireEvent.click(
       screen.getByRole('checkbox', {
         name: 'I agree to the recording and processing of my reports',
       }),
     );
-    fireEvent.click(wa);
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    fireEvent.click(continueButton);
     await waitFor(() =>
       expect(routes.consent).toHaveBeenCalledWith('K7Q2MX', {
         types: ['recording', 'data_processing', 'sms', 'whatsapp'],
-        textVersion: 'field.consent.v1',
+        textVersion: 'field.consent.v2',
         contactPref: 'link',
         locale: 'en-US',
       }),
     );
+  });
+
+  it('says the WhatsApp sentence in Turkish on a {push, whatsapp} pack (§19 Q374, Q376)', async () => {
+    const routes = fakeRoutes({
+      resolve: vi.fn().mockResolvedValue(
+        resolved({
+          reporter: { ...resolved().reporter, locale: 'tr-TR' },
+          needsDeviceCheck: false,
+          sites: [SITE],
+          country: {
+            ...US_COUNTRY,
+            code: 'TR',
+            fieldLocales: ['tr-TR', 'en-US'],
+            messageChannels: ['push', 'whatsapp'],
+          },
+        }),
+      ),
+      consent: vi.fn().mockResolvedValue({
+        consents: [],
+        status: 'active',
+        contactPref: 'link',
+        locale: 'tr-TR',
+      }),
+      today: vi.fn().mockResolvedValue(todayResponse()),
+    });
+    renderApp('/r/K7Q2MX', { session: null, routes });
+    const tr = UI_RESOURCES.tr.field.welcome;
+    expect(
+      await screen.findByText(
+        "Devam ederek günlük rapor linklerini ve hatırlatmaları WhatsApp'tan almayı kabul edersiniz. İstediğiniz zaman STOP yazarak durdurabilirsiniz.",
+      ),
+    ).toBeInTheDocument();
+    // SMS is passive (§19 Q374): no texts box either.
+    expect(screen.queryByRole('checkbox', { name: tr.consentSms })).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: tr.consentRequired }));
+    fireEvent.click(screen.getByRole('button', { name: tr.continue }));
+    await waitFor(() =>
+      expect(routes.consent).toHaveBeenCalledWith('K7Q2MX', {
+        types: ['recording', 'data_processing', 'whatsapp'],
+        textVersion: 'field.consent.v2',
+        contactPref: 'link',
+        locale: 'tr-TR',
+      }),
+    );
+    await act(() => i18n.changeLanguage('en'));
   });
 
   it('skips the device check and the welcome on a verified, consented phone', async () => {

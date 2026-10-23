@@ -6,6 +6,7 @@ import { DEMO_COUNTRIES } from '../demo/countries.ts';
 import { assertE164 } from '../format.ts';
 import type { NotifyRecipient } from '../notify/notifier.ts';
 import {
+  hasEdgeVariable,
   isWhatsappAuthKey,
   VERIFY_CODE_EXPIRY_MINUTES,
   WHATSAPP_AUTH_KEYS,
@@ -60,10 +61,10 @@ function twilio(reply: { status: number; json: unknown } = { status: 201, json: 
 
 describe('WhatsApp templates (W2-15, §9.2)', () => {
   it('numbers a key’s §9.2 variables in order; Meta’s start and end rule', () => {
-    const tr = whatsappTemplate('daily_link', 'tr', whatsappRenderOptions(TR_WA));
+    const tr = whatsappTemplate('call_coming', 'tr', whatsappRenderOptions(TR_WA));
     expect(tr).toEqual({
-      body: 'TalkOlog: {{1}} bugünkü rapor: {{2}} - TalkOlog',
-      variables: ['site', 'link'],
+      body: 'Bugünkü rapor için sizi saat {{1}} gibi arayacağım. Şimdi yapmak isterseniz: {{2}} - TalkOlog',
+      variables: ['time', 'link'],
       category: 'utility',
       contentType: 'twilio/text',
     });
@@ -80,11 +81,82 @@ describe('WhatsApp templates (W2-15, §9.2)', () => {
       hasVoiceNumber: true,
     });
     expect(withNumber.variables).toEqual(['time', 'link', 'number']);
-    expect(whatsappContentVariables(tr, { site: 'Kuzey', link: 'https://x/r/1' })).toEqual({
-      '1': 'Kuzey',
+    expect(whatsappContentVariables(tr, { time: '16:30', link: 'https://x/r/1' })).toEqual({
+      '1': '16:30',
       '2': 'https://x/r/1',
     });
-    expect(() => whatsappContentVariables(tr, { site: 'Kuzey' })).toThrow('{link}');
+    expect(() => whatsappContentVariables(tr, { time: '16:30' })).toThrow('{link}');
+    // Punctuation next to the variable still puts it at the end (Meta, 2026-10-23: "Tap {{1}}."
+    // rejected), and likewise at the start (§19 Q110).
+    const voiced = whatsappTemplate('reminder_2', 'en', {
+      ...whatsappRenderOptions(TR_WA),
+      hasVoiceNumber: true,
+    });
+    expect(voiced.body).toBe(
+      "Still nothing for today. I'll let the office know at {{1}}. {{2}} or call {{3}}. - TalkOlog",
+    );
+    expect(hasEdgeVariable('Tap {{1}}.')).toBe(true);
+    expect(hasEdgeVariable('Tap {{1}} .)')).toBe(true);
+    expect(hasEdgeVariable('"{{1}}" is due')).toBe(true);
+    expect(hasEdgeVariable('{{1}}')).toBe(true);
+    expect(hasEdgeVariable('TalkOlog: {{1}} (please do not share it).')).toBe(false);
+    expect(hasEdgeVariable('Tap {{1}} - TalkOlog')).toBe(false);
+    expect(hasEdgeVariable('Rapor: {{1}} (lütfen paylaşmayın).')).toBe(false);
+  });
+
+  it('the Meta utility texts of daily_link, reminder_1, missed_call, finish_report and edit_applied (§19 Q377)', () => {
+    const options = whatsappRenderOptions(TR_WA);
+    const body = (key: Parameters<typeof whatsappTemplate>[0], language: 'en' | 'es' | 'tr') =>
+      whatsappTemplate(key, language, options).body;
+    expect(body('daily_link', 'en')).toBe(
+      'TalkOlog: the daily report for {{1}} is open. Your personal report link for today: {{2}} (please do not share it).',
+    );
+    expect(body('daily_link', 'tr')).toBe(
+      'TalkOlog: {{1}} için bugünkü günlük rapor açıldı. Bugünkü kişisel rapor linkiniz: {{2}} (lütfen paylaşmayın).',
+    );
+    expect(body('reminder_1', 'en')).toBe(
+      'TalkOlog: the daily report for {{1}} has not been received yet today. Your report link: {{2}} (please do not share it).',
+    );
+    expect(body('reminder_1', 'tr')).toBe(
+      'TalkOlog: {{1}} için bugünkü günlük rapor henüz alınmadı. Rapor linkiniz: {{2}} (lütfen paylaşmayın).',
+    );
+    expect(body('missed_call', 'en')).toBe(
+      "TalkOlog: we could not reach you by phone for today's daily report. Your report link: {{1}} (please do not share it).",
+    );
+    expect(body('missed_call', 'tr')).toBe(
+      'TalkOlog: bugünkü günlük rapor için size telefonla ulaşamadık. Rapor linkiniz: {{1}} (lütfen paylaşmayın).',
+    );
+    expect(body('finish_report', 'en')).toBe(
+      "TalkOlog: your call ended before today's report was filed, so the report is not filed yet. Your report link: {{1}} (please do not share it).",
+    );
+    expect(body('finish_report', 'tr')).toBe(
+      'TalkOlog: görüşme bugünkü rapor kaydedilmeden bitti, rapor henüz kaydedilmedi. Rapor linkiniz: {{1}} (lütfen paylaşmayın).',
+    );
+    expect(body('edit_applied', 'en')).toBe(
+      'TalkOlog: your daily report for {{1}} was updated with this change: {{2}}. Version {{3}} of the report has been sent to the office.',
+    );
+    expect(body('edit_applied', 'tr')).toBe(
+      'TalkOlog: {{1}} günlük raporunuz şu değişiklikle güncellendi: {{2}}. Raporun {{3}}. sürümü ofise gönderildi.',
+    );
+    const vars = {
+      daily_link: ['site', 'link'],
+      reminder_1: ['site', 'link'],
+      missed_call: ['link'],
+      finish_report: ['link'],
+      edit_applied: ['weekday', 'change', 'v'],
+    } as const;
+    for (const [key, variables] of Object.entries(vars) as [keyof typeof vars, readonly string[]][])
+      for (const language of WHATSAPP_TEMPLATE_LANGUAGES)
+        for (const hasVoiceNumber of [false, true]) {
+          const t = whatsappTemplate(key, language, { ...options, hasVoiceNumber });
+          // The same variables in the same order, with or without a voice number; plain notices.
+          expect(t.variables, `${key}.${language}`).toEqual(variables);
+          expect(t.body, `${key}.${language}`).toMatch(/^TalkOlog: /);
+          expect(hasEdgeVariable(t.body), `${key}.${language}`).toBe(false);
+          expect(t.body, `${key}.${language}`).not.toMatch(
+            /one tap|plenty|un toque|tek dokunuş|yeterli/i,
+          );
+        }
   });
 
   it('lists every key WhatsApp carries in each field language of the pack, the welcome and the code too', () => {
@@ -97,7 +169,7 @@ describe('WhatsApp templates (W2-15, §9.2)', () => {
     for (const t of all) {
       // Meta's own authentication text starts with the code: the start/end rule is for ours.
       if (t.category === 'utility')
-        expect(t.body, `${t.key}.${t.language}`).not.toMatch(/^\{\{|\}\}$/);
+        expect(hasEdgeVariable(t.body), `${t.key}.${t.language}`).toBe(false);
       expect(t.body).not.toMatch(/\{[a-z_]+\}/);
     }
   });
@@ -111,7 +183,7 @@ describe('WhatsApp templates (W2-15, §9.2)', () => {
           expect(t.body.trim().length, `${key}.${language}`).toBeGreaterThan(0);
           expect(t.body, `${key}.${language}`).not.toMatch(/\{[a-z_]+\}/);
           if (t.category === 'utility')
-            expect(t.body, `${key}.${language}`).not.toMatch(/^\{\{|\}\}$/);
+            expect(hasEdgeVariable(t.body), `${key}.${language}`).toBe(false);
           expect(t.category, key).toBe(isWhatsappAuthKey(key) ? 'authentication' : 'utility');
           // Numbered from 1 with no gap, each variable once.
           const numbers = [...t.body.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]));

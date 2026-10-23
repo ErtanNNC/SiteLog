@@ -16,6 +16,7 @@ import {
   submitTemplates,
   syncPack,
   templateName,
+  NAME_VERSION,
   twilioContentClient,
   type ContentRecord,
   type Fetch,
@@ -164,10 +165,21 @@ describe('parseWhatsappTemplatesArgs', () => {
 });
 
 describe('names, categories and samples', () => {
-  it('names templates talkolog_<key>_<lang>, the welcome v2 (§19 Q373)', () => {
-    expect(templateName('daily_link', 'tr')).toBe('talkolog_daily_link_tr');
+  it('names templates talkolog_<key>_<lang>, a resubmitted text v2 (§19 Q373, Q377)', () => {
     expect(templateName('welcome', 'en')).toBe('talkolog_welcome_v2_en');
     expect(templateName('verify_code', 'es')).toBe('talkolog_verify_code_es');
+    expect(templateName('filed', 'tr')).toBe('talkolog_filed_tr');
+    expect(templateName('reminder_2', 'en')).toBe('talkolog_reminder_2_en');
+    for (const key of [
+      'daily_link',
+      'reminder_1',
+      'missed_call',
+      'finish_report',
+      'edit_applied',
+    ] as const) {
+      expect(templateName(key, 'tr')).toBe(`talkolog_${key}_v2_tr`);
+      expect(NAME_VERSION[key]).toBe('v2');
+    }
   });
 
   it('has a sample for every variable of every template, with and without a voice number', () => {
@@ -191,7 +203,7 @@ describe('buildPlan and the request bodies', () => {
   it('plans one template per name, shared by the packs that use it, in the chosen languages', () => {
     const plan = buildPlan([TR, US], ['tr', 'en']);
     expect(plan).toHaveLength(WHATSAPP_KEYS.length * 2);
-    const daily = plan.find((p) => p.name === 'talkolog_daily_link_en')!;
+    const daily = plan.find((p) => p.name === 'talkolog_daily_link_v2_en')!;
     expect(daily.codes).toEqual(['TR', 'US']);
     expect(plan.some((p) => p.language === 'es')).toBe(false);
     expect(buildPlan([US], null).map((p) => p.language)).toContain('es');
@@ -400,7 +412,7 @@ describe('submitTemplates', () => {
 
   it('marks a failure and goes on; with no client (dry run) calls nothing', async () => {
     const plan = buildPlan([TR], ['en']);
-    const twilio = fakeTwilio([], { failCreate: 'talkolog_daily_link_en' });
+    const twilio = fakeTwilio([], { failCreate: 'talkolog_daily_link_v2_en' });
     const rows = await submitTemplates(
       plan,
       twilioContentClient({ accountSid: ACCOUNT, authToken: TOKEN, fetch: twilio.fetch }),
@@ -440,8 +452,11 @@ describe('syncPack', () => {
       // The first welcome (Marketing, §19 Q373): another name, never read.
       approved(2, 'talkolog_welcome_tr', 'MARKETING', 'x'),
       approved(3, 'talkolog_verify_code_tr', 'AUTHENTICATION', null),
-      approved(4, 'talkolog_daily_link_tr'),
-      approved(5, 'talkolog_reminder_1_tr', 'MARKETING'),
+      approved(4, 'talkolog_daily_link_v2_tr'),
+      // The first daily_link and reminder_1 (Marketing, §19 Q377): other names, never read.
+      approved(9, 'talkolog_daily_link_tr', 'MARKETING', 'x'),
+      approved(10, 'talkolog_reminder_1_tr', 'UTILITY', 'x'),
+      approved(5, 'talkolog_reminder_1_v2_tr', 'MARKETING'),
       {
         ...approved(6, 'talkolog_reminder_2_tr'),
         approval: {
@@ -458,8 +473,9 @@ describe('syncPack', () => {
     const by = (name: string) => rows.find((r) => r.name === name)!;
     expect(by('talkolog_welcome_v2_tr').outcome).toBe('set');
     expect(by('talkolog_verify_code_tr').outcome).toBe('set');
-    expect(by('talkolog_daily_link_tr').outcome).toBe('set');
-    expect(by('talkolog_reminder_1_tr')).toMatchObject({
+    expect(by('talkolog_daily_link_v2_tr').outcome).toBe('set');
+    expect(rows.some((r) => r.name === 'talkolog_daily_link_tr')).toBe(false);
+    expect(by('talkolog_reminder_1_v2_tr')).toMatchObject({
       outcome: 'wrong category',
       category: 'MARKETING',
     });

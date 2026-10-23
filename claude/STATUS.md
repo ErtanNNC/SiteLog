@@ -1,5 +1,10 @@
 # TalkOlog · Durum
 
+**2026-10-23 — Welcome'da WhatsApp kutusu kalktı, "Devam et" izni veriyor (§19 Q376, kararınız).**
+
+- **Değişen:** Saha uygulamasının ilk açılış ekranında "Bana WhatsApp'tan mesaj gönderin" kutusu yok. Paket WhatsApp'ı listeliyorsa "Devam et" düğmesinin hemen üstünde tek cümle görünüyor ("Devam ederek günlük rapor linklerini ve hatırlatmaları WhatsApp'tan almayı kabul edersiniz. İstediğiniz zaman STOP yazarak durdurabilirsiniz.", EN/ES de var). "Devam et" WhatsApp iznini diğer izinlerle birlikte kaydediyor (yöntem yine `web_checkbox`, metin sürümü `field.consent.v2`, audit log aynı). Paket WhatsApp'ı listelemiyorsa cümle de izin de yok.
+- **Değişmeyen:** Zorunlu kayıt/işleme kutusu, (paket SMS gönderiyorsa) SMS kutusu, otomatik arama kutusu, gizlilik linki. Ayarlar'daki WhatsApp "Kapat / Aç" düğmesi duruyor. Migration ya da API sözleşmesi değişikliği yok.
+
 **2026-10-23 — Aramada "evet" artık WhatsApp izni (§19 Q375, kararınız).**
 
 - **Değişen:** Asistan ilk aramada izin sorusunu WhatsApp'ı adıyla soruyor ("Bu görüşmeleri kaydetmem ve size rapor linklerini WhatsApp'tan göndermem uygun mu?", EN/ES/TR). "Evet" artık `sms` yerine `recording`, `data_processing` ve `whatsapp` izni kaydediyor (migration `20261023000200_call_consent_whatsapp.sql`, metin sürümü `voice.consent.v2`). "Hayır" diyen kişiye link, önceden SMS veya WhatsApp izni varsa gönderiliyor.

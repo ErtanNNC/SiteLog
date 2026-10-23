@@ -77,7 +77,7 @@ describe('whatsapp:templates --sync on the migrated schema', () => {
       const fetch = listing([
         [1, 'talkolog_welcome_v2_tr', 'UTILITY'],
         [2, 'talkolog_verify_code_tr', 'AUTHENTICATION'],
-        [3, 'talkolog_daily_link_en', 'MARKETING'],
+        [3, 'talkolog_daily_link_v2_en', 'MARKETING'],
       ]);
       const deps = { env, connect, fetch, log: () => undefined };
       const out = await runWhatsappTemplates(['--sync', '--code', 'TR'], deps);

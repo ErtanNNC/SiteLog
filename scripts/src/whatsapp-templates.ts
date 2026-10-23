@@ -7,8 +7,9 @@
  *   pnpm whatsapp:templates -- --submit --code TR,US --dry-run      → print the plan, call nothing
  *   pnpm whatsapp:templates -- --sync --code TR,US                  → approved sids into the packs
  *
- * Names (claude/whatsapp-templates.md): `talkolog_<key>_<lang>`, the welcome
- * `talkolog_welcome_v2_<lang>` (§19 Q373). Bodies come from `whatsappTemplate` for the pack's
+ * Names (claude/whatsapp-templates.md): `talkolog_<key>_<lang>`, or `talkolog_<key>_<version>_<lang>`
+ * for a key resubmitted with a new text (`NAME_VERSION`: the welcome `v2`, §19 Q373; `daily_link`,
+ * `reminder_1`, `missed_call`, `finish_report`, `edit_applied` `v2`, §19 Q377). Bodies come from `whatsappTemplate` for the pack's
  * variant, read from the database (its voice number decides the "or call {number}" clauses), as
  * `pnpm countries:set -- --print-whatsapp-templates` prints them. Every key is a Utility template
  * (`twilio/text`) but `verify_code`, an Authentication one (`whatsapp/authentication`: security
@@ -122,8 +123,20 @@ export function parseWhatsappTemplatesArgs(argv: readonly string[]): WhatsappTem
 // ---------------------------------------------------------------------------------------------
 // Names, categories and samples
 
-/** A key whose template was resubmitted under a new name (§19 Q373: the welcome, v2). */
-const NAME_VERSION: Partial<Record<WhatsappKey, string>> = { welcome: 'v2' };
+/**
+ * Keys whose template was resubmitted under a new name: Twilio's and Meta's names are unique and
+ * the old templates stay, so a new text needs a new name, and `--sync` reads only the current one
+ * (the old Marketing or rejected templates are never set). §19 Q373: the welcome, v2. §19 Q377:
+ * `daily_link`, `reminder_1`, `missed_call`, `finish_report`, `edit_applied`, v2.
+ */
+export const NAME_VERSION: Readonly<Partial<Record<WhatsappKey, string>>> = {
+  welcome: 'v2',
+  daily_link: 'v2',
+  reminder_1: 'v2',
+  missed_call: 'v2',
+  finish_report: 'v2',
+  edit_applied: 'v2',
+};
 
 /** The template's name in Twilio and at Meta (claude/whatsapp-templates.md). */
 export function templateName(key: WhatsappKey, language: Language): string {

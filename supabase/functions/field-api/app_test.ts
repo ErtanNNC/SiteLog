@@ -1998,6 +1998,41 @@ Deno.test('Settings: turning texts off revokes the sms consent only; reports go 
 });
 
 Deno.test(
+  'Q376: Continue on Welcome gives WhatsApp with field.consent.v2, as the tick did (web_checkbox, audited)',
+  async () => {
+    const h = setup({ country: { message_channels: ['push', 'whatsapp'] } });
+    await verifiedDevice(h);
+    const res = await h.call('POST', 'consent', {
+      body: {
+        types: ['recording', 'data_processing', 'whatsapp'],
+        textVersion: 'field.consent.v2',
+        contactPref: 'link',
+        locale: 'en-US',
+      },
+    });
+    assertEquals(res.status, 200);
+    assertEquals(res.json.consents, ['data_processing', 'recording', 'whatsapp']);
+    assertEquals(
+      h.store.consents.map((x) => [x.type, x.method, x.text_version]),
+      [
+        ['recording', 'web_checkbox', 'field.consent.v2'],
+        ['data_processing', 'web_checkbox', 'field.consent.v2'],
+        ['whatsapp', 'web_checkbox', 'field.consent.v2'],
+      ],
+    );
+    const given = h.store.audits.filter((a) => a.action === 'consent.given');
+    assertEquals(
+      given.map((a) => a.diff),
+      ['recording', 'data_processing', 'whatsapp'].map((type) => ({
+        type,
+        method: 'web_checkbox',
+        text_version: 'field.consent.v2',
+      })),
+    );
+  },
+);
+
+Deno.test(
   'W2-15: Message me on WhatsApp on Welcome and in Settings, where the pack lists it (Q25, Q40)',
   async () => {
     const h = setup({ country: { message_channels: ['push', 'whatsapp', 'sms'] } });

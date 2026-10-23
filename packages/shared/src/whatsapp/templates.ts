@@ -17,7 +17,9 @@ import { LANGUAGES, type Language } from '../locale.ts';
  * `{<key>: {<language>: <content sid>}}`.
  *
  * Meta refuses a body that starts or ends with a variable, so such a text gets "TalkOlog: " in front
- * or " - TalkOlog" at the end (spec §19 Q110).
+ * or " - TalkOlog" at the end (spec §19 Q110). Punctuation or spaces between the variable and the
+ * edge do not help: Meta rejected "… Tap {{1}}." as ending with a variable (2026-10-23), so a
+ * variable followed only by punctuation counts as the end, and likewise at the start.
  *
  * Categories (§19 Q372): every key is a Utility template but `verify_code`, an Authentication
  * template (`WHATSAPP_AUTH_KEYS`). Meta fixes an authentication template's text: the body
@@ -91,11 +93,18 @@ const PREFIX = 'TalkOlog: ';
 const SUFFIX = ' - TalkOlog';
 
 /**
- * Template texts that differ from the SMS copy (§19 Q373, owner 2026-10-21): Meta classed the
- * welcome built from the SMS text ("Hi {first}, I'm TalkOlog, …") as Marketing, so its WhatsApp
- * template is a notice of the invite instead, with the same variables in the same order. The SMS
- * welcome is unchanged. No "or call {number}" clause: the template is the same with or without a
+ * Template texts that differ from the SMS copy. The SMS copy of these keys is unchanged; each text
+ * has the same variables in the same order and meaning as the SMS one, never starts or ends with a
+ * variable, and has no "or call {number}" clause, so the template is the same with or without a
  * voice number.
+ *
+ * - `welcome` (§19 Q373, owner 2026-10-21): Meta classed the welcome built from the SMS text
+ *   ("Hi {first}, I'm TalkOlog, …") as Marketing, so its template is a notice of the invite.
+ * - `daily_link`, `reminder_1`, `missed_call`, `finish_report`, `edit_applied` (§19 Q377, owner
+ *   2026-10-23): Meta recategorised the first four as Marketing (persuasive wording: "A one-minute
+ *   voice note is plenty", "Finish in one tap"), rejected `missed_call.en` for ending with a
+ *   variable ("Tap {{1}}.") and `edit_applied` for too many variables for its length. Their
+ *   templates are plain, informational notices, submitted under new names (`_v2`).
  */
 const WHATSAPP_TEXT: Partial<Record<WhatsappKey, Readonly<Record<Language, string>>>> = {
   welcome: {
@@ -103,7 +112,44 @@ const WHATSAPP_TEXT: Partial<Record<WhatsappKey, Readonly<Record<Language, strin
     es: 'TalkOlog: {first}, {company} le agregó como responsable del reporte diario de {site}. Cada día de trabajo antes de las {deadline}, envíe su reporte desde este enlace: {link} Responda STOP para darse de baja.',
     tr: 'TalkOlog: {first}, {company} sizi {site} için günlük raporcu olarak ekledi. Her iş günü {deadline} öncesi raporunuzu bu linkten verin: {link} Durdurmak için STOP yazın.',
   },
+  daily_link: {
+    en: 'TalkOlog: the daily report for {site} is open. Your personal report link for today: {link} (please do not share it).',
+    es: 'TalkOlog: el reporte diario de {site} está abierto. Su enlace personal de reporte para hoy: {link} (por favor, no lo comparta).',
+    tr: 'TalkOlog: {site} için bugünkü günlük rapor açıldı. Bugünkü kişisel rapor linkiniz: {link} (lütfen paylaşmayın).',
+  },
+  reminder_1: {
+    en: 'TalkOlog: the daily report for {site} has not been received yet today. Your report link: {link} (please do not share it).',
+    es: 'TalkOlog: el reporte diario de {site} de hoy todavía no se ha recibido. Su enlace de reporte: {link} (por favor, no lo comparta).',
+    tr: 'TalkOlog: {site} için bugünkü günlük rapor henüz alınmadı. Rapor linkiniz: {link} (lütfen paylaşmayın).',
+  },
+  missed_call: {
+    en: "TalkOlog: we could not reach you by phone for today's daily report. Your report link: {link} (please do not share it).",
+    es: 'TalkOlog: no pudimos comunicarnos con usted por teléfono para el reporte diario de hoy. Su enlace de reporte: {link} (por favor, no lo comparta).',
+    tr: 'TalkOlog: bugünkü günlük rapor için size telefonla ulaşamadık. Rapor linkiniz: {link} (lütfen paylaşmayın).',
+  },
+  finish_report: {
+    en: "TalkOlog: your call ended before today's report was filed, so the report is not filed yet. Your report link: {link} (please do not share it).",
+    es: 'TalkOlog: su llamada terminó antes de registrar el reporte de hoy, así que el reporte todavía no está registrado. Su enlace de reporte: {link} (por favor, no lo comparta).',
+    tr: 'TalkOlog: görüşme bugünkü rapor kaydedilmeden bitti, rapor henüz kaydedilmedi. Rapor linkiniz: {link} (lütfen paylaşmayın).',
+  },
+  edit_applied: {
+    en: 'TalkOlog: your daily report for {weekday} was updated with this change: {change}. Version {v} of the report has been sent to the office.',
+    es: 'TalkOlog: su reporte diario del {weekday} se actualizó con este cambio: {change}. La versión {v} del reporte se envió a la oficina.',
+    tr: 'TalkOlog: {weekday} günlük raporunuz şu değişiklikle güncellendi: {change}. Raporun {v}. sürümü ofise gönderildi.',
+  },
 };
+
+/**
+ * Whether a body starts or ends with a variable for Meta: only spaces or punctuation between the
+ * variable and the edge (§19 Q110; "… Tap {{1}}." ends with one).
+ */
+const STARTS_WITH_VARIABLE = /^[^\p{L}\p{N}]*\{\{\d+\}\}/u;
+const ENDS_WITH_VARIABLE = /\{\{\d+\}\}[^\p{L}\p{N}]*$/u;
+
+/** Whether a template body starts or ends with a variable, as Meta reads it (§19 Q110). */
+export function hasEdgeVariable(body: string): boolean {
+  return STARTS_WITH_VARIABLE.test(body) || ENDS_WITH_VARIABLE.test(body);
+}
 
 /** The template of a key in a language for the pack's variant. */
 export function whatsappTemplate(
@@ -128,8 +174,8 @@ export function whatsappTemplate(
     if (n < 0) n = variables.push(name) - 1;
     return `{{${n + 1}}}`;
   });
-  if (/^\{\{\d+\}\}/.test(body)) body = PREFIX + body;
-  if (/\{\{\d+\}\}$/.test(body)) body = body + SUFFIX;
+  if (STARTS_WITH_VARIABLE.test(body)) body = PREFIX + body;
+  if (ENDS_WITH_VARIABLE.test(body)) body = body + SUFFIX;
   return { body, variables, category: 'utility', contentType: 'twilio/text' };
 }
 

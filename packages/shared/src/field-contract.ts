@@ -212,8 +212,10 @@ export const REQUIRED_CONSENTS = [
  * The version of the field app's own consent wording (`field.welcome.*`, W1-09), stored as
  * `consents.text_version` while the pack names no consent key (spec §19 Q28, Appendix B); when
  * `legalKeys.consent` is set the app sends that key instead. Bump it when the wording changes.
+ * v2 (spec §19 Q376, 2026-10-23): Welcome's *Message me on WhatsApp* box became the sentence
+ * above Continue (`welcome.whatsappNotice`), and Continue gives the `whatsapp` consent.
  */
-export const FIELD_CONSENT_TEXT_VERSION = 'field.consent.v1';
+export const FIELD_CONSENT_TEXT_VERSION = 'field.consent.v2';
 
 /** The recorder's cap per clip (§9.3, F5): 15 minutes, then the clip is sent and another may start. */
 export const MAX_CLIP_SECONDS = 15 * 60;

@@ -210,7 +210,7 @@ for (const run of RUNS) {
       // What the app sent: the consent with the wording's version, the clip by signed URL.
       expect(api.consent).toEqual({
         types: ['recording', 'data_processing', 'sms'],
-        textVersion: 'field.consent.v1',
+        textVersion: 'field.consent.v2',
         contactPref: 'link',
         locale: market.reporter.locale,
       });
@@ -405,25 +405,32 @@ test.describe('Other… (F7, W2-09) off the happy path', () => {
   });
 });
 
-test.describe('Message me on WhatsApp (W2-15, spec §19 Q25, Q40)', () => {
+test.describe('WhatsApp messages (W2-15, spec §19 Q40, Q376)', () => {
   test.use({ locale: 'tr-TR' });
 
-  test('the opt-in on Welcome, unticked by default, then Turn off and on in Settings', async ({
+  test('Continue on Welcome gives it under the visible sentence, then Turn off and on in Settings', async ({
     page,
   }) => {
     const field = UI_RESOURCES.tr.field;
     const market = demir();
     const api = await installFakeFieldApi(page, market, { verified: true, whatsapp: true });
     await page.goto(`/r/${CODE}`);
-    const wa = page.getByRole('checkbox', { name: field.welcome.consentWhatsapp });
-    await expect(wa).not.toBeChecked();
+    // §19 Q376: no box; the sentence sits directly above Continue, in view with it.
+    await expect(page.getByText(field.welcome.whatsappNotice, { exact: true })).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: field.welcome.consentWhatsapp })).toHaveCount(
+      0,
+    );
+    const go = page.getByRole('button', { name: field.welcome.continue });
+    await expect(go).toHaveAccessibleDescription(field.welcome.whatsappNotice);
     await page.getByRole('checkbox', { name: field.welcome.consentRequired }).check();
-    await wa.check();
-    await page.getByRole('button', { name: field.welcome.continue }).click();
+    await go.click();
     await expect(
       page.getByRole('heading', { level: 1, name: field.welcomeTest.title }),
     ).toBeVisible();
     expect((api.consent as { types: string[] }).types).toContain('whatsapp');
+    expect((api.consent as { textVersion: string }).textVersion).toBe(
+      market.country.legalKeys.consent ?? 'field.consent.v2',
+    );
 
     await page.goto('/settings');
     const s = field.settings;
@@ -436,7 +443,7 @@ test.describe('Message me on WhatsApp (W2-15, spec §19 Q25, Q40)', () => {
     await sheet.getByRole('button', { name: s.turnOnSheet.confirm }).click();
     expect(api.calls.find((c) => c.path === 'consent/grant')!.body).toEqual({
       type: 'whatsapp',
-      textVersion: market.country.legalKeys.consent ?? 'field.consent.v1',
+      textVersion: market.country.legalKeys.consent ?? 'field.consent.v2',
     });
     await expect(
       page.getByRole('button', { name: `${s.turnOff}: ${s.consents.whatsapp}` }),
@@ -634,7 +641,7 @@ for (const run of RUNS) {
       await expect(page.getByText(s.off, { exact: true })).toHaveCount(0);
       expect(api.calls.find((c) => c.path === 'consent/grant')!.body).toEqual({
         type: 'sms',
-        textVersion: market.country.legalKeys.consent ?? 'field.consent.v1',
+        textVersion: market.country.legalKeys.consent ?? 'field.consent.v2',
       });
 
       // Recording off behind the sheet; Keep it on changes nothing.
@@ -700,7 +707,7 @@ for (const run of RUNS) {
       await sheet.getByRole('button', { name: s.turnOnSheet.confirm }).click();
       expect(api.calls.find((c) => c.path === 'consent/grant')!.body).toEqual({
         type: 'auto_call',
-        textVersion: market.country.legalKeys.consent ?? 'field.consent.v1',
+        textVersion: market.country.legalKeys.consent ?? 'field.consent.v2',
       });
       // "Don't call me today" (§19 Q129): saved, then said as the state; no undo (§19 Q217).
       await page.getByRole('button', { name: s.notToday.button }).click();
@@ -824,7 +831,7 @@ for (const run of RUNS) {
           expirationTime: null,
           keys: { p256dh: 'BPe2eKey', auth: 'e2eAuth' },
         },
-        textVersion: run.market().country.legalKeys.consent ?? 'field.consent.v1',
+        textVersion: run.market().country.legalKeys.consent ?? 'field.consent.v2',
       });
       // The push consent is the toggle's, not a row of the consents (one label on the screen).
       await expect(page.getByText(s.push.label, { exact: true })).toHaveCount(1);

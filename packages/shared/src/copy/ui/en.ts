@@ -109,8 +109,14 @@ export const uiEn = {
       consentRequired: 'I agree to the recording and processing of my reports',
       consentSms: 'Text me the daily report link',
       consentCall: 'Call me at report time (automated)',
-      /** W2-15 (spec §19 Q25): only when the pack lists WhatsApp; the `whatsapp` consent. */
+      /** Settings' row for the `whatsapp` consent (W2-15); Welcome shows `whatsappNotice` instead (§19 Q376). */
       consentWhatsapp: 'Message me on WhatsApp',
+      /**
+       * §19 Q376 (owner, 2026-10-23): the sentence above Continue where the pack lists WhatsApp;
+       * Continue gives the `whatsapp` consent (`field.consent.v2`). Owner-approved wording.
+       */
+      whatsappNotice:
+        'By continuing, you agree to get your daily report links and reminders on WhatsApp. Reply STOP at any time to stop them.',
       prefLegend: 'How do you want to report?',
       prefLink: 'Text link',
       prefLinkHint: 'Tap the link, talk, done. Add photos.',
