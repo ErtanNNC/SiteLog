@@ -26,8 +26,18 @@ export interface PgliteDatabase {
   close(): Promise<void>;
 }
 
-export async function startPgliteDatabase(opts: { seed?: boolean } = {}): Promise<PgliteDatabase> {
+export async function startPgliteDatabase(
+  opts: {
+    seed?: boolean;
+    /**
+     * The packs with SMS in their order, as before §19 Q374 (`SMS_ORDER`, test/harness.ts): for
+     * the tests of the SMS paths kept for the switch back. The migrations' packs list none.
+     */
+    smsOrder?: boolean;
+  } = {},
+): Promise<PgliteDatabase> {
   const pg = await bootDatabase({ seed: opts.seed ?? true });
+  if (opts.smsOrder) await restoreSmsOrder(pg);
   const server = new PGLiteSocketServer({ db: pg, host: '127.0.0.1', port: 0 });
   await server.start();
   const url = `postgres://postgres:postgres@${server.getServerConn()}/postgres`;
@@ -50,4 +60,11 @@ export async function startPgliteDatabase(opts: { seed?: boolean } = {}): Promis
       await pg.close().catch(() => undefined);
     },
   };
+}
+
+/** `smsOrder`: every pack's order as before §19 Q374 (20261023000100 took SMS out). */
+export async function restoreSmsOrder(pg: Pick<PGlite, 'query'>): Promise<void> {
+  await pg.query(
+    `update countries set message_channels = '{push,whatsapp,sms}' where not ('sms' = any (message_channels))`,
+  );
 }

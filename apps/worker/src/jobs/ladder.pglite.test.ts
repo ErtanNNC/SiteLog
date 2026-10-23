@@ -83,7 +83,7 @@ async function skips(dedupeKey: string) {
 }
 
 beforeAll(async () => {
-  pg = await startPgliteDatabase({ seed: true });
+  pg = await startPgliteDatabase({ seed: true, smsOrder: true });
   const [m] = await pg.q<{ id: string; site_id: string }>(
     `select r.id, sr.site_id from reporters r join site_reporters sr on sr.reporter_id = r.id
       where r.phone_e164 = $1 and sr.is_primary limit 1`,

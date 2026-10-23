@@ -291,7 +291,7 @@ describe('Settings → Field channels (W4-05, P12, §19 Q231, Q232)', () => {
       'Toll-free number · Not set up in this environment',
     );
     expect(row('Number to call TalkOlog')).toHaveTextContent('Talk now only');
-    expect(screen.getByTestId('channel-order')).toHaveTextContent('Notifications → WhatsApp → SMS');
+    expect(screen.getByTestId('channel-order')).toHaveTextContent('Notifications → WhatsApp');
     expect(row('Replies to texts')).toHaveTextContent('Two-way');
     expect(row('Links in texts')).toHaveTextContent('Allowed');
     // Nothing in the pack card can be edited.
@@ -409,6 +409,20 @@ describe('Settings → Field channels (W4-05, P12, §19 Q231, Q232)', () => {
     await userEvent.click(send);
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       'Five test messages an hour. Try again later.',
+    );
+  });
+
+  it('§19 Q374: a pack that lists no SMS answers that texts are off for the country', async () => {
+    const store = new DemoStore();
+    vi.spyOn(store, 'sendTestMessage').mockReturnValue({ outcome: 'console', reason: 'sms_off' });
+    renderWithProviders(<SettingsPage />, opts(store, 'channels'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Send me a test message' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Send me a test message' });
+    await userEvent.type(within(dialog).getByTestId('test-phone'), '(555) 014-2290');
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'This is my own number.' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Send test message' }));
+    expect(await within(dialog).findByTestId('test-result')).toHaveTextContent(
+      'Texts are off for United States: TalkOlog reaches site managers by WhatsApp and app notifications, so nothing was sent.',
     );
   });
 

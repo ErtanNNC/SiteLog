@@ -21,7 +21,7 @@ import { testConfig } from '../config';
 import { createMetrics, type Ctx } from '../context';
 import { createMemoryProvider } from '../email/provider';
 import { createWorkerNotifier } from '../messaging';
-import type { SmsDriver, SmsTransport } from '@sitelog/shared';
+import type { MessageChannel, SmsDriver, SmsTransport } from '@sitelog/shared';
 import { createFakeTranscriber } from '../ai/fake-transcriber';
 import { registry } from '../jobs/registry';
 import { silentLogger } from '../log';
@@ -149,6 +149,13 @@ export interface Harness {
   failSms(err: Error | null): void;
 }
 
+/**
+ * §19 Q374 (2026-10-23): every launch pack lists push and WhatsApp only. The SMS paths stay built
+ * for the forward migration that switches SMS back on; the tests of those paths give the packs
+ * their order before Q374 (`createHarness({ smsOrder: true })`, `startPgliteDatabase({ smsOrder:
+ * true })`).
+ */
+export const SMS_ORDER: readonly MessageChannel[] = ['push', 'whatsapp', 'sms'];
 /** Fri Oct 9 2026 17:31 America/Chicago (CDT, UTC-5). */
 export const FRIDAY_EVENING = new Date('2026-10-09T22:31:00Z');
 
@@ -158,10 +165,13 @@ export function createHarness(
     claude?: MessagesClient | null;
     multiSiteForMarco?: boolean;
     settings?: Partial<OrgSettingsRow>;
+    /** The packs with SMS in their order, as before §19 Q374 (`SMS_ORDER`). */
+    smsOrder?: boolean;
   } = {},
 ): Harness {
   let now = opts.now ?? FRIDAY_EVENING;
   const db = createFakeDb(() => now);
+  if (opts.smsOrder) for (const c of db.data.countries) c.message_channels = [...SMS_ORDER];
   const wa = createFakeWaClient();
   const email = createMemoryProvider();
   const storage = createMemoryStorage();

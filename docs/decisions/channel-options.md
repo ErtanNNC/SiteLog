@@ -1,6 +1,10 @@
 # TalkOlog — Field channels (decision record)
 
-**Status:** Decided · **Date:** 2026-10-13, amended 2026-10-14; Q20 comparison 2026-10-17 · **Implemented in:** SITELOG_SPEC.md v1.2 (§0, §3, §4.4–§4.6, §5.1, §5.2, §6.2, §6.3, §7, §8 F3–F24, §9, §15, §19) and the Design canvas page "Field: text link & call"
+**Status:** Decided · **Date:** 2026-10-13, amended 2026-10-14; Q20 comparison 2026-10-17; SMS passive 2026-10-23 · **Implemented in:** SITELOG_SPEC.md v1.2 (§0, §3, §4.4–§4.6, §5.1, §5.2, §6.2, §6.3, §7, §8 F3–F24, §9, §15, §19) and the Design canvas page "Field: text link & call"
+
+## Amendment 2026-10-23 — SMS passive in every country pack (§19 Q374)
+
+**Status:** Decided by the owner. Until the SMS senders are registered (US 10DLC / toll-free verification, the TR `TALKOLOG` title), every pack orders `{push, whatsapp}` (`20261023000100_whatsapp_only.sql`): messages go by web push and WhatsApp through Twilio only, the welcome and the device code by their approved templates (§19 Q372, Q373). Nothing is sent by SMS. SMS stays built (drivers, `sms-webhook` with STOP / START / HELP, copy, consents) and comes back per pack by a forward migration of `countries.message_channels`.
 
 ## Amendment 2026-10-17 — Q20 revisited: TR SMS on İletimerkezi or a Twilio alphanumeric sender (for the owner; W4-13)
 

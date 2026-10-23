@@ -98,7 +98,7 @@ Deno.test('fieldCountryView: the pack subset, never the sender or a provider', (
     voiceNumber: null,
     fieldLocales: ['tr-TR', 'en-US'],
     twoWaySms: false,
-    messageChannels: ['push', 'whatsapp', 'sms'],
+    messageChannels: ['push', 'whatsapp'],
     legalKeys: {},
   });
   assert(!JSON.stringify(view).includes('TALKOLOG'));

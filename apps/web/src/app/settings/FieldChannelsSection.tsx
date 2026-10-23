@@ -318,9 +318,10 @@ function RecordingNoticeCard({ pack }: { pack: CountryPack }) {
 function resultText(t: CopyT, r: SendTestMessageResult, country: string): string {
   if (r.outcome === 'sent') return t('settings.channels.testResults.sent');
   if (r.outcome === 'failed') return t('settings.channels.testResults.failed');
-  return r.reason === 'demo'
-    ? t('settings.channels.testResults.demo')
-    : t('settings.channels.testResults.noSender', { country });
+  if (r.reason === 'demo') return t('settings.channels.testResults.demo');
+  // §19 Q374: SMS passive in the pack.
+  if (r.reason === 'sms_off') return t('settings.channels.testResults.smsOff', { country });
+  return t('settings.channels.testResults.noSender', { country });
 }
 
 /** The pack's field languages (the test text's and call's language choices), English without one. */

@@ -920,9 +920,9 @@ describe('jobs: welcome, template, retention', () => {
     });
   });
 
-  it('§19 Q372: a real org sends the welcome by its WhatsApp template, and by SMS without one', async () => {
+  it('§19 Q372: a real org sends the welcome by its WhatsApp template, and by SMS without one (a pack that lists SMS)', async () => {
     const SID = `HX${'b'.repeat(32)}`;
-    const h = createHarness();
+    const h = createHarness({ smsOrder: true });
     const us = h.db.data.countries.find((c) => c.code === 'US')!;
     us.sms_sender_id = '+18885550142';
     us.whatsapp_sender_id = '+17752628262';
@@ -993,8 +993,107 @@ describe('jobs: welcome, template, retention', () => {
     expect(smsSent[0]).toMatch(/^Hola Jorge/);
   });
 
-  it("send_welcome on a real org: the pack's provider and sender, the link masked in messages", async () => {
+  it('§19 Q374: no SMS in the pack: a late WhatsApp failure is an undeliverable welcome, told once', async () => {
+    const SID = `HX${'b'.repeat(32)}`;
     const h = createHarness();
+    const us = h.db.data.countries.find((c) => c.code === 'US')!;
+    expect(us.message_channels).toEqual(['push', 'whatsapp']);
+    us.sms_sender_id = '+18885550142';
+    us.whatsapp_sender_id = '+17752628262';
+    us.whatsapp_templates = { welcome: { en: SID } };
+    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
+    const forms: URLSearchParams[] = [];
+    const config = { ...h.ctx.config, TWILIO_ACCOUNT_SID: 'AC1', TWILIO_AUTH_TOKEN: 'tok' };
+    const smsSent: string[] = [];
+    h.ctx.notifier = createWorkerNotifier(
+      config,
+      h.db,
+      () => ({
+        driver: 'twilio',
+        send: (_to, body) => {
+          smsSent.push(body);
+          return Promise.resolve({ providerId: 'SMs1' });
+        },
+      }),
+      () => new Date('2026-10-23T15:00:00Z'),
+      [
+        workerWhatsappRegistration(config, h.db, ((_url: string, init: RequestInit) => {
+          forms.push(new URLSearchParams(String(init.body)));
+          return Promise.resolve(new Response(JSON.stringify({ sid: 'SMwa1' }), { status: 201 }));
+        }) as typeof fetch),
+      ],
+    );
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(forms).toHaveLength(1);
+    const [message] = [...h.db.data.messages.values()];
+    expect(message).toMatchObject({ channel: 'whatsapp', provider: 'twilio', status: 'sent' });
+    const recheck = [...h.db.data.jobs.values()].find(
+      (j) => j.type === 'send_welcome' && (j.payload as { recheck?: unknown }).recheck,
+    );
+    // Twilio failed it late (63003): no SMS to hand it to. The office hears it once.
+    Object.assign(message!, { status: 'failed', error: 'twilio failed 63003' });
+    await h.runJob('send_welcome', recheck!.payload);
+    await h.runJob('send_welcome', recheck!.payload);
+    expect([forms.length, smsSent.length, h.db.data.messages.size]).toEqual([1, 0, 1]);
+    expect(h.db.data.reporters.get(h.marco.id)!.last_invite_error).toBe('twilio failed 63003');
+    expect(h.db.data.notifications).toEqual([
+      expect.objectContaining({
+        kind: 'reporter_invite_failed',
+        title: 'Marco Ruiz: the welcome text could not be delivered',
+        data: { key: 'welcome_undeliverable', params: { name: 'Marco Ruiz' } },
+      }),
+    ]);
+    expect(h.db.data.audit.filter((a) => a.action === 'reporter.invite_failed')).toEqual([
+      expect.objectContaining({
+        diff: expect.objectContaining({
+          error: 'twilio failed 63003',
+          undeliverable: true,
+          channel: 'whatsapp',
+          message_id: message!.id,
+          via: 'recheck',
+        }),
+      }),
+    ]);
+    expect(h.db.data.audit.some((a) => a.action === 'reporter.welcome_fallback')).toBe(false);
+    // Jorge speaks Spanish: no approved Spanish welcome and no SMS, so nothing goes.
+    h.db.data.reporters.get(h.jorge.id)!.status = 'invited';
+    h.db.data.reporters.get(h.jorge.id)!.invited_at = null;
+    h.db.data.reporters.get(h.jorge.id)!.locale = 'es-US';
+    await h.runJob('send_welcome', { reporterId: h.jorge.id, siteId: SITE_RIVERSIDE });
+    expect([forms.length, smsSent.length]).toEqual([1, 0]);
+    expect(h.db.data.reporters.get(h.jorge.id)!.invited_at).toBeNull();
+    expect(h.db.data.notifications.at(-1)).toMatchObject({
+      kind: 'reporter_invite_failed',
+      data: { key: 'welcome_not_sent', params: { name: 'Jorge Medina', reason: 'no_channel' } },
+    });
+  });
+
+  it('§19 Q374: a real org with no WhatsApp sender here reaches no phone and says so (W1-08 on WhatsApp)', async () => {
+    const h = createHarness();
+    // An SMS sender alone no longer carries anything: the pack lists no SMS.
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
+    h.db.data.reporters.get(h.marco.id)!.invited_at = null;
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.sms).toEqual([]);
+    // What would have gone out, masked, for the staging Demo phone; no text.
+    const [message, ...more] = [...h.db.data.messages.values()];
+    expect(more).toEqual([]);
+    expect(message).toMatchObject({ channel: 'whatsapp', provider: 'console', status: 'failed' });
+    expect(message!.body).toContain(MASKED_CODE);
+    const marco = h.db.data.reporters.get(h.marco.id)!;
+    expect([marco.status, marco.invited_at]).toEqual(['invited', null]);
+    expect(h.db.data.notifications).toEqual([
+      expect.objectContaining({
+        kind: 'reporter_invite_failed',
+        title: 'Marco Ruiz: the welcome text was not sent',
+        body: expect.stringMatching(/no SMS or WhatsApp sender is set for its country pack/),
+      }),
+    ]);
+  });
+
+  it("send_welcome on a real org: the pack's provider and sender, the link masked in messages", async () => {
+    const h = createHarness({ smsOrder: true });
     h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
     h.db.data.reporters.get(h.marco.id)!.status = 'invited';
     await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
@@ -1029,7 +1128,7 @@ describe('jobs: welcome, template, retention', () => {
   });
 
   it('send_welcome: a number the provider refuses for good is flagged for the office', async () => {
-    const h = createHarness();
+    const h = createHarness({ smsOrder: true });
     h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
     h.db.data.reporters.get(h.marco.id)!.status = 'invited';
     h.ctx.notifier = createWorkerNotifier(h.ctx.config, h.db, () => ({
@@ -1068,7 +1167,7 @@ describe('jobs: welcome, template, retention', () => {
 
   it("send_welcome: an account fault (bad credentials, no credit) is never the number's fault", async () => {
     // Twilio 21606: the From number is not a valid, SMS-capable number of the account.
-    const h = createHarness();
+    const h = createHarness({ smsOrder: true });
     h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
     h.db.data.reporters.get(h.marco.id)!.status = 'invited';
     h.ctx.notifier = createWorkerNotifier(h.ctx.config, h.db, () => ({
@@ -1101,7 +1200,7 @@ describe('jobs: welcome, template, retention', () => {
     });
     expect([...h.db.data.messages.values()][0]!.status).toBe('failed');
     // İletimerkezi out of credit: the same, for the TR pack.
-    const tr = createHarness();
+    const tr = createHarness({ smsOrder: true });
     tr.db.data.orgs.get(tr.org.id)!.country = 'TR';
     Object.assign(
       tr.db.data.countries.find((c) => c.code === 'TR')!,
@@ -1347,7 +1446,7 @@ describe('jobs: welcome, template, retention', () => {
   });
 
   it("send_welcome: a number on the provider's opt-out list (Twilio 21610) is recorded as an opt-out", async () => {
-    const h = createHarness();
+    const h = createHarness({ smsOrder: true });
     h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
     h.db.data.reporters.get(h.marco.id)!.status = 'invited';
     h.ctx.notifier = createWorkerNotifier(
@@ -1402,7 +1501,7 @@ describe('jobs: welcome, template, retention', () => {
   });
 
   it('send_welcome: a real org whose pack has no sender here reaches no phone and says so', async () => {
-    const h = createHarness();
+    const h = createHarness({ smsOrder: true });
     h.db.data.reporters.get(h.marco.id)!.status = 'invited';
     h.db.data.reporters.get(h.marco.id)!.invited_at = null;
     await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
@@ -1434,7 +1533,7 @@ describe('jobs: welcome, template, retention', () => {
   });
 
   it("send_welcome: a phone that sent STOP on the pack's sender gets nothing, whatever the row says", async () => {
-    const h = createHarness();
+    const h = createHarness({ smsOrder: true });
     h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
     h.db.data.reporters.get(h.marco.id)!.status = 'invited';
     h.db.data.smsOptOuts.push({

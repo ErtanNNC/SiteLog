@@ -191,7 +191,7 @@ export interface SendTestMessageInput {
 
 export type SendTestMessageResult =
   | { outcome: 'sent'; driver: string }
-  | { outcome: 'console'; reason: 'demo' | 'no_sender' }
+  | { outcome: 'console'; reason: 'demo' | 'no_sender' | 'sms_off' }
   | { outcome: 'failed'; driver: string };
 
 /** W4-05 (§19 Q232, Q350): Settings' "Call me now" (settings_test_call_start()). */

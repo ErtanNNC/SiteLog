@@ -62,7 +62,7 @@ function heroComplete(id: string, out: ReturnType<FixtureLibrary['get']>['record
 }
 
 beforeAll(async () => {
-  database = await startPgliteDatabase({ seed: true });
+  database = await startPgliteDatabase({ seed: true, smsOrder: true });
   lib = loadFixtureLibrary([HERO]);
   clock = manualClock(new Date('2026-10-13T21:40:00Z'));
   // Virtual latency (the clock moves, nobody sleeps): transcription 12 s, extraction 20 s.

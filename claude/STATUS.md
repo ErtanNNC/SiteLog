@@ -1,5 +1,12 @@
 # TalkOlog · Durum
 
+**2026-10-23 — SMS bütün ülke paketlerinde pasif (§19 Q374, kararınız).**
+
+- **Değişen:** Mesajlar yalnızca uygulama bildirimi (push) ve WhatsApp (Twilio) ile gidiyor; US ve TR paketlerinin sırası `{push, whatsapp}` (migration `20261023000100_whatsapp_only.sql`, bütün satırlar). Doğrulama kodu da artık SMS'e düşmüyor. WhatsApp'ın taşıyamadığı mesaj (gönderici yok, o dilde onaylı şablon yok, STOP, sonradan başarısız) gönderilmiyor; ofis mevcut bildirimlerle haberdar ediliyor (welcome'da "karşılama mesajı iletilemedi"). Ayarlar'daki deneme SMS'i bu paketlerde gönderilmiyor ("SMS kapalı").
+- **Değişmeyen:** SMS kodu duruyor (sürücüler, gelen SMS, STOP/START/HELP, metinler). Geri açmak: o paketin `message_channels` sütununu değiştiren yeni bir migration.
+- **Testler:** e2e paketleri yerel stack'te SMS sırasını kendi çalışmaları için geri koyuyor (SMS yolları test edilmeye devam ediyor); WhatsApp-only davranışı birim, PGlite ve Deno testleriyle kapsanıyor.
+- **Sizin kararınız gereken:** Welcome ekranındaki "WhatsApp'tan mesaj at" kutusu varsayılan olarak işaretsiz (§19 Q25); işaretlemeyen kişi yalnızca push alır. Varsayılanı değiştirelim mi?
+
 **2026-10-20 (akşam) — İlk mesaj WhatsApp'tan (§19 Q372, onayınızla).**
 
 - **Neden:** Türk operatörleri ABD numarasından gelen linkli SMS'leri teslim etmiyor (Twilio'da durum `sent`, hiç `delivered` olmuyor); ABD SMS'i kayıt bekliyor.

@@ -219,7 +219,8 @@ export function sqlSimStack(opts: StackOptions): SimStack {
           `insert into site_reporters (site_id, reporter_id, is_primary) values ($1, $2, true)`,
           [siteId, reporterId],
         );
-      for (const type of ['recording', 'data_processing', 'sms'])
+      // §19 Q374: WhatsApp too, the only phone channel of a pack that lists no SMS.
+      for (const type of ['recording', 'data_processing', 'sms', 'whatsapp'])
         await q(
           `insert into consents (reporter_id, type, method, text_version, evidence)
            values ($1, $2, 'office_attested', 'simulate-call', '{"by":"simulate-call"}'::jsonb)`,

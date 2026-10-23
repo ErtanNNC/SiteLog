@@ -315,8 +315,9 @@ describe('LISTEN: its own connection, reconnecting with backoff', () => {
 });
 
 describe('notify job (§10.1, D48)', () => {
+  // The SMS paths, kept for the switch back (§19 Q374): the packs with SMS in their order.
   it('sends the key through the Notifier once per dedupe key', async () => {
-    const h = createHarness();
+    const h = createHarness({ smsOrder: true });
     h.db.data.orgs.get(h.org.id)!.is_demo = true;
     h.db.data.consents.push({
       id: 'c1',
@@ -344,7 +345,7 @@ describe('notify job (§10.1, D48)', () => {
   });
 
   it('tells the office when a real org has no SMS sender here (console)', async () => {
-    const h = createHarness();
+    const h = createHarness({ smsOrder: true });
     h.db.data.consents.push({
       id: 'c1',
       reporter_id: h.marco.id,
@@ -373,7 +374,7 @@ describe('notify job (§10.1, D48)', () => {
   });
 
   const consentedDemo = () => {
-    const h = createHarness();
+    const h = createHarness({ smsOrder: true });
     h.db.data.orgs.get(h.org.id)!.is_demo = true;
     h.db.data.consents.push({
       id: 'c1',

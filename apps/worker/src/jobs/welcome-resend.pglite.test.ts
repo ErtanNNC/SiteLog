@@ -110,7 +110,7 @@ async function audits(reporterId: string) {
 }
 
 beforeAll(async () => {
-  pg = await startPgliteDatabase({ seed: true });
+  pg = await startPgliteDatabase({ seed: true, smsOrder: true });
   const [s] = await pg.q<{ id: string }>(
     `insert into sites (org_id, name, project_code, timezone, deadline, status)
      values ($1, 'Harbor Lofts', 'W412', 'America/Chicago', '17:30', 'active') returning id`,

@@ -37,6 +37,8 @@ function setup(
     held?: ConsentType[];
     isDemo?: boolean;
     voice?: string | null;
+    /** The pack's order: SMS listed (as before §19 Q374, for the SMS paths) unless given. */
+    channels?: CountryRow['message_channels'];
   } = {},
 ) {
   const messaging = fakeMessaging();
@@ -53,6 +55,7 @@ function setup(
   // The pack's voice number picks the text's variant; the store reads the same pack.
   const country: CountryRow = {
     ...DEMO_COUNTRIES.find((c) => c.code === 'US')!,
+    message_channels: opts.channels ?? ['push', 'whatsapp', 'sms'],
     voice_number: voice,
   };
   messaging.recipients.set(PRIYA, {
@@ -303,5 +306,30 @@ Deno.test(
     );
     assertEquals([notLinked.status, notLinked.details], [409, { code: 'reporter_not_linked' }]);
     assertEquals(inactive.messaging.sent.length, 0);
+  },
+);
+
+Deno.test(
+  '§19 Q374: no SMS in the pack: a texts-only reporter gets nothing, WhatsApp carries it',
+  async () => {
+    const noSms = DEMO_COUNTRIES.find((c) => c.code === 'US')!.message_channels;
+    assertEquals(noSms, ['push', 'whatsapp']);
+    const textsOnly = setup({ channels: noSms });
+    assertEquals(await textDailyLink(textsOnly.deps, LENA, { siteId: SITE, requestId: REQ }), {
+      sent: false,
+      reporterId: PRIYA,
+      reason: 'no_consent',
+      detail: null,
+      reportDate: '2026-10-09',
+    });
+    assertEquals(textsOnly.messaging.sent.length, 0);
+    const whatsapp = setup({ channels: noSms, held: ['sms', 'whatsapp'] });
+    const result = await textDailyLink(whatsapp.deps, LENA, { siteId: SITE, requestId: REQ });
+    assertEquals([result.sent, result.sent && result.channel], [true, 'whatsapp']);
+    assertEquals(whatsapp.messaging.sent.length, 0);
+    assertEquals(
+      whatsapp.messaging.rows.map((r) => [r.channel, r.provider]),
+      [['whatsapp', 'console']],
+    );
   },
 );

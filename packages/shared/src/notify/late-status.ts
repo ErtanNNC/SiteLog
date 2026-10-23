@@ -199,7 +199,8 @@ export async function applyLateStatus(
     // notice nor "Can't reach this number"; the message goes on the person's next channel (W2-01),
     // and the office hears only if every channel fails. A WhatsApp welcome or device code (§19
     // Q372) is no `notify` job, so no fallback is queued here: send_welcome's recheck hands the
-    // welcome to SMS, and the next code goes by SMS (`whatsappFailedSinceInbound`).
+    // welcome to the pack's next channel (none since §19 Q374: it tells the office), and the next
+    // code skips WhatsApp (`whatsappFailedSinceInbound`).
     await fallBack(to);
     return to;
   }

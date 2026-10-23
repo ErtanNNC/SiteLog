@@ -10,7 +10,7 @@ Kaynak: `packages/shared/src/whatsapp/templates.ts` (`pnpm countries:set -- --co
    - `verify_code` dışındaki her şablon: **Text** (`twilio/text`), WhatsApp onay kategorisi **Utility**.
    - `verify_code`: **Authentication** (`whatsapp/authentication`), kategori **Authentication**. Metni Meta sabitler, siz yazmazsınız: "Add security recommendation" **açık**, "Code expiration" **10 dakika**, buton **Copy code** (Türkçe şablonda buton metni `Kodu kopyala`, İspanyolcada `Copiar código`). Tek değişken `{{1}}` = kod.
 4. Gövdeyi aşağıdan **aynen** yapıştırın; `{{1}}`, `{{2}}` … numaralarını ve sırasını değiştirmeyin. Meta örnek değer ister: "Örnek" sütunundakileri girin.
-5. _Save and submit for WhatsApp approval_. Onaylanınca her şablonun `HX…` kimliğini bana şu biçimde yazın (eksik olan anahtar/dil SMS ile gider, hiçbir şey kaybolmaz):
+5. _Save and submit for WhatsApp approval_. Onaylanınca her şablonun `HX…` kimliğini bana şu biçimde yazın (§19 Q374'ten beri SMS kapalı: şablonu olmayan anahtar/dil hiç gitmez, ofise "ulaşılamadı" bildirimi düşer):
 
 ```json
 {
@@ -22,7 +22,7 @@ Kaynak: `packages/shared/src/whatsapp/templates.ts` (`pnpm countries:set -- --co
 
 Aynı numara (+17752628262) iki pakete de hizmet ediyor; aynı `HX…` kimliklerini US paketine `en`/`es`, TR paketine `tr`/`en` olarak `countries-set` ile ben işlerim.
 
-**Öncelik:** önce `welcome` ve `verify_code` (üç dilde): ilk temas (karşılama ve cihaz kodu) artık WhatsApp'tan gidebiliyor (§19 Q372) ve şablon onaylanana kadar SMS'e düşüyor. Sonra `daily_link`, `reminder_1`, `reminder_2`, `question_ready`, `draft_ready`, `filed`.
+**Öncelik:** önce `welcome` ve `verify_code` (üç dilde): ilk temas (karşılama ve cihaz kodu) artık WhatsApp'tan gidebiliyor (§19 Q372) ; şablonu onaylanmayan mesaj gitmez (§19 Q374). Sonra `daily_link`, `reminder_1`, `reminder_2`, `question_ready`, `draft_ready`, `filed`.
 
 ## Değişkenler
 

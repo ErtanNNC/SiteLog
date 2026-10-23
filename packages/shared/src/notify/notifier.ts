@@ -58,7 +58,9 @@ import {
  *   order `{push, whatsapp, sms}` and no WhatsApp sender, SMS). Only when no channel of the order
  *   has a sender does W1-08's rule apply, on SMS: the row is written `failed` with the reason,
  *   masked, so the staging Demo phone shows what would have gone out, and the caller gets
- *   `no_channel` with detail `console_real_org` (the office is told by the sending job).
+ *   `no_channel` with detail `console_real_org` (the office is told by the sending job). Since
+ *   §19 Q374 no pack lists SMS: the rule applies on the order's first channel (WhatsApp, which is
+ *   not reachable without a sender), its row's error naming the channel.
  *   `verify_code` is then not written at all: a code nobody receives is of no use, and the
  *   W1-07 rule keeps it out of the office's reach (spec §19 Q48). A reply to an inbound text
  *   (`reply`) on `console` for a real org (its pack's sender cleared after the text came in) is
@@ -260,9 +262,14 @@ export interface NotifierDeps {
 /** Keys `console` writes only for demo orgs: their whole point is the secret (W1-07 rule). */
 export const CONSOLE_DEMO_ONLY_KEYS: readonly MessageKey[] = ['verify_code'];
 
-/** The `messages.error` of a text a real org's pack could not send (no sender id here). */
-export function consoleRealOrgError(packCode: string): string {
-  return `console: no SMS sender set for pack ${packCode}`;
+/**
+ * The `messages.error` of a message a real org's pack could not send (no sender id here): SMS's,
+ * or since §19 Q374 WhatsApp's when the pack lists no SMS.
+ */
+export function consoleRealOrgError(packCode: string, channel: MessageChannel = 'sms'): string {
+  return channel === 'sms'
+    ? `console: no SMS sender set for pack ${packCode}`
+    : `console: no ${channel} sender set for pack ${packCode}`;
 }
 
 export interface ReplyInput<K extends ReplySmsKey> {
@@ -682,7 +689,16 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
     if (reachable.length === 0) {
       // Nothing left but channels that cannot carry the key here (§19 Q372: WhatsApp with no
       // sender or template): an SMS opt-out is still why the person gets nothing.
-      return skip(recipient, key, reporter.status === 'opted_out' ? 'opted_out' : 'no_channel');
+      if (reporter.status === 'opted_out') return skip(recipient, key, 'opted_out');
+      // §19 Q374: with no SMS in the pack, a real org whose order has no sender of any of its
+      // channels here takes W1-08's rule below on the first one (WhatsApp), as SMS did before: a
+      // masked `failed` row, `console_real_org`, the office told by the sending job.
+      const noSender =
+        !org.isDemo &&
+        order.every((c) => pickMessageTransport({ isDemo: false }, pack, c, specs) === 'console');
+      const phoneChannel = order.find((c) => c !== 'push');
+      if (!noSender || phoneChannel === undefined) return skip(recipient, key, 'no_channel');
+      reachable.push(phoneChannel);
     }
     order = reachable;
     if (!org.isDemo) {
@@ -693,7 +709,7 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
         (c) => pickMessageTransport({ isDemo: false }, pack, c, specs) !== 'console',
       );
       if (withSender.length > 0) order = withSender;
-      else if (order.includes('sms')) order = ['sms'];
+      else order = [order.includes('sms') ? 'sms' : (order.find((c) => c !== 'push') ?? order[0]!)];
     }
     const phone = assertE164(reporter.phone_e164);
     if (order.includes('sms') && (await store.isPhoneOptedOut(phone, pack.code))) {
@@ -776,7 +792,7 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
         // staging Demo phone shows it), and the caller tells the office. Only when no channel of
         // the order has a sender here (spec §19 Q84 removed the others above).
         const id = plan.retry?.id ?? deps.randomUUID();
-        await writeRow(input, id, 'failed', consoleRealOrgError(pack.code));
+        await writeRow(input, id, 'failed', consoleRealOrgError(pack.code, channel));
         return skip(recipient, key, 'no_channel', 'console_real_org', { message_id: id });
       }
       const id = plan.retry?.id ?? deps.randomUUID();

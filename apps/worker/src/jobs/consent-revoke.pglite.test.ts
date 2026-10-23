@@ -28,7 +28,7 @@ function notifier() {
 }
 
 beforeAll(async () => {
-  pg = await startPgliteDatabase({ seed: true });
+  pg = await startPgliteDatabase({ seed: true, smsOrder: true });
   const [m] = await pg.q<{ id: string }>(`select id from reporters where phone_e164 = $1`, [
     MARCO_PHONE,
   ]);

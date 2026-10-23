@@ -29,6 +29,8 @@ const PORT = new URL(APP_URL).port;
 
 export default defineConfig({
   testDir: './e2e/supabase',
+  // §19 Q374: the packs' SMS order for the run (the SMS paths kept for the switch back).
+  globalSetup: './e2e/supabase/sms-order.ts',
   testMatch: /\.spec\.ts$/,
   timeout: 90_000,
   expect: { timeout: 15_000 },

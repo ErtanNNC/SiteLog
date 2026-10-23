@@ -20,8 +20,19 @@ import {
 
 /** `device/send-code` through the Notifier (spec §4.5, §19 Q25; W1-08). */
 
+/**
+ * The launch packs with SMS in their order, as before §19 Q374: the SMS paths stay built for the
+ * forward migration that switches SMS back on. The last tests use the packs as migrated (no SMS).
+ */
+const SMS_ORDER: CountryRow['message_channels'] = ['push', 'whatsapp', 'sms'];
 const pack = (code: 'US' | 'TR', patch: Partial<CountryRow> = {}) =>
-  toCountryPack({ ...DEMO_COUNTRIES.find((c) => c.code === code)!, ...patch });
+  toCountryPack({
+    ...DEMO_COUNTRIES.find((c) => c.code === code)!,
+    message_channels: SMS_ORDER,
+    ...patch,
+  });
+/** The pack's order as migrated (§19 Q374, 20261023000100). */
+const NO_SMS = { message_channels: ['push', 'whatsapp'] } satisfies Partial<CountryRow>;
 
 function message(
   over: Partial<ReporterRow> = {},
@@ -318,5 +329,50 @@ Deno.test(
     assertEquals(finalRefusal(whatsappRefused), true);
     assertEquals(finalRefusal(busy), false);
     assertEquals(finalRefusal(new Error('boom')), false);
+  },
+);
+
+Deno.test(
+  '§19 Q374: no SMS in the pack: the device code by WhatsApp only, never by SMS',
+  async () => {
+    assertEquals(
+      DEMO_COUNTRIES.map((c) => c.message_channels),
+      [NO_SMS.message_channels, NO_SMS.message_channels],
+    );
+    const m = fakeMessaging({ lastInbound: null });
+    const send = notifierCodeSender(m.notifier);
+    // A demo org: WhatsApp on the console (the Demo phone), an SMS preference ignored.
+    assertEquals((await send(message({}, { pack: NO_SMS }))).channel, 'whatsapp');
+    assertEquals(
+      (await send(message({ message_channel: 'sms' }, { pack: NO_SMS }))).channel,
+      'whatsapp',
+    );
+    // WhatsApp's STOP (its revoked consent): nothing to fall back to.
+    assertEquals(await send(message({}, { pack: NO_SMS, revoked: ['whatsapp'] })), {
+      channel: null,
+      reason: 'no_consent',
+    });
+    // A real org with an SMS sender but no WhatsApp sender here: nothing, and no row.
+    const before = m.rows.length;
+    assertEquals(await send(message({}, { pack: NO_SMS, isDemo: false, sender: '+18885550142' })), {
+      channel: null,
+      reason: 'no_channel',
+      detail: 'console_real_org',
+    });
+    // With a WhatsApp sender but no approved template in the reporter's language: nothing either.
+    const SID = `HX${'c'.repeat(32)}`;
+    const live = {
+      ...NO_SMS,
+      whatsapp_sender_id: '+17752628262',
+      whatsapp_templates: { verify_code: { en: SID } },
+    };
+    assertEquals(await send(message({ locale: 'es-US' }, { pack: live, isDemo: false })), {
+      channel: null,
+      reason: 'no_channel',
+    });
+    assertEquals(m.rows.length, before);
+    assertEquals((await send(message({}, { pack: live, isDemo: false }))).channel, 'whatsapp');
+    assertEquals(m.sent, []);
+    assertEquals(m.waSent.length, 1);
   },
 );

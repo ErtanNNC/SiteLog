@@ -81,7 +81,8 @@ describe('assembleTeam (W4-03)', () => {
     });
     expect(team.pack).toMatchObject({
       code: 'US',
-      settingsChannels: ['whatsapp', 'sms'],
+      // §19 Q374: SMS passive in every pack.
+      settingsChannels: ['whatsapp'],
       twoWaySms: true,
     });
     expect(team.orgLocale).toBe('en-US');

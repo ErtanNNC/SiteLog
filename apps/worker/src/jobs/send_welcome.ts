@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   MessageSendError,
+  attemptIsFinal,
   ensurePersonalLink,
   fieldLinkUrl,
   firstName,
@@ -33,9 +34,10 @@ import { PermanentJobError, type JobHandler } from './types';
  * What the office hears (§13 "Message undeliverable / opted out", `reporter_invite_failed` /
  * `reporter_opted_out`), and what the reporter row records:
  * §19 Q372: the welcome may go by WhatsApp (its template) where the pack orders WhatsApp first, and
- * by SMS where WhatsApp cannot carry it (no sender here, no approved template in the reporter's
- * language) or refuses it for good (the Notifier falls back, §19 Q22). The refusal below is the
- * last channel's (`MessageSendError`; `SmsSendError` for SMS):
+ * by SMS where the pack lists SMS and WhatsApp cannot carry it (no sender here, no approved
+ * template in the reporter's language) or refuses it for good (the Notifier falls back, §19 Q22).
+ * Since §19 Q374 no pack lists SMS: where WhatsApp cannot carry it, nothing is deliverable. The
+ * refusal below is the last channel's (`MessageSendError`; `SmsSendError` for SMS):
  * - the number cannot get messages (`undeliverable`: invalid, landline, unroutable):
  *   `last_invite_error` (Team: "Can't reach this number", F3), audited `reporter.invite_failed`,
  *   no retry;
@@ -70,9 +72,12 @@ import { PermanentJobError, type JobHandler } from './types';
 
 /**
  * §19 Q372: how long after a WhatsApp welcome its walk runs again (`send_welcome.recheck`), so a
- * late failure (63003, the number is not on WhatsApp) hands it to SMS. Twilio's failed status
- * comes within seconds to minutes; a later one leaves WhatsApp for the next message
- * (`whatsappFailedSinceInbound`), the automatic re-send included.
+ * late failure (63003, the number is not on WhatsApp) hands it to the next channel of the pack's
+ * order. §19 Q374: no pack lists SMS, so there is none: the recheck then tells the office the
+ * welcome could not be delivered (`last_invite_error`, `reporter.invite_failed`), as for any
+ * undeliverable welcome. Twilio's failed status comes within seconds to minutes; a later one
+ * leaves WhatsApp for the next message (`whatsappFailedSinceInbound`), the automatic re-send
+ * included.
  */
 export const WELCOME_WHATSAPP_RECHECK_MS = 10 * 60_000;
 
@@ -187,9 +192,8 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
     recheck?.messageKey ??
     (auto ? jobKeys.welcomeAutoResend(reporter.id) : `send_welcome:${job.id}`);
   // A recheck reports only a message its own walk sent (a retry of it finds that one already there).
-  const before = recheck
-    ? new Set((await ctx.db.listMessagesByDedupeKey(reporter.id, welcomeKey)).map((m) => m.id))
-    : null;
+  const prior = recheck ? await ctx.db.listMessagesByDedupeKey(reporter.id, welcomeKey) : null;
+  const before = prior ? new Set(prior.map((m) => m.id)) : null;
   let outcome: NotifyOutcome;
   try {
     outcome = await ctx.notifier.send(
@@ -298,6 +302,42 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
         reporter_id: reporter.id,
         reason: outcome.reason,
       });
+      // §19 Q374: no channel after the late failure (no SMS in the pack, or none deliverable):
+      // the welcome did not reach them, told as any undeliverable welcome (F3 "Can't reach this
+      // number"), while they are still only invited; once (a retry finds the error recorded).
+      const failed = prior?.find((m) => m.id === recheck.messageId);
+      if (
+        failed &&
+        attemptIsFinal({
+          status: failed.status,
+          provider_message_id: failed.provider_message_id ?? null,
+        }) &&
+        reporter.status === 'invited' &&
+        reporter.last_invite_error === null
+      ) {
+        const error = (failed.error ?? `whatsapp ${failed.status}`).slice(0, 300);
+        await ctx.db.updateReporter(reporter.id, { last_invite_error: error });
+        await notify(
+          'the welcome text could not be delivered',
+          error,
+          noticeData('welcome_undeliverable', { name: reporter.name }),
+        );
+        await ctx.db.logAudit({
+          org_id: reporter.org_id,
+          actor_type: 'system',
+          action: 'reporter.invite_failed',
+          entity: 'reporter',
+          entity_id: reporter.id,
+          diff: {
+            error,
+            undeliverable: true,
+            channel: failed.channel,
+            message_id: failed.id,
+            via: 'recheck',
+            reason: outcome.reason,
+          },
+        });
+      }
     }
     return;
   }

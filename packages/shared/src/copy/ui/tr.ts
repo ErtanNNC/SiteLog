@@ -129,7 +129,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
           },
           message_no_sender: {
             title: '{{name}}: ona giden bir mesaj gönderilemedi',
-            body: 'Bu ortamda şirketin ülkesi için SMS göndericisi tanımlı değil, bu yüzden mesaj hiçbir telefona ulaşmadı.',
+            body: 'Bu ortamda şirketin ülkesi için SMS veya WhatsApp göndericisi tanımlı değil, bu yüzden mesaj hiçbir telefona ulaşmadı.',
           },
           welcome_undeliverable: { title: '{{name}}: karşılama mesajı iletilemedi' },
           welcome_provider_fault: {
@@ -1689,6 +1689,8 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
           demo: 'Demo şirket: hiçbir şey gönderilmedi. Gerçek şirketler mesajı ülkenin göndericisinden alır.',
           noSender:
             'Bu ortamda {{country}} için mesaj göndericisi ayarlanmadı, bu yüzden hiçbir şey gönderilmedi.',
+          smsOff:
+            '{{country}} için SMS kapalı: TalkOlog şantiye şeflerine WhatsApp ve uygulama bildirimleriyle ulaşıyor, bu yüzden hiçbir şey gönderilmedi.',
           failed: 'Mesaj sağlayıcısı deneme mesajını reddetti. TalkOlog bunu kaydetti.',
           rateLimited: 'Saatte beş deneme mesajı. Daha sonra tekrar deneyin.',
           invalidPhone: 'Geçerli bir cep telefonu numarası girin.',

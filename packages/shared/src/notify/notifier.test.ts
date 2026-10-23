@@ -20,9 +20,19 @@ import {
   type OutboundMessageRow,
 } from './notifier.ts';
 
+/**
+ * §19 Q374 (2026-10-23): the launch packs list no SMS (`{push, whatsapp}`; the last tests use them
+ * as migrated, `demoPack`). The SMS paths stay built for the forward migration that switches SMS
+ * back on, so these tests run on the launch packs with their order before Q374.
+ */
+const SMS_ORDER: CountryRow['message_channels'] = ['push', 'whatsapp', 'sms'];
 const pack = (code: 'US' | 'TR', patch: Partial<CountryRow> = {}): CountryPack =>
-  toCountryPack({ ...DEMO_COUNTRIES.find((c) => c.code === code)!, ...patch });
-const US = demoPack('US');
+  toCountryPack({
+    ...DEMO_COUNTRIES.find((c) => c.code === code)!,
+    message_channels: SMS_ORDER,
+    ...patch,
+  });
+const US = pack('US');
 const US_LIVE = pack('US', { sms_sender_id: '+18885550142' });
 const TR_LIVE = pack('TR', {
   sms_provider: 'iletimerkezi',
@@ -1274,5 +1284,111 @@ describe('Notifier WhatsApp (W2-15; §19 Q25, Q39, Q84)', () => {
     expect((await h.notifier.deliver(stopped, 'verify_code', { code: '042917' })).channel).toBe(
       'sms',
     );
+  });
+
+  describe('§19 Q374: no SMS in the launch packs', () => {
+    const LIVE_WA = {
+      sms_sender_id: '+18885550142',
+      whatsapp_sender_id: '+15550142299',
+      whatsapp_templates: { welcome: { en: SID }, verify_code: { en: SID } },
+    };
+
+    it('a demo org: the welcome and the device code by WhatsApp (console), never by SMS', async () => {
+      for (const code of ['US', 'TR'] as const) {
+        const w = wa();
+        const h = harness({ channels: [w.registration] });
+        const r = recipient({ pack: demoPack(code) });
+        expect((await h.notifier.deliver(r, 'welcome', WELCOME)).channel, code).toBe('whatsapp');
+        expect((await h.notifier.deliver(r, 'verify_code', { code: '042917' })).channel).toBe(
+          'whatsapp',
+        );
+        expect([...h.rows.values()].map((m) => [m.channel, m.provider])).toEqual([
+          ['whatsapp', 'console'],
+          ['whatsapp', 'console'],
+        ]);
+        // A reporter who agreed to texts only: nothing goes (no SMS to carry it).
+        const textsOnly = recipient({ pack: demoPack(code), consents: ['sms', 'recording'] });
+        expect(await h.notifier.deliver(textsOnly, 'daily_link', DAILY)).toEqual({
+          channel: null,
+          reason: 'no_consent',
+        });
+        expect(h.sent.every((s) => s.driver === 'console')).toBe(true);
+        expect(h.rows.size).toBe(2);
+      }
+    });
+
+    it('a real org with an SMS sender but no WhatsApp here: no text, W1-08 on WhatsApp (a masked failed row)', async () => {
+      const w = wa();
+      const h = harness({ channels: [w.registration] });
+      const live = toCountryPack({
+        ...DEMO_COUNTRIES.find((c) => c.code === 'US')!,
+        sms_sender_id: '+18885550142',
+      });
+      const r = recipient({ isDemo: false, pack: live });
+      expect(await h.notifier.deliver(r, 'welcome', WELCOME)).toEqual({
+        channel: null,
+        reason: 'no_channel',
+        detail: 'console_real_org',
+      });
+      // The row records what would have gone out (the staging Demo phone), the link masked.
+      expect([...h.rows.values()]).toEqual([
+        expect.objectContaining({
+          channel: 'whatsapp',
+          provider: 'console',
+          status: 'failed',
+          copy_key: 'welcome',
+          error: consoleRealOrgError('US', 'whatsapp'),
+        }),
+      ]);
+      expect(h.rows.get('m-1')!.body).toContain(`/r/${MASKED_CODE}`);
+      expect(consoleRealOrgError('US', 'whatsapp')).toBe(
+        'console: no whatsapp sender set for pack US',
+      );
+      // The device code: no row at all (W1-07: a code nobody receives is of no use).
+      expect(await h.notifier.deliver(r, 'verify_code', { code: '042917' })).toEqual({
+        channel: null,
+        reason: 'no_channel',
+        detail: 'console_real_org',
+      });
+      expect([h.sent, w.forms, h.rows.size]).toEqual([[], [], 1]);
+      // A reporter with push on and no key pair here: still the phone channel, never push.
+      const pushOn = recipient({ isDemo: false, pack: live, consents: ['whatsapp', 'push'] });
+      const out = await h.notifier.deliver(pushOn, 'filed', {
+        report_no: 'RL-2041-0187',
+        pdf_link: 'https://go.talkolog.com/r/K7Q2MX/report/1',
+      });
+      expect(out).toMatchObject({ channel: null, detail: 'console_real_org' });
+      expect([...h.rows.values()].at(-1)).toMatchObject({ channel: 'whatsapp', copy_key: 'filed' });
+    });
+
+    it('a real org with WhatsApp: its templates; no template, a late failure or its STOP leave nothing', async () => {
+      const w = wa();
+      const h = harness({ channels: [w.registration] });
+      const live = toCountryPack({ ...DEMO_COUNTRIES.find((c) => c.code === 'US')!, ...LIVE_WA });
+      const r = recipient({ isDemo: false, pack: live });
+      expect((await h.notifier.deliver(r, 'welcome', WELCOME, { dedupeKey: 'w1' })).channel).toBe(
+        'whatsapp',
+      );
+      expect(w.forms).toHaveLength(1);
+      // A late failure (63003): the walk has nowhere to go; the refusal is thrown again.
+      Object.assign(h.rows.get('m-1')!, { status: 'failed', error: 'twilio failed 63003' });
+      await expect(
+        h.notifier.deliver(r, 'welcome', WELCOME, { dedupeKey: 'w1' }),
+      ).rejects.toMatchObject({ channel: 'whatsapp', undeliverable: true });
+      // No approved Spanish welcome: WhatsApp cannot carry it, and there is no SMS.
+      const spanish = recipient({ isDemo: false, pack: live, locale: 'es-US' });
+      expect(await h.notifier.deliver(spanish, 'welcome', WELCOME)).toEqual({
+        channel: null,
+        reason: 'no_channel',
+      });
+      // WhatsApp's STOP (its revoked consent): the device code has no SMS to fall back to.
+      const stopped = recipient({ isDemo: false, pack: live, revoked: ['whatsapp'] });
+      expect(await h.notifier.deliver(stopped, 'verify_code', { code: '042917' })).toEqual({
+        channel: null,
+        reason: 'no_consent',
+      });
+      expect(w.forms).toHaveLength(1);
+      expect(h.sent).toEqual([]);
+    });
   });
 });

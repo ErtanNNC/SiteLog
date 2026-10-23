@@ -178,7 +178,8 @@ describe('country pack rows (§4.6)', () => {
         paper: 'a4',
         currency: 'TRY',
         default_timezone: 'Europe/Istanbul',
-        message_channels: ['push', 'whatsapp', 'sms'],
+        // §19 Q374 (20261023000100): SMS passive in every pack.
+        message_channels: ['push', 'whatsapp'],
         sms_provider: 'twilio',
         whatsapp_provider: 'twilio',
         sms_sender_type: 'long_code',
@@ -196,8 +197,8 @@ describe('country pack rows (§4.6)', () => {
         paper: 'letter',
         currency: 'USD',
         default_timezone: 'America/Chicago',
-        // §19 Q372 (20261020000100): WhatsApp before SMS, as TR.
-        message_channels: ['push', 'whatsapp', 'sms'],
+        // §19 Q372 (20261020000100): WhatsApp before SMS, as TR; §19 Q374 (20261023000100): no SMS.
+        message_channels: ['push', 'whatsapp'],
         sms_provider: 'twilio',
         whatsapp_provider: 'twilio',
         sms_sender_type: 'toll_free',

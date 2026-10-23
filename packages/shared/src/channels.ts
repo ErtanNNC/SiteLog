@@ -94,7 +94,8 @@ export const PUSH_KEYS = [
  * alternative), the device code by an authentication template, so a WhatsApp-only worker can
  * verify a new phone (F4 step 2). Each is a business-initiated message: outside the 24-hour window
  * it needs an approved template (`whatsapp/templates.ts`); without one in the reporter's language
- * the channel is not reachable for the key and SMS carries it (§19 Q22, `ChannelRegistration`).
+ * the channel is not reachable for the key and the next channel of the pack's order carries it,
+ * if any (§19 Q22, `ChannelRegistration`; since §19 Q374 no pack lists SMS, so none).
  */
 export const WHATSAPP_KEYS = [
   'welcome',
@@ -160,8 +161,10 @@ export const PRE_CONSENT_KEYS = [
  * the channel stops it: SMS STOP (`optedOut`, the provider's list), and on WhatsApp a revoked
  * `whatsapp` consent, which is what WhatsApp's STOP records (§19 Q40; the Settings untick reads
  * the same, so it stops the code there too). It follows the person's order like any key, kept to
- * `PRE_CONSENT_CHANNELS`; SMS stays at the end of it even on a pack that lists no SMS for its
- * messages (every pack has an SMS sender, `sms_provider`).
+ * `PRE_CONSENT_CHANNELS`, and never steps outside the pack's list (§19 Q374, 2026-10-23: SMS is
+ * passive in every pack, so the code goes by WhatsApp only; until then SMS was appended to the
+ * order of a pack that listed none). Where WhatsApp cannot carry it, nothing is deliverable, as
+ * for any key.
  */
 export const CONSENT_FREE_KEYS = ['verify_code'] as const satisfies readonly NotifierKey[];
 
@@ -436,9 +439,9 @@ export function messageChannelOrder(
 
 /**
  * The channels a Notifier message may go on, in order (§4.5). The order is computed here, so no
- * caller can step outside the pack's allow-list: `messageChannelOrder(pack, preferred)` (with SMS
- * appended for `CONSENT_FREE_KEYS` when the pack lists none), kept to the channels in `narrow` when
- * given. A channel then stays only if it is built (`implemented`, default
+ * caller can step outside the pack's allow-list: `messageChannelOrder(pack, preferred)`, kept to
+ * the channels in `narrow` when given (a pack that lists no SMS sends nothing by SMS, the device
+ * code included, §19 Q374). A channel then stays only if it is built (`implemented`, default
  * `IMPLEMENTED_MESSAGE_CHANNELS`) and carries the key (`CHANNEL_KEYS`); its consent label exists
  * and is held (`PRE_CONSENT_KEYS` skip it on `PRE_CONSENT_CHANNELS` while the person has none,
  * given or revoked; `CONSENT_FREE_KEYS` always, short of a revoked WhatsApp consent); the person
@@ -470,9 +473,7 @@ export function deliverableChannels(input: {
   }
   const implemented: readonly MessageChannel[] = input.implemented ?? IMPLEMENTED_MESSAGE_CHANNELS;
   const consentFree = (CONSENT_FREE_KEYS as readonly MessageKey[]).includes(key);
-  const ordered = messageChannelOrder(input.pack, input.preferred);
-  const base: MessageChannel[] =
-    consentFree && !ordered.includes('sms') ? [...ordered, 'sms'] : ordered;
+  const base = messageChannelOrder(input.pack, input.preferred);
   const narrow = input.narrow;
   const order = narrow ? base.filter((c) => narrow.includes(c)) : base;
   const neverConsented = input.consents.size === 0 && input.revoked.size === 0;

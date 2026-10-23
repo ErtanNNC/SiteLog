@@ -67,8 +67,9 @@ describe('country pack rows (spec §4.6)', () => {
       expect(toCountryPack(row).outboundTrunkId, row.code).toBeNull();
       expect(row.legal_keys, row.code).toEqual({});
       // W2-14 (§19 Q107): push first, reached only by a reporter who turned notifications on;
-      // §19 Q372 (20261020000100): WhatsApp then SMS on both (W2-16 had US SMS first).
-      expect(row.message_channels, row.code).toEqual(['push', 'whatsapp', 'sms']);
+      // §19 Q372 (20261020000100): WhatsApp then SMS on both (W2-16 had US SMS first);
+      // §19 Q374 (20261023000100): SMS passive in every pack, WhatsApp only.
+      expect(row.message_channels, row.code).toEqual(['push', 'whatsapp']);
     }
   });
 
@@ -105,7 +106,7 @@ describe('country pack rows (spec §4.6)', () => {
       paper: 'a4',
       currency: 'TRY',
       defaultTimezone: 'Europe/Istanbul',
-      messageChannels: ['push', 'whatsapp', 'sms'],
+      messageChannels: ['push', 'whatsapp'],
       smsProvider: 'twilio',
       whatsappProvider: 'twilio',
       smsSenderType: 'long_code',

@@ -15,6 +15,7 @@ import {
 // The @sitelog/db harness (supabase/db-tests) boots PGlite with the Supabase stubs, every
 // migration and the demo seed. Imported by path so the worker image does not need that package.
 import { bootDatabase } from '../../../supabase/db-tests/src/harness.ts';
+import { restoreSmsOrder } from './test/pglite';
 import { DEMO_AUDIT_ID_BASE } from '@sitelog/shared/demo/rows.ts';
 import { DEMO_ORG_ID } from '@sitelog/shared/demo/kestrel.ts';
 import { STALE_LOCK_MS, testConfig } from './config';
@@ -62,6 +63,8 @@ const company: Record<string, string> = {};
 
 beforeAll(async () => {
   pg = await bootDatabase({ seed: true });
+  // The W1-08 messaging tests below cover the SMS paths kept for the switch back (§19 Q374).
+  await restoreSmsOrder(pg);
   server = new PGLiteSocketServer({ db: pg, host: '127.0.0.1', port: 0 });
   await server.start();
   sql = connectSql(`postgres://postgres:postgres@${server.getServerConn()}/postgres`, { max: 1 });

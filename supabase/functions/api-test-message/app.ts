@@ -22,6 +22,8 @@ import { HttpError } from '../_shared/http.ts';
  *   the company's name; no link, no reply instruction.
  * - How: the pack's own SMS transport (`pickMessageTransport`): `console` for a demo org and for a
  *   pack with no sender id in this environment, where nothing leaves TalkOlog and the answer says so.
+ *   §19 Q374: a pack that lists no SMS in its channels (every pack since 2026-10-23) sends no text
+ *   either: `console`, answered `sms_off` (a demo org's answer stays `demo`).
  * - How often: at most 5 an hour per org (`settings_test_message_claim()`, audited
  *   `settings.test_message` with the masked number, the driver and the language); the sixth is
  *   429 `rate_limited` with the time the next one is allowed.
@@ -63,8 +65,11 @@ export interface TestMessageDeps {
 
 export type TestMessageResult =
   | { outcome: 'sent'; driver: Exclude<SmsDriver, 'console'> }
-  /** Nothing left TalkOlog: a demo org, or a pack with no sender id in this environment. */
-  | { outcome: 'console'; reason: 'demo' | 'no_sender' }
+  /**
+   * Nothing left TalkOlog: a demo org, a pack with no sender id in this environment, or a pack
+   * whose channels list no SMS (§19 Q374).
+   */
+  | { outcome: 'console'; reason: 'demo' | 'no_sender' | 'sms_off' }
   | { outcome: 'failed'; driver: SmsDriver };
 
 /** "+15550143378" → "+1555***378": the audit's form of a number (§15, never stored whole). */
@@ -91,7 +96,11 @@ export async function sendTestMessage(
   const to = parsePhoneIn(input.phone, org.pack.code);
   if (!to) throw new HttpError(400, 'Enter a valid mobile number', { code: 'invalid_phone' });
 
-  const driver = pickMessageTransport({ isDemo: org.is_demo }, org.pack, 'sms');
+  // §19 Q374: SMS passive in the pack: nothing is texted, whatever its sender.
+  const smsOff = !org.pack.messageChannels.includes('sms');
+  const driver = smsOff
+    ? 'console'
+    : pickMessageTransport({ isDemo: org.is_demo }, org.pack, 'sms');
   const phoneMasked = maskPhone(to);
   const claim = await store.claim({
     orgId: org.id,
@@ -107,7 +116,7 @@ export async function sendTestMessage(
     });
   }
   if (driver === 'console') {
-    return { outcome: 'console', reason: org.is_demo ? 'demo' : 'no_sender' };
+    return { outcome: 'console', reason: org.is_demo ? 'demo' : smsOff ? 'sms_off' : 'no_sender' };
   }
   try {
     await deps

@@ -235,8 +235,9 @@ export interface WhatsappRegistrationDeps extends WhatsappTransportDeps {
  * Whether the person's latest WhatsApp message failed for good after Twilio took it (a late
  * `failed` / `undeliverable` status: 63003 not a WhatsApp user, a blocked or unregistered number)
  * and they have not written on WhatsApp since (§19 Q372). WhatsApp is then not reachable for them,
- * so the next message, a re-sent welcome or a new device code goes by SMS instead of failing the
- * same way: the first contact goes by WhatsApp before anyone knows the number is on WhatsApp.
+ * so the next message, a re-sent welcome or a new device code goes by SMS where the pack lists it
+ * (none since §19 Q374: nothing is deliverable) instead of failing the same way: the first contact
+ * goes by WhatsApp before anyone knows the number is on WhatsApp.
  */
 export function whatsappFailedSinceInbound(
   last: LastWhatsappOutbound | null,

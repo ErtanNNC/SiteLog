@@ -839,7 +839,7 @@ export const RPCS: Record<
     why: '§2.2 "Manage reporters, phone numbers & channel preferences": admin, ops (F15 Office, §19 Q243).',
     allow: ADMIN_OPS,
     call: (o) =>
-      `select update_reporter_contact('${o.reporter}', 'call', 'sms', 'en-US', true) as v`,
+      `select update_reporter_contact('${o.reporter}', 'call', 'whatsapp', 'en-US', true) as v`,
   },
   revoke_reporter_devices: {
     why: '§2.2 "Manage reporters": admin, ops (F16 lost phone, §19 Q244).',

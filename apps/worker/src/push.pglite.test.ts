@@ -101,7 +101,7 @@ async function rows(dedupeKey: string) {
 }
 
 beforeAll(async () => {
-  pg = await startPgliteDatabase({ seed: true });
+  pg = await startPgliteDatabase({ seed: true, smsOrder: true });
   const [m] = await pg.q<{ id: string; org_id: string }>(
     `select id, org_id from reporters where phone_e164 = $1`,
     [MARCO_PHONE],

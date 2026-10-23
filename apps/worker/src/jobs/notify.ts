@@ -292,7 +292,7 @@ export function createNotifyJob(
       });
       if (outcome.detail === 'console_real_org') {
         await officeNotice(
-          'No SMS sender is set for this organisation’s country in this environment, so the text reached no phone.',
+          'No SMS or WhatsApp sender is set for this organisation’s country in this environment, so the message reached no phone.',
           noticeData('message_no_sender', { name: reporter.name }),
         );
       }

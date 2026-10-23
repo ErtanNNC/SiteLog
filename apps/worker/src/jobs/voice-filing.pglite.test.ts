@@ -161,7 +161,7 @@ async function runQueued<T extends 'file_report' | 'notify'>(type: T, reportId: 
 }
 
 beforeAll(async () => {
-  pg = await startPgliteDatabase({ seed: true });
+  pg = await startPgliteDatabase({ seed: true, smsOrder: true });
   fake = createFixtureClaude({ lib: loadFixtureLibrary() });
   const [marco] = await pg.q<{ id: string; site_id: string; org_id: string }>(
     `select r.id, sr.site_id, r.org_id from reporters r

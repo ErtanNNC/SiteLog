@@ -39,7 +39,7 @@ let RIVERSIDE = '';
 let ORG = '';
 
 beforeAll(async () => {
-  database = await startPgliteDatabase({ seed: true });
+  database = await startPgliteDatabase({ seed: true, smsOrder: true });
   world = createWorld({
     db: database.db,
     sql: database.sql,

@@ -16,8 +16,13 @@ import { maskPhone, sendTestMessage, type TestMessageStore } from './app.ts';
 const ORG = '22222222-2222-4222-8222-222222222222';
 const LENA = '44444444-4444-4444-8444-444444444444';
 
+/** The pack with SMS in its order (as before §19 Q374) unless `channels` says otherwise. */
 function packOf(code: 'US' | 'TR', over: Partial<CountryRow> = {}) {
-  return toCountryPack({ ...DEMO_COUNTRIES.find((c) => c.code === code)!, ...over });
+  return toCountryPack({
+    ...DEMO_COUNTRIES.find((c) => c.code === code)!,
+    message_channels: ['push', 'whatsapp', 'sms'],
+    ...over,
+  });
 }
 
 function setup(
@@ -27,6 +32,7 @@ function setup(
     code?: 'US' | 'TR';
     sender?: string | null;
     fail?: Error;
+    channels?: CountryRow['message_channels'];
   } = {},
 ) {
   const claims: Array<Parameters<TestMessageStore['claim']>[0]> = [];
@@ -42,7 +48,10 @@ function setup(
         id: ORG,
         name: code === 'US' ? 'Kestrel Build Group' : 'Demir Yapı A.Ş.',
         is_demo: opts.isDemo ?? false,
-        pack: packOf(code, { sms_sender_id: sender }),
+        pack: packOf(code, {
+          sms_sender_id: sender,
+          ...(opts.channels ? { message_channels: opts.channels } : {}),
+        }),
       }),
     claim: (input) => {
       claims.push(input);
@@ -161,4 +170,25 @@ Deno.test('maskPhone keeps the country code and the last three digits', () => {
   assertEquals(maskPhone('+15550143378'), '+1555***378');
   assertEquals(maskPhone('+905325550142'), '+9053***142');
   assertEquals(maskPhone('+12'), '***');
+});
+
+Deno.test('§19 Q374: a pack that lists no SMS texts nothing, with its sender set', async () => {
+  const channels = DEMO_COUNTRIES.find((c) => c.code === 'US')!.message_channels;
+  assertEquals(channels, ['push', 'whatsapp']);
+  const t = setup({ channels });
+  assertEquals(await sendTestMessage(t.deps, LENA, input), {
+    outcome: 'console',
+    reason: 'sms_off',
+  });
+  assertEquals(t.sent, []);
+  assertEquals(
+    t.claims.map((c) => c.driver),
+    ['console'],
+  );
+  // A demo org's answer is still the demo's.
+  const demo = setup({ channels, isDemo: true });
+  assertEquals(await sendTestMessage(demo.deps, LENA, input), {
+    outcome: 'console',
+    reason: 'demo',
+  });
 });

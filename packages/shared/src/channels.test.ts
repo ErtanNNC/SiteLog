@@ -40,8 +40,14 @@ const row = (code: 'US' | 'TR') => DEMO_COUNTRIES.find((c) => c.code === code)!;
 const pack = (code: 'US' | 'TR', patch: Partial<CountryRow> = {}): CountryPack =>
   toCountryPack({ ...row(code), ...patch });
 
-const US = demoPack('US');
-const TR = demoPack('TR');
+/**
+ * §19 Q374 (2026-10-23): the launch packs list no SMS (`{push, whatsapp}`, the last describe). The
+ * SMS rules stay built for the forward migration that switches SMS back on, so most tests here run
+ * on the launch packs with their order before Q374, `{push, whatsapp, sms}`.
+ */
+const SMS_ORDER: CountryRow['message_channels'] = ['push', 'whatsapp', 'sms'];
+const US = pack('US', { message_channels: SMS_ORDER });
+const TR = pack('TR', { message_channels: SMS_ORDER });
 /** US with its toll-free sender and TR with its title set in this environment. */
 const US_LIVE = pack('US', { sms_sender_id: '+18885550142', voice_number: '+15550142290' });
 const TR_LIVE = pack('TR', {
@@ -330,17 +336,22 @@ describe('deliverableChannels (§4.5)', () => {
     expect(deliverable(smsOnly, 'daily_link', { narrow: ['whatsapp'] })).toEqual([]);
     expect(deliverable(smsOnly, 'daily_link', { narrow: [] })).toEqual([]);
     expect(deliverable(smsOnly, 'verify_code', { consents: NONE })).toEqual(['sms']);
-    // A pack without SMS in its list: no message goes by SMS, even narrowed to SMS.
+    // A pack without SMS in its list: no message goes by SMS, even narrowed to SMS, the device
+    // code included (§19 Q374).
     for (const key of NOTIFIER_KEYS) {
-      if ((CONSENT_FREE_KEYS as readonly string[]).includes(key)) continue;
+      if ((CONSENT_FREE_KEYS as readonly string[]).includes(key)) {
+        expect(deliverable(NO_SMS, key), key).toEqual(['whatsapp']);
+        expect(deliverable(NO_SMS, key, { narrow: ['sms'] }), key).toEqual([]);
+        continue;
+      }
       expect(deliverable(NO_SMS, key), key).toEqual([]);
       expect(deliverable(NO_SMS, key, { narrow: ['sms'] }), key).toEqual([]);
       expect(deliverable(NO_SMS, key, { implemented: MESSAGE_CHANNELS }), key).toEqual([]);
     }
   });
 
-  it('sends the device code by SMS on every pack, even one that lists no SMS (§19 Q25)', () => {
-    for (const p of [US_SMS, NO_LINKS, NO_SMS]) {
+  it('sends the device code by SMS only where the pack lists SMS (§19 Q25, Q374)', () => {
+    for (const p of [US_SMS, NO_LINKS]) {
       expect(deliverable(p, 'verify_code', { preferred: 'sms' }), p.code).toContain('sms');
       expect(deliverable(p, 'verify_code', { consents: NONE }).at(-1), p.code).toBe('sms');
       expect(
@@ -351,7 +362,12 @@ describe('deliverableChannels (§4.5)', () => {
         p.code,
       ).toEqual([]);
     }
-    expect(deliverable(NO_SMS, 'verify_code')).toEqual(['whatsapp', 'sms']);
+    // Until §19 Q374 SMS was appended to an order that lists none: no longer.
+    expect(deliverable(NO_SMS, 'verify_code')).toEqual(['whatsapp']);
+    expect(deliverable(NO_SMS, 'verify_code', { consents: NONE, preferred: 'sms' })).toEqual([
+      'whatsapp',
+    ]);
+    expect(deliverable(NO_SMS, 'verify_code', { revoked: new Set(['whatsapp']) })).toEqual([]);
     expect(deliverable(NO_SMS, 'verify_code', { narrow: ['whatsapp'] })).toEqual(['whatsapp']);
     expect(deliverable(NO_SMS, 'verify_code', { narrow: ['push'] })).toEqual([]);
   });
@@ -550,5 +566,60 @@ describe('settingsMessageChannels (F15, spec §19 Q21)', () => {
     expect(
       settingsMessageChannels({ messageChannels: ['whatsapp', 'sms'] }, ['sms', 'whatsapp']),
     ).toEqual(['whatsapp', 'sms']);
+  });
+});
+
+describe('§19 Q374: SMS is passive in every launch pack', () => {
+  const launch = [demoPack('US'), demoPack('TR')];
+
+  it('orders push and WhatsApp only, and offers WhatsApp as the only preference', () => {
+    for (const p of launch) {
+      expect(p.messageChannels, p.code).toEqual(['push', 'whatsapp']);
+      expect(messageChannelOrder(p, null), p.code).toEqual(['push', 'whatsapp']);
+      // A stored SMS preference is ignored: the pack is the allow-list (§19 Q21).
+      expect(messageChannelOrder(p, 'sms'), p.code).toEqual(['push', 'whatsapp']);
+      expect(settingsMessageChannels(p), p.code).toEqual(['whatsapp']);
+    }
+  });
+
+  it('sends no key by SMS, whatever the consents, preference, narrowing or opt-outs', () => {
+    const consentSets: ReadonlySet<ConsentType>[] = [NONE, SMS_CONSENT, new Set(CONSENT_TYPES)];
+    for (const p of launch)
+      for (const key of NOTIFIER_KEYS)
+        for (const consents of consentSets)
+          for (const preferred of [null, 'sms', 'whatsapp'] as const) {
+            const label = `${p.code} ${key} ${[...consents].join(',')} ${preferred}`;
+            const order = deliverable(p, key, {
+              consents,
+              preferred,
+              implemented: MESSAGE_CHANNELS,
+            });
+            expect(order, label).not.toContain('sms');
+            expect(deliverable(p, key, { consents, preferred, narrow: ['sms'] }), label).toEqual(
+              [],
+            );
+          }
+  });
+
+  it('sends the welcome and the device code by WhatsApp only; its opt-out leaves nothing', () => {
+    for (const p of launch) {
+      expect(deliverable(p, 'welcome', { consents: NONE }), p.code).toEqual(['whatsapp']);
+      expect(deliverable(p, 'verify_code', { consents: NONE }), p.code).toEqual(['whatsapp']);
+      // Declined SMS and WhatsApp at F4: the device code still goes by WhatsApp (Q25, Q372).
+      expect(deliverable(p, 'verify_code', { consents: new Set(['recording']) }), p.code).toEqual([
+        'whatsapp',
+      ]);
+      // WhatsApp's STOP (a revoked WhatsApp consent): no SMS to fall back to.
+      expect(deliverable(p, 'verify_code', { revoked: new Set(['whatsapp']) }), p.code).toEqual([]);
+      // A reporter who agreed to texts only gets nothing but push from here on.
+      expect(deliverable(p, 'daily_link', { consents: SMS_CONSENT }), p.code).toEqual([]);
+      expect(
+        deliverable(p, 'daily_link', {
+          consents: new Set(['sms', 'push', 'recording']),
+          implemented: MESSAGE_CHANNELS,
+        }),
+        p.code,
+      ).toEqual(['push']);
+    }
   });
 });

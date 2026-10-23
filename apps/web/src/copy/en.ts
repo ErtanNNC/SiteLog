@@ -143,7 +143,7 @@ export const copy = {
         },
         message_no_sender: {
           title: '{{name}}: a message to them was not sent',
-          body: 'No SMS sender is set for this organisation’s country in this environment, so the text reached no phone.',
+          body: 'No SMS or WhatsApp sender is set for this organisation’s country in this environment, so the message reached no phone.',
         },
         welcome_undeliverable: { title: '{{name}}: the welcome text could not be delivered' },
         welcome_provider_fault: {
@@ -2217,6 +2217,8 @@ export const copy = {
         demo: 'Demo company: nothing was sent. Real companies get it from the country’s sender.',
         noSender:
           'No text sender is set up for {{country}} in this environment, so nothing was sent.',
+        smsOff:
+          'Texts are off for {{country}}: TalkOlog reaches site managers by WhatsApp and app notifications, so nothing was sent.',
         failed: 'The text provider refused the test message. TalkOlog has logged it.',
         rateLimited: 'Five test messages an hour. Try again later.',
         invalidPhone: 'Enter a valid mobile number.',

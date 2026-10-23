@@ -255,7 +255,7 @@ function stereoRecording(): Buffer {
 }
 
 beforeAll(async () => {
-  pg = await startPgliteDatabase({ seed: true });
+  pg = await startPgliteDatabase({ seed: true, smsOrder: true });
   fake = createFixtureClaude({
     lib: loadFixtureLibrary(),
     extractionV2: (_id, out) => (heardEdit ? heardEdit(out) : out),

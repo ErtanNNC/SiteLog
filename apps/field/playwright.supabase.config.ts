@@ -29,6 +29,8 @@ const DIST = 'node_modules/.e2e/field-supabase';
 
 export default defineConfig({
   testDir: './e2e/supabase',
+  // §19 Q374: the packs' SMS order for the run (the SMS paths kept for the switch back).
+  globalSetup: './e2e/supabase/sms-order.ts',
   testMatch: /\.spec\.ts$/,
   timeout: 120_000,
   expect: { timeout: 15_000 },
