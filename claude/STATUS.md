@@ -1,5 +1,16 @@
 # TalkOlog · Durum
 
+**2026-10-23 (akşam) — Özet ve bekleyenler.**
+
+- **WhatsApp şablonları otomatik (Deploy → preview → `whatsapp-templates`):** `submit` eksik şablonları Twilio'da oluşturup Meta onayına gönderiyor; `sync` onaylananları (yalnız Utility / Authentication) TR ve US paketlerine yazıyor; `dry-run` hiçbir şey göndermiyor. Elle şablon girmeye gerek yok.
+- **Durum (17:25 TR saati):** onaylı ve pakete yazılı: `welcome_v2_tr`, `verify_code_tr`. Bekleyen 28 (Türkçe ve İngilizce), hepsi Utility. İlk turda reddedilen ya da Marketing sayılan 5 anahtar (`daily_link`, `reminder_1`, `missed_call`, `finish_report`, `edit_applied`) sade metinlerle `_v2` adıyla yeniden gönderildi (§19 Q377). Eski reddedilen/Marketing şablonlar Twilio'da duruyor ama kullanılmıyor; isterseniz silebilirsiniz. Otomatik kontrol 21:27 TR saatinde, sonra yarın sabah.
+- **Welcome izni (§19 Q376) kararınız A:** Ayarlar'dan WhatsApp'ı kapatan kişi Welcome'a dönüp "Devam" derse WhatsApp yeniden açılır (görünür cümle yeni ve bilinçli onay sayılır). Q374 girişindeki "varsayılan işaretsiz kutu" sorusu bu kararla kapandı.
+- **Sizin adımlarınız:**
+  1. Önemli şablonlar (welcome/verify_code EN, daily_link, reminder_1/2) onaylanınca **veritabanına uygulama onayı**: Q374 (SMS pasif) ve Q375 (aramada "evet" = WhatsApp) migration'ları preview'e henüz uygulanmadı (Deploy → preview → `supabase`). Uygulanınca SMS tamamen durur.
+  2. **Netlify:** PR #1'in son panel ve saha uygulaması deploy'larını yayınlayın (yeni Welcome ekranı, legal sayfalar).
+  3. **Netlify rozeti:** saha sitesinde Project configuration → General → "Powered by Netlify badge" → Off (Free planda seçenek yoksa Personal plan).
+- **Bilgi:** 20 Ekim'de TR'ye gönderilen eski welcome SMS'i Türk operatörü tarafından günler sonra (23 Ekim sabahı) teslim edildi; linki eski `pr-1--…` adresi. Yeni bir sorun değil.
+
 **2026-10-23 — Welcome'da WhatsApp kutusu kalktı, "Devam et" izni veriyor (§19 Q376, kararınız).**
 
 - **Değişen:** Saha uygulamasının ilk açılış ekranında "Bana WhatsApp'tan mesaj gönderin" kutusu yok. Paket WhatsApp'ı listeliyorsa "Devam et" düğmesinin hemen üstünde tek cümle görünüyor ("Devam ederek günlük rapor linklerini ve hatırlatmaları WhatsApp'tan almayı kabul edersiniz. İstediğiniz zaman STOP yazarak durdurabilirsiniz.", EN/ES de var). "Devam et" WhatsApp iznini diğer izinlerle birlikte kaydediyor (yöntem yine `web_checkbox`, metin sürümü `field.consent.v2`, audit log aynı). Paket WhatsApp'ı listelemiyorsa cümle de izin de yok.
@@ -15,7 +26,7 @@
 - **Değişen:** Mesajlar yalnızca uygulama bildirimi (push) ve WhatsApp (Twilio) ile gidiyor; US ve TR paketlerinin sırası `{push, whatsapp}` (migration `20261023000100_whatsapp_only.sql`, bütün satırlar). Doğrulama kodu da artık SMS'e düşmüyor. WhatsApp'ın taşıyamadığı mesaj (gönderici yok, o dilde onaylı şablon yok, STOP, sonradan başarısız) gönderilmiyor; ofis mevcut bildirimlerle haberdar ediliyor (welcome'da "karşılama mesajı iletilemedi"). Ayarlar'daki deneme SMS'i bu paketlerde gönderilmiyor ("SMS kapalı").
 - **Değişmeyen:** SMS kodu duruyor (sürücüler, gelen SMS, STOP/START/HELP, metinler). Geri açmak: o paketin `message_channels` sütununu değiştiren yeni bir migration.
 - **Testler:** e2e paketleri yerel stack'te SMS sırasını kendi çalışmaları için geri koyuyor (SMS yolları test edilmeye devam ediyor); WhatsApp-only davranışı birim, PGlite ve Deno testleriyle kapsanıyor.
-- **Sizin kararınız gereken:** Welcome ekranındaki "WhatsApp'tan mesaj at" kutusu varsayılan olarak işaretsiz (§19 Q25); işaretlemeyen kişi yalnızca push alır. Varsayılanı değiştirelim mi?
+- **Karar (kapandı):** Welcome'daki WhatsApp kutusu kaldırıldı; "Devam" izin veriyor (§19 Q376).
 
 **2026-10-20 (akşam) — İlk mesaj WhatsApp'tan (§19 Q372, onayınızla).**
 
