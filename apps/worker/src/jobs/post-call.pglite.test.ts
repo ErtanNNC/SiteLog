@@ -640,7 +640,7 @@ describe('W3-14: a call whose reporter said no to the consent question (§19 Q12
   it('processes nothing: no transcript, no reconcile, no hand-over; the recording is deleted', async () => {
     const call = await newCall('2030-07-09T21:00:00Z');
     await uploadRecording(call, fakeAudio('call-riverside-en', 75));
-    await pg.q(`select voice_record_consent($1, 'no', 4, 'voice.consent.v1')`, [call]);
+    await pg.q(`select voice_record_consent($1, 'no', 4, 'voice.consent.v2')`, [call]);
     await endCall(call, 'abandoned');
     await pg.q(`update calls set ended_at = now() - interval '2 hours' where id = $1`, [call]);
     await runPostCall(call);

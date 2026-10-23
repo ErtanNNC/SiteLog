@@ -351,7 +351,7 @@ describe('F10 on a call: voice_request_filed_correction / voice_save_filed_corre
   });
 });
 
-describe('voice_record_consent (F3 call, §19 Q120)', () => {
+describe('voice_record_consent (F3 call, §19 Q120, Q375)', () => {
   let invited: string;
 
   beforeAll(async () => {
@@ -368,14 +368,17 @@ describe('voice_record_consent (F3 call, §19 Q120)', () => {
     ]);
   });
 
-  it('yes stores recording, data processing and texts by voice, with the call, and activates', async () => {
+  it('yes stores recording, data processing and WhatsApp by voice, with the call, and activates', async () => {
     const call = await newCall(20, '2030-07-10T18:00:00Z', { reporter: invited });
-    const r = await one<{ status: string; given: string[]; smsBefore: boolean }>(
-      `select voice_record_consent($1, 'yes', 7.25, 'voice.consent.v1') as r`,
-      [call],
-    );
-    expect(r).toMatchObject({ status: 'given', smsBefore: false });
-    expect(r.given.sort()).toEqual(['data_processing', 'recording', 'sms']);
+    const r = await one<{
+      status: string;
+      given: string[];
+      smsBefore: boolean;
+      messagesBefore: boolean;
+    }>(`select voice_record_consent($1, 'yes', 7.25, 'voice.consent.v2') as r`, [call]);
+    expect(r).toMatchObject({ status: 'given', smsBefore: false, messagesBefore: false });
+    // §19 Q375: WhatsApp, never SMS (no pack sends SMS since Q374).
+    expect(r.given.sort()).toEqual(['data_processing', 'recording', 'whatsapp']);
     const rows = await svc<{
       type: string;
       method: string;
@@ -389,7 +392,7 @@ describe('voice_record_consent (F3 call, §19 Q120)', () => {
     for (const row of rows) {
       expect(row).toMatchObject({
         method: 'voice_yes',
-        text_version: 'voice.consent.v1',
+        text_version: 'voice.consent.v2',
         evidence: { call_id: call, at: 7.25 },
       });
     }
@@ -406,25 +409,29 @@ describe('voice_record_consent (F3 call, §19 Q120)', () => {
     ).toEqual([{ n: 3 }]);
     // Said again: nothing new.
     const again = await one<{ given: string[] }>(
-      `select voice_record_consent($1, 'yes', 9, 'voice.consent.v1') as r`,
+      `select voice_record_consent($1, 'yes', 9, 'voice.consent.v2') as r`,
       [call],
     );
     expect(again.given).toEqual([]);
   });
 
-  it('no marks the call and tells whether texts were consented before; a yes after it is refused', async () => {
+  it('no marks the call and tells whether messages were consented before; a yes after it is refused', async () => {
     const call = await newCall(21, '2030-07-11T18:00:00Z', { reporter: invited });
     await svc(`update calls set recording_path = $2 where id = $1`, [
       call,
       `${DEMO_ORG_ID}/${call}.ogg`,
     ]);
-    const r = await one<{ status: string; smsBefore: boolean; recordingPath: string }>(
-      `select voice_record_consent($1, 'no', 4, 'voice.consent.v1') as r`,
-      [call],
-    );
+    const r = await one<{
+      status: string;
+      smsBefore: boolean;
+      messagesBefore: boolean;
+      recordingPath: string;
+    }>(`select voice_record_consent($1, 'no', 4, 'voice.consent.v2') as r`, [call]);
     expect(r).toEqual({
       status: 'declined',
-      smsBefore: true,
+      // The yes above gave WhatsApp, not SMS: the link goes on a message consent (§19 Q375).
+      smsBefore: false,
+      messagesBefore: true,
       recordingPath: `${DEMO_ORG_ID}/${call}.ogg`,
       given: [],
     });
@@ -434,7 +441,7 @@ describe('voice_record_consent (F3 call, §19 Q120)', () => {
       ]),
     ).toEqual([{ declined: true }]);
     expect(
-      await failure(`select voice_record_consent($1, 'yes', 9, 'voice.consent.v1')`, [call]),
+      await failure(`select voice_record_consent($1, 'yes', 9, 'voice.consent.v2')`, [call]),
     ).toMatch(/wrong_state/);
   });
 });

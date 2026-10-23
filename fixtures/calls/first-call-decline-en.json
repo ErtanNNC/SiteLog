@@ -60,14 +60,14 @@
           "autoCall": false
         },
         "recordingNoticeVersion": "voice.recording_notice.v1",
-        "consentTextVersion": "voice.consent.v1",
+        "consentTextVersion": "voice.consent.v2",
         "maxQuestions": 2
       }
     ],
     "record_consent": [
       {
         "status": "declined",
-        "confirmation": "Understood. Nothing from this call is kept. I'll text you your link so you can report on the web. Goodbye.",
+        "confirmation": "Understood. Nothing from this call is kept. I'll send you your link so you can report on the web. Goodbye.",
         "linkSent": true
       }
     ],

@@ -1,5 +1,10 @@
 # TalkOlog · Durum
 
+**2026-10-23 — Aramada "evet" artık WhatsApp izni (§19 Q375, kararınız).**
+
+- **Değişen:** Asistan ilk aramada izin sorusunu WhatsApp'ı adıyla soruyor ("Bu görüşmeleri kaydetmem ve size rapor linklerini WhatsApp'tan göndermem uygun mu?", EN/ES/TR). "Evet" artık `sms` yerine `recording`, `data_processing` ve `whatsapp` izni kaydediyor (migration `20261023000200_call_consent_whatsapp.sql`, metin sürümü `voice.consent.v2`). "Hayır" diyen kişiye link, önceden SMS veya WhatsApp izni varsa gönderiliyor.
+- **Değişmeyen:** Daha önce aramayla kaydedilmiş `sms` izinleri olduğu gibi duruyor. WhatsApp'ta STOP demiş biri aramada "evet" derse WhatsApp izni yeniden veriliyor (SMS'te de böyleydi).
+
 **2026-10-23 — SMS bütün ülke paketlerinde pasif (§19 Q374, kararınız).**
 
 - **Değişen:** Mesajlar yalnızca uygulama bildirimi (push) ve WhatsApp (Twilio) ile gidiyor; US ve TR paketlerinin sırası `{push, whatsapp}` (migration `20261023000100_whatsapp_only.sql`, bütün satırlar). Doğrulama kodu da artık SMS'e düşmüyor. WhatsApp'ın taşıyamadığı mesaj (gönderici yok, o dilde onaylı şablon yok, STOP, sonradan başarısız) gönderilmiyor; ofis mevcut bildirimlerle haberdar ediliyor (welcome'da "karşılama mesajı iletilemedi"). Ayarlar'daki deneme SMS'i bu paketlerde gönderilmiyor ("SMS kapalı").

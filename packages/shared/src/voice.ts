@@ -71,8 +71,12 @@ export function voiceRoomKey(name: string | undefined, sid: string | undefined):
   return null;
 }
 
-/** The consent wording version a call stores until the pack's `legal_keys.consent` is set (§19 Q28, Q120). */
-export const VOICE_CONSENT_TEXT_VERSION = 'voice.consent.v1';
+/**
+ * The consent wording version a call stores until the pack's `legal_keys.consent` is set (§19 Q28,
+ * Q120). v2 (§19 Q375): `consent_ask` names WhatsApp, and a yes gives the `whatsapp` consent (v1
+ * said "text" and gave `sms`).
+ */
+export const VOICE_CONSENT_TEXT_VERSION = 'voice.consent.v2';
 
 /** The recording notice version a call plays until the pack's `legal_keys.recording_notice` is set (§19 Q28). */
 export const VOICE_RECORDING_NOTICE_VERSION = 'voice.recording_notice.v1';
@@ -393,7 +397,7 @@ export const GetContextResponseSchema = z.strictObject({
   }),
   /** The pack's `legal_keys.recording_notice`, else `voice.recording_notice.v1`. */
   recordingNoticeVersion: z.string().min(1).max(64),
-  /** The pack's `legal_keys.consent`, else `voice.consent.v1`. */
+  /** The pack's `legal_keys.consent`, else `voice.consent.v2`. */
   consentTextVersion: z.string().min(1).max(64),
   /** §9.4 dialog policy `{max_questions}`: `org_settings.max_questions_per_report` (§10.5). */
   maxQuestions: z.number().int().min(0).max(10),
@@ -675,9 +679,10 @@ export const SaveChangeResponseSchema = z.strictObject({
 /**
  * W3-14 `record_consent` (F3 on a call, §19 Q120; an addition to §9.4's table): the reporter's
  * verbatim answer to `consent_ask`, said after the disclosure, with its call second. Code reads it
- * (`callYesNo`): yes stores `recording`, `data_processing` and `sms` (`voice_yes`, the call id
- * and second as evidence) and activates the reporter; no stores nothing more, deletes the call's
- * recording and texts the link only if `sms` was given before; anything else is asked again.
+ * (`callYesNo`): yes stores `recording`, `data_processing` and `whatsapp` (§19 Q375; `voice_yes`,
+ * the call id and second as evidence) and activates the reporter; no stores nothing more, deletes
+ * the call's recording and sends the link only if `sms` or `whatsapp` was given before; anything
+ * else is asked again.
  */
 export const RecordConsentRequestSchema = z.strictObject({
   ...toolBase,
@@ -691,7 +696,7 @@ export const RecordConsentResponseSchema = z.strictObject({
    * call `abandoned`); `consent_repeat`.
    */
   confirmation: z.string().min(1).max(400),
-  /** `declined`: the personal link was texted (only with an `sms` consent given before). */
+  /** `declined`: the personal link was sent (only with an `sms` or `whatsapp` consent given before). */
   linkSent: z.boolean(),
 });
 

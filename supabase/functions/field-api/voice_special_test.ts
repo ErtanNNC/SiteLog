@@ -538,9 +538,10 @@ Deno.test(
     const yes = await h.tool('record_consent', c, { utterance: 'Yes.', at: 11.2 });
     assertEquals(yes.json, { status: 'given', confirmation: 'Thank you.', linkSent: false });
     const rows = h.store.consents.filter((x) => x.reporter_id === DANA);
-    assertEquals(rows.map((r) => r.type).sort(), ['data_processing', 'recording', 'sms']);
+    // §19 Q375: the yes gives WhatsApp, not SMS (no pack sends SMS since Q374).
+    assertEquals(rows.map((r) => r.type).sort(), ['data_processing', 'recording', 'whatsapp']);
     for (const r of rows) {
-      assertEquals([r.method, r.text_version], ['voice_yes', 'voice.consent.v1']);
+      assertEquals([r.method, r.text_version], ['voice_yes', 'voice.consent.v2']);
       assertEquals(r.evidence, { call_id: c.callId, at: 11.2 });
     }
     assertEquals(h.store.reporters.find((r) => r.id === DANA)!.status, 'active');
@@ -549,49 +550,63 @@ Deno.test(
   },
 );
 
-Deno.test(
-  'a first-time caller who says no: nothing kept, no recording, the link by text only after an earlier sms consent',
-  async () => {
-    const h = setup();
-    // Dana had consented to texts on an earlier invite, never to recording.
-    h.store.consents.push({
-      id: crypto.randomUUID(),
-      reporter_id: DANA,
-      type: 'sms',
-      method: 'web_checkbox',
-      text_version: 'field.consent.v1',
-      evidence: null,
-      given_at: '2026-10-01T15:00:00Z',
-      revoked_at: null,
-    });
-    const c = await h.sip(9, DANA_PHONE);
-    const no = await h.tool('record_consent', c, { utterance: 'No, thanks.', at: 7 });
-    assertEquals(no.json, {
-      status: 'declined',
-      confirmation: renderVoice('consent_declined_link', 'en'),
-      linkSent: true,
-    });
-    assertEquals(h.texts.length, 1);
-    assertEquals(h.texts[0]!.vars.site, 'Hillcrest School Extension');
-    assertMatch(h.texts[0]!.vars.link, /^https:\/\/go\.sitelog\.test\//);
-    assert(h.store.callRows.find((x) => x.id === c.callId)!.consent_declined_at);
-    assertEquals(
-      h.store.consents.filter((x) => x.reporter_id === DANA).map((x) => x.type),
-      ['sms'],
-    );
-    // Nothing of the call is processed or kept.
-    const upload = await h.tool('update_draft', c, {
-      segments: [{ start: 1, end: 2, text: 'Apex had six.' }],
-    });
-    assertEquals([upload.status, upload.json.error], [403, 'consent_required']);
-    const rec = await h.call(
-      `voice/calls/${c.callId}/recording`,
-      { callId: c.callId, mime: 'audio/ogg', bytes: 1000, durationS: 30 },
-      c.token,
-    );
-    assertEquals([rec.status, rec.json.error], [403, 'consent_required']);
-  },
-);
+for (const before of ['whatsapp', 'sms'] as const) {
+  Deno.test(
+    `a first-time caller who says no: nothing kept, no recording, the link sent only after an earlier ${before} consent (§19 Q375)`,
+    async () => {
+      const h = setup();
+      // Dana had consented to messages on an earlier invite, never to recording.
+      h.store.consents.push({
+        id: crypto.randomUUID(),
+        reporter_id: DANA,
+        type: before,
+        method: 'web_checkbox',
+        text_version: 'field.consent.v1',
+        evidence: null,
+        given_at: '2026-10-01T15:00:00Z',
+        revoked_at: null,
+      });
+      const c = await h.sip(9, DANA_PHONE);
+      const no = await h.tool('record_consent', c, { utterance: 'No, thanks.', at: 7 });
+      assertEquals(no.json, {
+        status: 'declined',
+        confirmation: renderVoice('consent_declined_link', 'en'),
+        linkSent: true,
+      });
+      assertEquals(h.texts.length, 1);
+      assertEquals(h.texts[0]!.vars.site, 'Hillcrest School Extension');
+      assertMatch(h.texts[0]!.vars.link, /^https:\/\/go\.sitelog\.test\//);
+      assert(h.store.callRows.find((x) => x.id === c.callId)!.consent_declined_at);
+      assertEquals(
+        h.store.consents.filter((x) => x.reporter_id === DANA).map((x) => x.type),
+        [before],
+      );
+      // Nothing of the call is processed or kept.
+      const upload = await h.tool('update_draft', c, {
+        segments: [{ start: 1, end: 2, text: 'Apex had six.' }],
+      });
+      assertEquals([upload.status, upload.json.error], [403, 'consent_required']);
+      const rec = await h.call(
+        `voice/calls/${c.callId}/recording`,
+        { callId: c.callId, mime: 'audio/ogg', bytes: 1000, durationS: 30 },
+        c.token,
+      );
+      assertEquals([rec.status, rec.json.error], [403, 'consent_required']);
+    },
+  );
+}
+
+Deno.test('a first-time caller who says no with no message consent before: no link', async () => {
+  const h = setup();
+  const c = await h.sip(9, DANA_PHONE);
+  const no = await h.tool('record_consent', c, { utterance: 'No, thanks.', at: 7 });
+  assertEquals(no.json, {
+    status: 'declined',
+    confirmation: renderVoice('consent_declined', 'en'),
+    linkSent: false,
+  });
+  assertEquals(h.texts.length, 0);
+});
 
 Deno.test(
   '"Not today" (§19 Q129) sets no calls until the end of today; no callback where no calls are placed',

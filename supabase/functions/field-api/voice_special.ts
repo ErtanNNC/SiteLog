@@ -77,8 +77,9 @@ import {
  *   window, the same day, before the missing step) and voice_schedule_callback() queues the one
  *   callback of the site-day as a delayed `place_call`; 400 `not_available` where the org places no
  *   calls or the reporter has no `auto_call` consent of their own (§19 Q131).
- * - `record_consent` (F3 call, §19 Q120): yes stores the consents by voice; no stores nothing more,
- *   deletes the call's recording and texts the link only when texts were consented before.
+ * - `record_consent` (F3 call, §19 Q120, Q375): yes stores the consents by voice (`recording`,
+ *   `data_processing` and `whatsapp`); no stores nothing more, deletes the call's recording and
+ *   sends the link only when messages (`sms` or `whatsapp`) were consented before.
  * - `leave_message` and the recording of an unknown caller (F13, §19 Q124): a 160-character
  *   snippet on `unknown_contacts`, at most 60 s of recording outside every org's folder.
  */
@@ -94,8 +95,13 @@ export type VoiceSaveResult =
 /** voice_record_consent(). */
 export interface VoiceConsentResult {
   status: 'given' | 'declined';
-  /** A `sms` consent was held before this call (§19 Q120: the link is texted only then). */
+  /** An `sms` consent was held before this call (kept for the field-api deployed before Q375). */
   smsBefore: boolean;
+  /**
+   * An `sms` or `whatsapp` consent was held before this call (§19 Q120, Q375: after a no, the link
+   * is sent only then).
+   */
+  messagesBefore: boolean;
   /** Declined: the call's recording path to delete, if one was signed. */
   recordingPath: string | null;
   given: string[];
@@ -364,7 +370,7 @@ export interface VoiceHelpers {
 /** Field-api's deps this module needs besides the voice routes' (`FieldApiDeps`). */
 export interface VoiceSpecialDeps {
   store: VoiceSpecialStore;
-  /** F3 call (§19 Q120): the daily link texted after a "no", when texts were consented before. */
+  /** F3 call (§19 Q120, Q375): the daily link sent after a "no", when messages were consented before. */
   sendDailyLink: SendDailyLink;
   fieldAppUrl: () => string;
   linkSigningSecret: () => string;
@@ -714,7 +720,7 @@ export function registerVoiceSpecialRoutes(
         // Nothing uploaded yet: the upload is refused from now on (no recording consent).
       }
     }
-    const linkSent = res.smsBefore ? await textLink(scope) : false;
+    const linkSent = res.messagesBefore ? await textLink(scope) : false;
     return out({
       status: 'declined',
       confirmation: renderVoice(linkSent ? 'consent_declined_link' : 'consent_declined', language),
@@ -723,8 +729,8 @@ export function registerVoiceSpecialRoutes(
   }
 
   /**
-   * §19 Q120: the declined caller's daily link for the call's site (or their one active site) by
-   * text, through the Notifier (which checks the `sms` consent and the opt-out), once per call.
+   * §19 Q120, Q375: the declined caller's daily link for the call's site (or their one active site)
+   * through the Notifier (on the pack's channels, each with its consent and opt-out), once per call.
    */
   async function textLink(scope: SpecialCallScope): Promise<boolean> {
     const active = scope.sites.filter((s) => s.status === 'active');

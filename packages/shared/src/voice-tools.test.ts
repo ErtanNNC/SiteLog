@@ -80,13 +80,13 @@ describe('voice tool answers (W3-03)', () => {
   it("uses the pack's legal keys, else the agent's own wording versions", () => {
     expect(voiceTextVersions({})).toEqual({
       recordingNoticeVersion: 'voice.recording_notice.v1',
-      consentTextVersion: 'voice.consent.v1',
+      consentTextVersion: 'voice.consent.v2',
     });
     expect(voiceTextVersions({ recording_notice: 'us.rec.2', consent: ' ' })).toEqual({
       recordingNoticeVersion: 'us.rec.2',
-      consentTextVersion: 'voice.consent.v1',
+      consentTextVersion: 'voice.consent.v2',
     });
-    expect(voiceTextVersions(null).consentTextVersion).toBe('voice.consent.v1');
+    expect(voiceTextVersions(null).consentTextVersion).toBe('voice.consent.v2');
   });
 
   it('puts a recording at calls/{org}/{call}.ogg', () => {

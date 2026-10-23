@@ -38,7 +38,7 @@ export const voiceTr: VoiceCatalog = {
     'Saat {time} itibarıyla hava nedeniyle iş durdu, ekip eve gönderildi. Bu sabah sahada kaç kişi vardı?',
   weather_photo_link: 'Hava koşullarının bir fotoğrafı kaydı güçlendirir. Size bir link gönderdim.',
   consent_ask:
-    'Bu görüşmeleri kaydetmem ve size rapor linklerini mesajla göndermem uygun mu? Evet ya da hayır deyin.',
+    "Bu görüşmeleri kaydetmem ve size rapor linklerini WhatsApp'tan göndermem uygun mu? Evet ya da hayır deyin.",
   preference_ask: 'Her iş günü arama mı istersiniz, yoksa linkinizi mesajla mı göndereyim?',
   consent_declined: 'Anlaşıldı. Bu görüşmeden hiçbir şey saklanmayacak. İyi günler.',
   consent_declined_link:
@@ -119,7 +119,7 @@ export const voiceTr: VoiceCatalog = {
   edit_pending: 'Hâlâ son değişiklik üzerinde çalışıyorum, bir saniye.',
   consent_given: 'Teşekkür ederim.',
   consent_repeat:
-    'Kusura bakmayın, bu görüşmeleri kaydetmem ve size rapor linklerini mesajla göndermem uygun mu? Evet ya da hayır deyin.',
+    "Kusura bakmayın, bu görüşmeleri kaydetmem ve size rapor linklerini WhatsApp'tan göndermem uygun mu? Evet ya da hayır deyin.",
   tool_error: 'Kusura bakmayın, bu işlem şu an olmadı. Tekrar deneyelim.',
   test_call_greeting: 'Merhaba, ben TalkOlog asistanı. Bu görüşme kaydedilmiyor.',
   test_call_line:

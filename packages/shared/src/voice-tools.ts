@@ -73,7 +73,7 @@ export function preferenceConfirmation(pref: ContactPref, language: Language): s
 
 /**
  * The wording versions a call stores (§19 Q28, Q120): the pack's `legal_keys` when counsel set
- * them, else the agent's own (`voice.recording_notice.v1`, `voice.consent.v1`).
+ * them, else the agent's own (`voice.recording_notice.v1`, `voice.consent.v2`).
  */
 export function voiceTextVersions(
   legalKeys: { recording_notice?: string; consent?: string } | null | undefined,

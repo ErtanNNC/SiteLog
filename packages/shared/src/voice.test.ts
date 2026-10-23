@@ -45,7 +45,7 @@ const TOOL_EXAMPLES: { [T in (typeof VOICE_TOOLS)[number]]: [VoiceToolRequest<T>
       keyterms: ['rebar', 'Apex Concrete'],
       consents: { recording: true, dataProcessing: true, sms: true, autoCall: false },
       recordingNoticeVersion: 'voice.recording_notice.v1',
-      consentTextVersion: 'voice.consent.v1',
+      consentTextVersion: 'voice.consent.v2',
       maxQuestions: 3,
     },
   ],

@@ -347,7 +347,7 @@ Deno.test(
     });
     assertEquals(
       [body.recordingNoticeVersion, body.consentTextVersion],
-      ['voice.recording_notice.v1', 'voice.consent.v1'],
+      ['voice.recording_notice.v1', 'voice.consent.v2'],
     );
     assertEquals(body.maxQuestions, 2);
     // Key terms (buildKeyterms, W3-08): the site, the companies and aliases, the site's area,

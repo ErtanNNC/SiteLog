@@ -178,6 +178,7 @@ export class FakeVoiceSpecialStore implements VoiceSpecialStore {
         (x) => x.reporter_id === c.reporter_id && x.type === t && !x.revoked_at,
       );
     const smsBefore = held('sms');
+    const messagesBefore = smsBefore || held('whatsapp');
     if (input.answer === 'no') {
       if (!c.consent_declined_at) {
         c.consent_declined_at = this.now().toISOString();
@@ -194,13 +195,14 @@ export class FakeVoiceSpecialStore implements VoiceSpecialStore {
       return Promise.resolve({
         status: 'declined',
         smsBefore,
+        messagesBefore,
         recordingPath: c.recording_path,
         given: [],
       });
     }
     if (c.consent_declined_at) return Promise.reject(new FieldDbError('wrong_state'));
     const given: string[] = [];
-    for (const type of ['recording', 'data_processing', 'sms'] as const) {
+    for (const type of ['recording', 'data_processing', 'whatsapp'] as const) {
       if (held(type)) continue;
       this.store.consents.push({
         id: crypto.randomUUID(),
@@ -228,7 +230,13 @@ export class FakeVoiceSpecialStore implements VoiceSpecialStore {
       rep.status = 'active';
       rep.activated_at ??= this.now().toISOString();
     }
-    return Promise.resolve({ status: 'given', smsBefore, recordingPath: null, given });
+    return Promise.resolve({
+      status: 'given',
+      smsBefore,
+      messagesBefore,
+      recordingPath: null,
+      given,
+    });
   }
 
   noCallsToday(callId: string) {

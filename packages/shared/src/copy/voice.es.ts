@@ -37,7 +37,7 @@ export const voiceEs: VoiceCatalog = {
     'Día de lluvia desde las {time}, el equipo se fue a casa. ¿Cuántos había en la obra esta mañana?',
   weather_photo_link: 'Una foto de las condiciones refuerza el registro. Le envié un enlace.',
   consent_ask:
-    '¿Está bien si grabo estas llamadas y le envío enlaces de reportes por mensaje? Diga sí o no.',
+    '¿Está bien si grabo estas llamadas y le envío enlaces de reportes por WhatsApp? Diga sí o no.',
   preference_ask: 'Cada día de trabajo, ¿prefiere una llamada o un mensaje con su enlace?',
   consent_declined: 'Entendido. No se guarda nada de esta llamada. Adiós.',
   consent_declined_link:
@@ -117,7 +117,7 @@ export const voiceEs: VoiceCatalog = {
   edit_pending: 'Todavía estoy con el último cambio, un momento.',
   consent_given: 'Gracias.',
   consent_repeat:
-    'Perdón, ¿está bien que grabe estas llamadas y le envíe los enlaces de sus reportes por mensaje? Diga sí o no.',
+    'Perdón, ¿está bien que grabe estas llamadas y le envíe los enlaces de sus reportes por WhatsApp? Diga sí o no.',
   tool_error: 'Perdón, eso no funcionó de mi lado. Intentémoslo de nuevo.',
   test_call_greeting: 'Hola, soy el asistente de TalkOlog. Esta llamada no se graba.',
   test_call_line:

@@ -60,14 +60,14 @@
           "autoCall": false
         },
         "recordingNoticeVersion": "voice.recording_notice.v1",
-        "consentTextVersion": "voice.consent.v1",
+        "consentTextVersion": "voice.consent.v2",
         "maxQuestions": 2
       }
     ],
     "record_consent": [
       {
         "status": "not_understood",
-        "confirmation": "Sorry, is it OK if I record these calls and text you report links? Say yes or no.",
+        "confirmation": "Sorry, is it OK if I record these calls and send you report links on WhatsApp? Say yes or no.",
         "linkSent": false
       },
       {

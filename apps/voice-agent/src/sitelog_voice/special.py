@@ -92,7 +92,8 @@ async def consent_turn(state: CallState, copy: VoiceCopy | None = None) -> str:
             state.context = state.context.model_copy(
                 update={
                     "consents": state.context.consents.model_copy(
-                        update={"recording": True, "data_processing": True, "sms": True}
+                        # §19 Q375: the yes gives WhatsApp (not in the contract's consents).
+                        update={"recording": True, "data_processing": True}
                     )
                 }
             )

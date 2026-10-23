@@ -59,7 +59,7 @@
           "autoCall": false
         },
         "recordingNoticeVersion": "voice.recording_notice.v1",
-        "consentTextVersion": "voice.consent.v1",
+        "consentTextVersion": "voice.consent.v2",
         "maxQuestions": 2
       }
     ],
