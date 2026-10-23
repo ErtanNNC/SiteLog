@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Dev scripts: webhook replay, demo seed generation, country pack endpoints, the cut-over pre-flight, the scripted call simulator, the voice latency report, listening-test samples and the local SMS stand-in.",
+  "description": "Dev scripts: webhook replay, demo seed generation, country pack endpoints, the WhatsApp templates in Twilio, the cut-over pre-flight, the scripted call simulator, the voice latency report, listening-test samples and the local SMS stand-in.",
   "scripts": {
     "replay-webhook": "tsx src/replay-webhook.ts",
     "seed-demo": "tsx src/seed-demo.ts",
     "countries-set": "tsx src/countries-set.ts",
+    "whatsapp-templates": "tsx src/whatsapp-templates.ts",
     "cutover-preflight": "tsx src/cutover-preflight.ts",
     "db-types-drift": "tsx src/db-types-drift.ts",
     "voice-contract": "tsx src/voice-contract.ts",

@@ -24,6 +24,16 @@ Aynı numara (+17752628262) iki pakete de hizmet ediyor; aynı `HX…` kimlikler
 
 **Öncelik:** önce `welcome` ve `verify_code` (üç dilde): ilk temas (karşılama ve cihaz kodu) artık WhatsApp'tan gidebiliyor (§19 Q372) ; şablonu onaylanmayan mesaj gitmez (§19 Q374). Sonra `daily_link`, `reminder_1`, `reminder_2`, `question_ready`, `draft_ready`, `filed`.
 
+## Otomatik yükleme
+
+Şablonları Console'da tek tek oluşturmak gerekmez: `pnpm whatsapp:templates` (`scripts/src/whatsapp-templates.ts`) Twilio Content API ile yapar. Preview'da Actions → **Deploy**, ortam `preview`, hedef `whatsapp-templates`, `pack_code` (örnek `TR,US`), `wa_mode` ve `wa_languages` (varsayılan `tr,en`). Sonuç tablosu çalışmanın özetine (run summary) yazılır.
+
+1. **Kuru çalışma** (`wa_mode` = `dry-run`): paketlerin hangi şablonlara ihtiyacı olduğunu adı, kategorisi, gövdesi ve örnek değerleriyle yazar; Twilio'ya hiçbir şey göndermez, Twilio anahtarı istemez.
+2. **Gönderim** (`wa_mode` = `submit`): Twilio'daki şablonları listeler; adı zaten olanı atlar ve onay durumunu yazar (oluşturulmuş ama onaya gönderilmemişi gönderir); eksikleri yukarıdaki adlar, gövdeler ve örnek değerlerle oluşturur ve her birini WhatsApp onayına gönderir (`verify_code` Authentication: güvenlik önerisi açık, 10 dakika, dile göre kopyala düğmesi; diğerleri Utility). Tekrar çalıştırmak güvenlidir: hiçbir şey iki kez oluşturulmaz.
+3. **Eşitleme** (`wa_mode` = `sync`, Meta onayladıktan sonra, genelde dakikalar ile bir gün arası): her paket, dil ve anahtar için güncel adlı şablon **onaylıysa**, kategorisi Utility (kod için Authentication) ise ve gövdesi paketin bugünkü gövdesiyse `HX…` kimliğini paketin `whatsapp_templates` alanına ekler; var olan kayıtlar kalır. Yazma `countries-set` ile aynı yoldan, `set_country_endpoints()` üzerinden ve denetim kaydıyla (`country.endpoints_set`) olur. Meta'nın Marketing'e çevirdiği bir şablon asla yazılmaz; tabloda ayrıca listelenir (yeni bir adla, örneğin `_v3`, yeniden gönderilmeli).
+
+Yerelde: `SUPABASE_DB_URL=… TWILIO_ACCOUNT_SID=… TWILIO_AUTH_TOKEN=… pnpm whatsapp:templates -- --submit --code TR,US --lang tr,en` (ya da `--dry-run`, ya da `--sync --code TR,US`); barındırılan veritabanı `--yes` ister. Aynı ad iki pakette farklı gövde isterse (biri sesli arama numaralı, öbürü değil) betik durur: bir ad tek gövde taşır.
+
 ## Değişkenler
 
 | Değişken         | Anlamı                                  | Örnek                                           |

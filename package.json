@@ -35,6 +35,7 @@
     "seed:demo": "pnpm --filter @sitelog/scripts seed-demo",
     "demo:call-audio": "pnpm --filter @sitelog/scripts demo-call-audio",
     "countries:set": "pnpm --filter @sitelog/scripts countries-set",
+    "whatsapp:templates": "pnpm --filter @sitelog/scripts whatsapp-templates",
     "cutover:preflight": "pnpm --filter @sitelog/scripts cutover-preflight",
     "voice:contract": "pnpm --filter @sitelog/scripts voice-contract",
     "voice:test": "cd apps/voice-agent && uv run --locked ruff check && uv run --locked ruff format --check && uv run --locked pyright && uv run --locked pytest -m 'not live'",

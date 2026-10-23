@@ -88,6 +88,7 @@ describe('deploy.yml', () => {
       'supabase',
       'seed',
       'countries-set',
+      'whatsapp-templates',
       'phone-setup',
       'preview-worker',
       'preview-worker-fly',
@@ -183,13 +184,14 @@ describe('deploy.yml', () => {
 
   it('guards every job that changes staging or production with the live branch (D40)', () => {
     // phone-setup, voice-setup and billing-setup set function secrets on the preview project only,
-    // countries-set its country packs, preview-worker-fly the preview worker's own Fly app (their
+    // countries-set and whatsapp-templates its country packs, preview-worker-fly the preview worker's own Fly app (their
     // own guard, below and in their own tests).
     const PREVIEW_ONLY = [
       'phone-setup',
       'voice-setup',
       'billing-setup',
       'countries-set',
+      'whatsapp-templates',
       'preview-worker-fly',
     ];
     for (const id of PREVIEW_ONLY) {
@@ -620,7 +622,7 @@ describe('deploy.yml plan step, run under bash', () => {
         ENVIRONMENT: environment,
         PR_NUMBER: '',
       });
-    for (const target of ['voice-setup', 'billing-setup', 'countries-set']) {
+    for (const target of ['voice-setup', 'billing-setup', 'countries-set', 'whatsapp-templates']) {
       const output = target.replace('-', '_');
       const ok = run(PREVIEW, 'preview', target);
       expect(ok.status, ok.log).toBe(0);
@@ -630,6 +632,7 @@ describe('deploy.yml plan step, run under bash', () => {
         'voice_setup',
         'billing_setup',
         'countries_set',
+        'whatsapp_templates',
         'preview_worker',
         'seed',
         'eval',
@@ -652,6 +655,71 @@ describe('deploy.yml plan step, run under bash', () => {
       expect(run(LIVE, 'staging', 'all').outputs[output]).toBe('false');
       expect(JOBS.get('plan')!.text).toContain(`[ "$1" != ${target} ]`);
     }
+  });
+
+  it('whatsapp-templates: Twilio secrets reach the script step only; the modes map to the script', () => {
+    const job = JOBS.get('whatsapp-templates')!;
+    expect(job.text).toMatch(/^ {4}timeout-minutes: 15$/m);
+    expect(job.text).toContain("WA_MODE: ${{ inputs.wa_mode || 'dry-run' }}");
+    expect(job.text).toContain("WA_LANGUAGES: ${{ inputs.wa_languages || 'tr,en' }}");
+    expect(job.text).not.toMatch(/TWILIO_[A-Z_]*.*GITHUB_ENV/);
+    const steps = jobSteps(job.text);
+    const withSecret = steps.filter((st) => st.text.includes('secrets.TWILIO_AUTH_TOKEN }}'));
+    expect(withSecret.map((st) => st.name)).toEqual(['pnpm whatsapp:templates']);
+    expect(WORKFLOW).toMatch(
+      /wa_mode:\n {8}description: [^\n]+\n {8}type: choice\n {8}options: \[dry-run, submit, sync\]\n {8}default: dry-run/,
+    );
+
+    const check = stepScript('whatsapp-templates', 'Check configuration');
+    const base = {
+      SUPABASE_ACCESS_TOKEN: 'sbp_x',
+      SUPABASE_DB_PASSWORD_SECRET: ' pw \n',
+      SUPABASE_PROJECT_REF: 'previewref0000000000',
+      PACK_CODE: 'TR,US',
+      WA_MODE: 'submit',
+      WA_LANGUAGES: 'tr,en',
+      HAS_TWILIO: 'true',
+    };
+    const ok = runStep(check, base);
+    expect(ok.status, ok.log).toBe(0);
+    expect(readFileSync(join(ok.dir, '.github-env'), 'utf8')).toContain(
+      'SUPABASE_DB_PASSWORD<<__PW__\npw\n__PW__',
+    );
+    const noTwilio = runStep(check, { ...base, HAS_TWILIO: 'false' });
+    expect(noTwilio.status).toBe(1);
+    expect(noTwilio.log).toContain('needs TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN');
+    // A dry run calls Twilio never, so it needs no Twilio secret.
+    expect(runStep(check, { ...base, HAS_TWILIO: 'false', WA_MODE: 'dry-run' }).status).toBe(0);
+    expect(runStep(check, { ...base, PACK_CODE: 'TR;US' }).log).toContain('pack_code must be');
+    expect(runStep(check, { ...base, WA_LANGUAGES: 'tr,de' }).log).toContain('wa_languages must');
+    expect(runStep(check, { ...base, SUPABASE_PROJECT_REF: STAGING_PROJECT_REF }).status).toBe(1);
+
+    const run = stepScript('whatsapp-templates', 'pnpm whatsapp:templates');
+    const pnpm =
+      'printf "%s\\n" "$@" > "$GITHUB_WORKSPACE/argv"; echo "| t | x |"; exit "${FAKE_EXIT:-0}"';
+    for (const [mode, argv] of [
+      ['dry-run', ['--submit', '--dry-run', '--lang', 'tr,en']],
+      ['submit', ['--submit', '--lang', 'tr,en']],
+      ['sync', ['--sync']],
+    ] as const) {
+      const r = runStep(run, { ...base, WA_MODE: mode }, undefined, { pnpm });
+      expect(r.status, r.log).toBe(0);
+      expect(readFileSync(join(r.dir, 'argv'), 'utf8').trim().split('\n')).toEqual([
+        '-s',
+        'whatsapp:templates',
+        '--',
+        ...argv,
+        '--code',
+        'TR,US',
+        '--yes',
+      ]);
+      expect(r.summary).toContain(`### WhatsApp templates · ${mode} · TR,US (preview)`);
+      expect(r.summary).toContain('| t | x |');
+    }
+    // A failed run still writes its table to the summary, and fails the job.
+    const failed = runStep(run, { ...base, FAKE_EXIT: '1' }, undefined, { pnpm });
+    expect(failed.status).toBe(1);
+    expect(failed.summary).toContain('| t | x |');
   });
 
   it('the inventory runs alone, from staging only', () => {
@@ -787,6 +855,7 @@ describe('deploy.yml field job (W1-04, D42/D43)', () => {
       'voice-setup',
       'billing-setup',
       'countries-set',
+      'whatsapp-templates',
       'eval',
     ]);
   });

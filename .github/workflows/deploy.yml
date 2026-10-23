@@ -35,6 +35,9 @@ name: Deploy
 #   workflow_dispatch preview, target     → Stripe test mode for the preview project: product, price,
 #     billing-setup                         webhook endpoint and the Stripe secrets on its functions,
 #                                           from spec-v1.2 only
+#   workflow_dispatch preview, target     → the WhatsApp templates in Twilio's Content API: create and
+#     whatsapp-templates                    submit the missing ones, or write the approved ids into the
+#                                           preview project's country packs, from spec-v1.2 only
 #   push to main                          → skipped by the guard (there is no main yet, D40)
 #
 # Until the cut-over (W1-19) the live branch runs its own pre-W1-01 deploy.yml (no guard, no
@@ -53,7 +56,7 @@ on:
         options: [staging, production, preview]
         default: staging
       target:
-        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project; phone-setup = field-api secrets and a panel sign-in link on the preview project; preview-worker = the worker in the runner against the preview project for 60 minutes, fake transcription and extraction, console texts; preview-worker-fly = the always-on worker for the preview project on its own Fly.io app; voice-setup = the voice secrets on the preview project and the agent deployed to LiveKit Cloud; billing-setup = Stripe test mode for the preview project (product, price, webhook and secrets); countries-set = a country pack's SMS and WhatsApp sender and WhatsApp templates on the preview project (or, with pack_print, the template bodies to submit); all seven owner-approved; eval = Claude models on the golden sets with the preview key, environment preview)
+        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project; phone-setup = field-api secrets and a panel sign-in link on the preview project; preview-worker = the worker in the runner against the preview project for 60 minutes, fake transcription and extraction, console texts; preview-worker-fly = the always-on worker for the preview project on its own Fly.io app; voice-setup = the voice secrets on the preview project and the agent deployed to LiveKit Cloud; billing-setup = Stripe test mode for the preview project (product, price, webhook and secrets); countries-set = a country pack's SMS and WhatsApp sender and WhatsApp templates on the preview project (or, with pack_print, the template bodies to submit); whatsapp-templates = the WhatsApp templates created and submitted in Twilio (wa_mode submit), or the approved ids written into the preview project's packs (wa_mode sync); all eight owner-approved; eval = Claude models on the golden sets with the preview key, environment preview)
         type: choice
         options:
           [
@@ -70,6 +73,7 @@ on:
             voice-setup,
             billing-setup,
             countries-set,
+            whatsapp-templates,
             eval,
           ]
         default: all
@@ -86,7 +90,7 @@ on:
         type: boolean
         default: false
       pack_code:
-        description: 'Target countries-set only: the country pack (US, TR)'
+        description: 'Targets countries-set (one pack: US or TR) and whatsapp-templates (one or more: TR,US): the country pack'
         type: string
         default: ''
       pack_sms_sender:
@@ -105,6 +109,15 @@ on:
         description: 'Target countries-set only: print the WhatsApp template bodies to submit and write nothing'
         type: boolean
         default: false
+      wa_mode:
+        description: 'Target whatsapp-templates only: dry-run (print the templates, call nothing), submit (create and submit the missing ones in Twilio) or sync (approved ids into the packs)'
+        type: choice
+        options: [dry-run, submit, sync]
+        default: dry-run
+      wa_languages:
+        description: 'Target whatsapp-templates only: the template languages (en, es, tr), comma-separated'
+        type: string
+        default: tr,en
 
 concurrency:
   # preview-worker runs for an hour: its own group, so seed, phone-setup and supabase dispatches to the
@@ -140,6 +153,7 @@ jobs:
       voice_setup: ${{ steps.plan.outputs.voice_setup }}
       billing_setup: ${{ steps.plan.outputs.billing_setup }}
       countries_set: ${{ steps.plan.outputs.countries_set }}
+      whatsapp_templates: ${{ steps.plan.outputs.whatsapp_templates }}
       eval: ${{ steps.plan.outputs.eval }}
     steps:
       - name: Decide what this run may touch
@@ -152,9 +166,9 @@ jobs:
           TARGET: ${{ inputs.target || 'all' }}
           PR_NUMBER: ${{ github.event.number }}
         run: |
-          supabase=false worker=false web=false field=false preview=false inventory=false seed=false phone_setup=false preview_worker=false preview_worker_fly=false voice_setup=false billing_setup=false countries_set=false eval=false
+          supabase=false worker=false web=false field=false preview=false inventory=false seed=false phone_setup=false preview_worker=false preview_worker_fly=false voice_setup=false billing_setup=false countries_set=false whatsapp_templates=false eval=false
           # `all` covers the four deploy targets; the inventory runs only when asked for.
-          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ] && [ "$1" != phone-setup ] && [ "$1" != preview-worker ] && [ "$1" != preview-worker-fly ] && [ "$1" != voice-setup ] && [ "$1" != billing-setup ] && [ "$1" != countries-set ] && [ "$1" != eval ]; }; }
+          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ] && [ "$1" != phone-setup ] && [ "$1" != preview-worker ] && [ "$1" != preview-worker-fly ] && [ "$1" != voice-setup ] && [ "$1" != billing-setup ] && [ "$1" != countries-set ] && [ "$1" != whatsapp-templates ] && [ "$1" != eval ]; }; }
 
           if [ "$EVENT" = pull_request ]; then
             web=true field=true preview=true
@@ -207,6 +221,13 @@ jobs:
             else
               echo "::notice::countries-set skipped: it writes the preview project's country packs only, dispatched with environment preview from $PREVIEW_BRANCH."
             fi
+          elif [ "$TARGET" = whatsapp-templates ]; then
+            # The WhatsApp templates (pnpm whatsapp:templates) in Twilio and the preview project's packs only.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              whatsapp_templates=true
+            else
+              echo "::notice::whatsapp-templates skipped: it writes the preview project's country packs only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
           elif [ "$TARGET" = eval ]; then
             # The model comparison (.github/workflows/eval.yml) with the preview Environment's key only.
             if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
@@ -255,6 +276,7 @@ jobs:
             echo "voice_setup=$voice_setup"
             echo "billing_setup=$billing_setup"
             echo "countries_set=$countries_set"
+            echo "whatsapp_templates=$whatsapp_templates"
             echo "eval=$eval"
           } >> "$GITHUB_OUTPUT"
           {
@@ -268,7 +290,7 @@ jobs:
             echo
             echo "| Job | Runs |"
             echo "| --- | --- |"
-            for k in supabase worker web field preview inventory seed phone_setup preview_worker preview_worker_fly voice_setup billing_setup countries_set eval; do echo "| $k | ${!k} |"; done
+            for k in supabase worker web field preview inventory seed phone_setup preview_worker preview_worker_fly voice_setup billing_setup countries_set whatsapp_templates eval; do echo "| $k | ${!k} |"; done
           } >> "$GITHUB_STEP_SUMMARY"
 
   supabase:
@@ -512,6 +534,112 @@ jobs:
             cat "$RUNNER_TEMP/countries-set.txt"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  whatsapp-templates:
+    name: WhatsApp templates · Twilio Content API and the country packs (preview)
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # `pnpm whatsapp:templates` with the preview project's packs: wa_mode dry-run prints the templates
+    # the packs need and calls nothing; submit creates the missing ones in Twilio's Content API and
+    # submits each for WhatsApp approval (re-runs skip what exists); sync writes the approved ids into
+    # the packs through set_country_endpoints() (audited as country.endpoints_set), never one Meta
+    # recategorised. From the moment a pack holds a key's id, real orgs' WhatsApp messages of that key
+    # go out on it (RUNBOOK "Country packs per environment").
+    if: >-
+      needs.plan.outputs.whatsapp_templates == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: preview
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD_SECRET: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      PACK_CODE: ${{ inputs.pack_code }}
+      WA_MODE: ${{ inputs.wa_mode || 'dry-run' }}
+      WA_LANGUAGES: ${{ inputs.wa_languages || 'tr,en' }}
+      # Presence only: the values reach the script's step alone.
+      HAS_TWILIO: ${{ secrets.TWILIO_ACCOUNT_SID != '' && secrets.TWILIO_AUTH_TOKEN != '' }}
+    steps:
+      - name: Check configuration
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD_SECRET" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::whatsapp-templates needs SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD (secrets) and SUPABASE_PROJECT_REF (variable) in the preview Environment."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing."
+            exit 1
+          fi
+          if [ "$WA_MODE" != dry-run ] && [ "$HAS_TWILIO" != true ]; then
+            echo "::error::wa_mode $WA_MODE needs TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN (secrets) in the preview Environment."
+            exit 1
+          fi
+          if ! [[ "$PACK_CODE" =~ ^[A-Za-z]{2}(,[A-Za-z]{2})*$ ]]; then
+            echo "::error::pack_code must be one or more country codes such as TR or TR,US."
+            exit 1
+          fi
+          if ! [[ "$WA_LANGUAGES" =~ ^(en|es|tr)(,(en|es|tr))*$ ]]; then
+            echo "::error::wa_languages must be en, es and tr, comma-separated (e.g. tr,en)."
+            exit 1
+          fi
+          pw="$(printf '%s' "$SUPABASE_DB_PASSWORD_SECRET" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          echo "::add-mask::$pw"
+          { echo "SUPABASE_DB_PASSWORD<<__PW__"; printf '%s\n' "$pw"; echo "__PW__"; } >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+      - name: Connection string
+        # As the seed job: the pooler address `supabase link` saved, session mode, never printed.
+        run: |
+          f=supabase/.temp/pooler-url
+          if [ ! -s "$f" ]; then
+            echo "::error::supabase link saved no pooler address ($f)."
+            exit 1
+          fi
+          url="$(node -e '
+            const u = new URL(require("fs").readFileSync(process.argv[1], "utf8").trim());
+            u.password = encodeURIComponent(process.env.SUPABASE_DB_PASSWORD);
+            u.port = "5432";
+            if (!u.username.includes(process.env.SUPABASE_PROJECT_REF)) { console.error("pooler user is not the preview project"); process.exit(1); }
+            console.log(u.toString());
+          ' "$f")"
+          echo "::add-mask::$url"
+          { echo "SUPABASE_DB_URL<<__URL__"; printf '%s\n' "$url"; echo "__URL__"; } >> "$GITHUB_ENV"
+      - name: pnpm whatsapp:templates
+        # The inputs reach the script as separate arguments from the environment, never through the
+        # shell's parsing of the command line. The Twilio credentials go to this step only.
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+        run: |
+          set -o pipefail
+          # A hosted database needs --yes even to read; the dispatch is the owner's approval.
+          case "$WA_MODE" in
+            dry-run) args=(--submit --dry-run --lang "$WA_LANGUAGES") ;;
+            submit) args=(--submit --lang "$WA_LANGUAGES") ;;
+            sync) args=(--sync) ;;
+            *) echo "::error::wa_mode must be dry-run, submit or sync."; exit 1 ;;
+          esac
+          args+=(--code "$PACK_CODE" --yes)
+          status=0
+          pnpm -s whatsapp:templates -- "${args[@]}" > "$RUNNER_TEMP/whatsapp-templates.md" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/whatsapp-templates.md"
+          {
+            echo "### WhatsApp templates · $WA_MODE · $PACK_CODE (preview)"
+            echo
+            cat "$RUNNER_TEMP/whatsapp-templates.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
   phone-setup:
     name: Phone check · field-api secrets and a panel sign-in link (preview)
