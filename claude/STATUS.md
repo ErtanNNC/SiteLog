@@ -1,5 +1,12 @@
 # TalkOlog · Durum
 
+**2026-10-24 — WhatsApp canlı (preview).**
+
+- **Şablonlar:** Meta 28 şablonun hepsini onayladı (15:19 TR). TR paketinde 15 anahtar × TR/EN, US paketinde 15 × EN kayıtlı (`whatsapp-templates sync`, audit `country.endpoints_set`). ES şablonu yok.
+- **Uygulandı (onayınızla):** Q374 (SMS pasif), Q375 (aramada "evet" = WhatsApp) migration'ları ve edge function'lar preview'de; Fly worker yeni kodla kuruldu.
+- **Sizin adımınız:** Netlify'da PR #1'in son saha uygulaması ve panel deploy'larını yayınlayın (Welcome'daki yeni cümle, Q376). Ardından TR şirketinde "karşılama mesajını tekrar gönder" ile WhatsApp'ı uçtan uca deneyin.
+- **Twilio toll-free (+18555135335) reddedildi** (30497, 30499, 30511). Düzeltilmiş metinler sohbette; 7 gün içinde yeniden gönderin. SMS pasif olduğundan acil değil.
+
 **2026-10-23 (akşam) — Özet ve bekleyenler.**
 
 - **WhatsApp şablonları otomatik (Deploy → preview → `whatsapp-templates`):** `submit` eksik şablonları Twilio'da oluşturup Meta onayına gönderiyor; `sync` onaylananları (yalnız Utility / Authentication) TR ve US paketlerine yazıyor; `dry-run` hiçbir şey göndermiyor. Elle şablon girmeye gerek yok.
