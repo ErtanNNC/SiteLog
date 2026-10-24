@@ -2,6 +2,7 @@ import {
   ButtonIds,
   ButtonSets,
   deadlineInstant,
+  isVoiceSourceKind,
   isWithinEditWindow,
   localDate,
   reportDateForInbound,
@@ -304,7 +305,7 @@ export async function startIntake(
     if (kind === 'photo') newPhotos++;
   }
   const sources = await ctx.db.listReportSources(report.id);
-  const hasContent = sources.some((x) => x.kind === 'audio' || x.kind === 'text');
+  const hasContent = sources.some((x) => isVoiceSourceKind(x.kind) || x.kind === 'text');
   await s.setState(null, { last_site_id: site.id, pending: null });
   if (!hasContent) {
     await s.reply(waCopy.photosOnly(), undefined, { kind: 'photos_only', reportId: report.id });

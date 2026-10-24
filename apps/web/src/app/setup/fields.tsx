@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
-import { copy } from '@/copy/en';
+import { useCopy } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
 import { SETUP_STEPS, type SetupStep } from './state';
 import { timezoneLabel, timezoneOptions } from './timezones';
@@ -25,8 +25,9 @@ export function Stepper({
   current: SetupStep;
   done: Partial<Record<SetupStep, boolean>>;
 }) {
+  const { t } = useCopy();
   return (
-    <ol className="grid gap-3 md:grid-cols-3" aria-label={copy.setup.title}>
+    <ol className="grid gap-3 md:grid-cols-3" aria-label={t('setup.title')}>
       {SETUP_STEPS.map((step, i) => {
         const isDone = !!done[step] && step !== current;
         const isCurrent = step === current;
@@ -56,12 +57,12 @@ export function Stepper({
             </span>
             <span className="min-w-0">
               <span className={cn('eyebrow block', isCurrent ? 'text-dust-light' : 'text-dust')}>
-                {copy.setup.stepOf(i + 1, SETUP_STEPS.length)}
+                {t('setup.stepOf', { n: i + 1, total: SETUP_STEPS.length })}
               </span>
               <span className="block truncate text-[15px] font-semibold">
-                {copy.setup.steps[step]}
+                {t(`setup.steps.${step}`)}
               </span>
-              <span className="sr-only">{copy.setup.stepState[state]}</span>
+              <span className="sr-only">{t(`setup.stepState.${state}`)}</span>
             </span>
           </li>
         );
@@ -87,16 +88,22 @@ export function Field({
   children: ReactNode;
   className?: string;
 }) {
+  const { t } = useCopy();
   return (
-    <div className={cn('grid gap-1.5', className)}>
+    // content-start: side by side with a taller field (one with a hint), the control stays level.
+    <div className={cn('grid content-start gap-1.5', className)}>
       <Label htmlFor={id}>
         {label}
         {optional ? (
-          <span className="ml-1 font-normal text-dust">· {copy.common.optional}</span>
+          <span className="ml-1 font-normal text-dust">· {t('common.optional')}</span>
         ) : null}
       </Label>
       {children}
-      {hint ? <p className="text-caption text-dust">{hint}</p> : null}
+      {hint ? (
+        <p id={`${id}-hint`} className="text-caption text-dust">
+          {hint}
+        </p>
+      ) : null}
       {error ? (
         <p role="alert" className="text-caption font-medium text-missing">
           {error}
@@ -116,7 +123,9 @@ export function TimezoneSelect({
   onChange: (tz: string) => void;
 }) {
   return (
-    <Select value={value} onValueChange={onChange}>
+    // Radix's hidden native select reports "" when the value's option is not mounted yet (a zone
+    // outside TIMEZONES, set by choosing a country): that is no choice, so it is ignored.
+    <Select value={value} onValueChange={(tz) => tz && onChange(tz)}>
       <SelectTrigger id={id} className="font-mono text-[13px]">
         <SelectValue />
       </SelectTrigger>
@@ -143,14 +152,14 @@ export function EmailChips({
   onChange: (next: string[]) => void;
   label: string;
 }) {
-  const c = copy.settings.recipients;
+  const { t } = useCopy();
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const add = () => {
     const e = value.trim().toLowerCase();
     if (!e) return;
     if (!EMAIL.test(e)) {
-      setError(c.invalid);
+      setError(t('setup.reports.emailInvalid'));
       return;
     }
     setError(null);
@@ -161,7 +170,7 @@ export function EmailChips({
     <div className="grid gap-2">
       <ul className="flex flex-wrap gap-2" aria-label={label}>
         {emails.length === 0 ? (
-          <li className="text-caption text-dust">{c.none}</li>
+          <li className="text-caption text-dust">{t('setup.reports.noRecipients')}</li>
         ) : (
           emails.map((e) => (
             <li
@@ -173,7 +182,7 @@ export function EmailChips({
               <button
                 type="button"
                 className="ml-1 flex size-7 items-center justify-center rounded-chip text-dust hover:bg-rebar hover:text-asphalt"
-                aria-label={c.remove(e)}
+                aria-label={t('setup.reports.removeEmail', { email: e })}
                 onClick={() => onChange(emails.filter((x) => x !== e))}
               >
                 <X className="size-4" aria-hidden="true" />
@@ -184,7 +193,7 @@ export function EmailChips({
       </ul>
       <div className="flex gap-2">
         <Label htmlFor={id} className="sr-only">
-          {c.add}
+          {t('setup.reports.addEmail')}
         </Label>
         <Input
           id={id}
@@ -197,12 +206,12 @@ export function EmailChips({
               add();
             }
           }}
-          placeholder={c.placeholder}
+          placeholder={t('setup.reports.emailPlaceholder')}
           aria-invalid={!!error}
         />
-        <Button variant="ghost" onClick={add} aria-label={c.add}>
+        <Button variant="ghost" onClick={add} aria-label={t('setup.reports.addEmail')}>
           <Plus aria-hidden="true" />
-          {c.add}
+          {t('setup.reports.addEmail')}
         </Button>
       </div>
       {error ? (

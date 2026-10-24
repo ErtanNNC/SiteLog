@@ -1,7 +1,10 @@
 {
   "id": "riverside-2026-10-06-unknown-sub-es",
   "description": "Spanish. Unknown crew \"los de Ramírez\" (4 until 12:00 → 5 h each) must stay unmapped and be flagged; \"cimbra\" proposed as a new term. Next question: unknown company.",
-  "expectedQuestion": { "field": "company.unknown", "path": "company.unknown:Ramírez" },
+  "expectedQuestion": {
+    "field": "company.unknown",
+    "path": "company.unknown:Ramírez"
+  },
   "site": {
     "name": "Riverside Lofts — Block B",
     "projectCode": "RL-2041",
@@ -9,6 +12,10 @@
     "workingHours": "07:00–15:30"
   },
   "reportDate": "2026-10-06",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "es-US",
+  "channel": "web",
   "defaultShiftHours": 8,
   "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
   "reporterFirstName": "Marco",
@@ -46,32 +53,132 @@
     }
   ],
   "glossary": [
-    { "heard": "the deck", "official": "Elevated concrete slab", "kind": "term" },
-    { "heard": "pour on four", "official": "Level 4 concrete pour", "kind": "area" },
-    { "heard": "block", "official": "Concrete masonry units (CMU)", "kind": "term" },
-    { "heard": "llovió", "official": "Rain", "kind": "term" },
-    { "heard": "andamio", "official": "Scaffold", "kind": "term" },
-    { "heard": "stood down", "official": "Work stoppage", "kind": "term" }
+    {
+      "heard": "the deck",
+      "official": "Elevated concrete slab",
+      "kind": "term"
+    },
+    {
+      "heard": "pour on four",
+      "official": "Level 4 concrete pour",
+      "kind": "area"
+    },
+    {
+      "heard": "block",
+      "official": "Concrete masonry units (CMU)",
+      "kind": "term"
+    },
+    {
+      "heard": "llovió",
+      "official": "Rain",
+      "kind": "term"
+    },
+    {
+      "heard": "andamio",
+      "official": "Scaffold",
+      "kind": "term"
+    },
+    {
+      "heard": "stood down",
+      "official": "Work stoppage",
+      "kind": "term"
+    }
   ],
   "rejectedMappings": [],
   "observedWeather": {
     "date": "2026-10-06",
     "provider": "Open-Meteo",
     "fetchedAt": "2026-10-06T21:30:00Z",
-    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
     "hours": [
-      { "time": "06:00", "precipIn": 0, "tempF": 55, "windMph": 7, "gustMph": 15 },
-      { "time": "07:00", "precipIn": 0, "tempF": 59, "windMph": 8, "gustMph": 13 },
-      { "time": "08:00", "precipIn": 0, "tempF": 62, "windMph": 9, "gustMph": 11 },
-      { "time": "09:00", "precipIn": 0, "tempF": 65, "windMph": 7, "gustMph": 14 },
-      { "time": "10:00", "precipIn": 0, "tempF": 67, "windMph": 8, "gustMph": 12 },
-      { "time": "11:00", "precipIn": 0, "tempF": 68, "windMph": 9, "gustMph": 15 },
-      { "time": "12:00", "precipIn": 0, "tempF": 68, "windMph": 7, "gustMph": 13 },
-      { "time": "13:00", "precipIn": 0, "tempF": 67, "windMph": 8, "gustMph": 11 },
-      { "time": "14:00", "precipIn": 0, "tempF": 65, "windMph": 9, "gustMph": 14 },
-      { "time": "15:00", "precipIn": 0, "tempF": 62, "windMph": 7, "gustMph": 12 },
-      { "time": "16:00", "precipIn": 0, "tempF": 59, "windMph": 8, "gustMph": 15 },
-      { "time": "17:00", "precipIn": 0, "tempF": 55, "windMph": 9, "gustMph": 13 }
+      {
+        "time": "06:00",
+        "precipIn": 0,
+        "tempF": 55,
+        "windMph": 7,
+        "gustMph": 15
+      },
+      {
+        "time": "07:00",
+        "precipIn": 0,
+        "tempF": 59,
+        "windMph": 8,
+        "gustMph": 13
+      },
+      {
+        "time": "08:00",
+        "precipIn": 0,
+        "tempF": 62,
+        "windMph": 9,
+        "gustMph": 11
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0,
+        "tempF": 65,
+        "windMph": 7,
+        "gustMph": 14
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0,
+        "tempF": 67,
+        "windMph": 8,
+        "gustMph": 12
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0,
+        "tempF": 68,
+        "windMph": 9,
+        "gustMph": 15
+      },
+      {
+        "time": "12:00",
+        "precipIn": 0,
+        "tempF": 68,
+        "windMph": 7,
+        "gustMph": 13
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 67,
+        "windMph": 8,
+        "gustMph": 11
+      },
+      {
+        "time": "14:00",
+        "precipIn": 0,
+        "tempF": 65,
+        "windMph": 9,
+        "gustMph": 14
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 62,
+        "windMph": 7,
+        "gustMph": 12
+      },
+      {
+        "time": "16:00",
+        "precipIn": 0,
+        "tempF": 59,
+        "windMph": 8,
+        "gustMph": 15
+      },
+      {
+        "time": "17:00",
+        "precipIn": 0,
+        "tempF": 55,
+        "windMph": 9,
+        "gustMph": 13
+      }
     ],
     "summary": {
       "precipIn": 0,
@@ -87,50 +194,52 @@
   "previousAnswers": [],
   "previousDraft": null,
   "photos": [
-    { "messageId": "e0000022-0000-4000-8000-000000002205", "takenAt": "2026-10-06T22:27:00Z" },
     {
-      "messageId": "e0000022-0000-4000-8000-000000002206",
+      "uploadId": "e0000022-0000-4000-8000-000000002205",
+      "takenAt": "2026-10-06T22:27:00Z"
+    },
+    {
+      "uploadId": "e0000022-0000-4000-8000-000000002206",
       "caption": "Columnas nivel 3",
       "takenAt": "2026-10-06T22:27:15Z"
     }
   ],
   "segments": [
     {
-      "messageId": "e0000022-0000-4000-8000-000000002201",
+      "uploadId": "e0000022-0000-4000-8000-000000002201",
       "start": 0,
       "end": 6,
       "text": "Riverside, martes. Día seco, sin problemas de clima."
     },
     {
-      "messageId": "e0000022-0000-4000-8000-000000002201",
+      "uploadId": "e0000022-0000-4000-8000-000000002201",
       "start": 6,
       "end": 14.5,
       "text": "Apex seis, todo el día, cimbra del deck del cuatro."
     },
     {
-      "messageId": "e0000022-0000-4000-8000-000000002201",
+      "uploadId": "e0000022-0000-4000-8000-000000002201",
       "start": 14.5,
       "end": 22,
       "text": "Vinieron los de Ramírez, cuatro, a resanar las columnas del tres, hasta las doce."
     },
     {
-      "messageId": "e0000022-0000-4000-8000-000000002201",
+      "uploadId": "e0000022-0000-4000-8000-000000002201",
       "start": 22,
       "end": 29,
       "text": "BrightLine cinco, todo el día, en el tres. Delta cinco, todo el día, en el dos."
     },
     {
-      "messageId": "e0000022-0000-4000-8000-000000002201",
+      "uploadId": "e0000022-0000-4000-8000-000000002201",
       "start": 29,
       "end": 35,
       "text": "Nuestros cuatro, todo el día, limpieza en el cuatro."
     },
     {
-      "messageId": "e0000022-0000-4000-8000-000000002201",
+      "uploadId": "e0000022-0000-4000-8000-000000002201",
       "start": 35,
       "end": 41.5,
       "text": "Plática de seguridad: protección contra caídas en los bordes de losa. Sin incidentes. Dos fotos."
     }
-  ],
-  "texts": []
+  ]
 }

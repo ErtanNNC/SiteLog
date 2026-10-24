@@ -1,12 +1,16 @@
-import type { DailyReportData } from '@sitelog/shared';
+import { upgradeV1toV2, type DailyReportData, type DailyReportDataV1 } from '@sitelog/shared';
 import type { EvidencePackInput, PdfPhoto, ReportPdfInput } from './types';
 
-/** The §18 hero report (RL-2041-0187, Fri Oct 9, v2 after "Apex 6 → 7") as PDF input, for visual checks and the smoke test. */
+/**
+ * The §18 hero report (RL-2041-0187, Fri Oct 9, v2 after "Apex 6 → 7") as PDF input, for visual
+ * checks, the smoke test and the PDF text snapshot. The report data is stored as v1 (WhatsApp
+ * era); the documents read it the way every reader does, through upgradeV1toV2.
+ */
 
 const AUDIO = 'a1b2c3d4-0000-4000-8000-000000000001';
 const REPLY = 'a1b2c3d4-0000-4000-8000-000000000002';
 
-export const heroReportData: DailyReportData = {
+export const heroReportDataV1: DailyReportDataV1 = {
   schemaVersion: 1,
   reportDate: '2026-10-09',
   languageDetected: ['es', 'en'],
@@ -175,6 +179,9 @@ export const heroReportData: DailyReportData = {
   proposedQuestions: [],
 };
 
+/** The hero report as the PDF reads it (§10.3 v2). */
+export const heroReportData: DailyReportData = upgradeV1toV2(heroReportDataV1);
+
 /** A tiny valid 1×1 PNG, tinted grey, so sample photos render without binary fixtures. */
 export const samplePng: Uint8Array = Uint8Array.from(
   atob(
@@ -198,6 +205,7 @@ export const sampleReportInput: ReportPdfInput = {
     name: 'Kestrel Build Group',
     address: '1200 Industrial Pkwy, Austin, TX 78741',
     licenseNo: 'TX-GC-20481',
+    taxNo: null,
     letterheadLines: ['office@kestrelbuild.example · (555) 014-2200'],
     logo: null,
   },
@@ -219,6 +227,9 @@ export const sampleReportInput: ReportPdfInput = {
     signedOffByName: 'Sam Kowalski',
     isLate: false,
     reviewReasons: [],
+    // v1.2 (Report-P1/P2): recorded on the web recorder, confirmed there.
+    channel: 'web',
+    confirmedVia: 'web',
   },
   data: heroReportData,
   reporterName: 'Marco Ruiz',
@@ -241,13 +252,220 @@ export const sampleReportInput: ReportPdfInput = {
     { version: 1, author: 'agent', changeNote: null, createdAt: '2026-10-09T22:43:00Z' },
     {
       version: 2,
-      author: 'reporter_reply',
+      author: 'reporter',
       changeNote: 'Apex Concrete 6 → 7 workers',
       createdAt: '2026-10-10T01:10:00Z',
     },
   ],
+  // The reply that confirmed Delta's headcount (a v1 reply source carries its message id).
+  answers: { [REPLY]: { answeredAt: '2026-10-09T22:41:00Z', field: 'manpower.workers' } },
   settings: { paper: 'letter', footerEnabled: true, maxPhotos: 4 },
   generatedAt: '2026-10-10T01:12:00Z',
+};
+
+const CALL = 'b7c8d9e0-0000-4000-8000-000000000001';
+const call = (start: number, end: number) => ({ type: 'call' as const, callId: CALL, start, end });
+
+/**
+ * A Turkish sample (D34): a Demir Yapı A.Ş. report (§18.2 org, site, reporter and companies) in
+ * report data v2 as written, metric, filed from a call with the voice assistant and confirmed by
+ * voice, on A4. §18.2 gives no report, so the day's figures are sample values for checking the
+ * render only; they are not seed data. Its text carries ğ ş ı İ (the glyph test reads them back).
+ */
+export const demirReportData: DailyReportData = {
+  schemaVersion: 2,
+  reportDate: '2026-10-09',
+  reportLanguage: 'tr',
+  units: 'metric',
+  languageDetected: ['tr'],
+  summary:
+    '4. kat döşeme betonu Usta Beton tarafından tamamlandı (yaklaşık 52 m³). Sabah 07:30–10:00 arası yağmur nedeniyle dış cephe işleri 2,5 saat durdu; ekip iç mekân duvar işlerine kaydırıldı. 3. kat elektrik tesisatı yaklaşık %60 tamamlandı. İş güvenliği bilgilendirmesi yapıldı; olay bildirilmedi.',
+  workingHours: { start: '07:30', end: '17:30' },
+  weather: {
+    observed: {
+      precip: 11.2,
+      tempMin: 14,
+      tempMax: 19,
+      wind: 18,
+      gust: 34,
+      provider: 'Open-Meteo',
+    },
+    conditionsText: 'Sabah yağmurlu, öğleden sonra bulutlu',
+    periods: [
+      {
+        start: '07:30',
+        end: '10:00',
+        condition: 'Yağmur',
+        impact: 'Dış cephe işleri durdu; ekip iç mekâna kaydırıldı',
+        lostHours: 2.5,
+        source: [call(38, 46)],
+      },
+    ],
+  },
+  manpower: [
+    {
+      companyId: 'c-usta',
+      companyNameHeard: 'Usta',
+      companyName: 'Usta Beton',
+      trade: 'Beton',
+      area: '4. kat',
+      workers: 8,
+      hoursPerWorker: 8,
+      totalHours: 64,
+      hoursBasis: 'full_day_default',
+      confidence: 0.94,
+      source: [call(12, 19)],
+    },
+    {
+      companyId: 'c-volt',
+      companyNameHeard: 'Volt',
+      companyName: 'Volt Elektrik',
+      trade: 'Elektrik',
+      area: '3. kat',
+      workers: 4,
+      hoursPerWorker: 8,
+      totalHours: 32,
+      hoursBasis: 'full_day_default',
+      confidence: 0.92,
+      source: [call(21, 27)],
+    },
+    {
+      companyId: 'c-akis',
+      companyNameHeard: 'Akış',
+      companyName: 'Akış Mekanik',
+      trade: 'Mekanik',
+      area: '2. kat',
+      workers: 3,
+      hoursPerWorker: 8,
+      totalHours: 24,
+      hoursBasis: 'full_day_default',
+      confidence: 0.9,
+      source: [call(29, 33), { type: 'answer', questionId: 'q-akis' }],
+    },
+    {
+      companyId: 'c-oz',
+      companyNameHeard: 'bizim ekip',
+      companyName: 'Demir Yapı öz ekip',
+      trade: 'Genel işçilik',
+      area: 'Şantiye geneli',
+      workers: 5,
+      hoursPerWorker: 8,
+      totalHours: 40,
+      hoursBasis: 'full_day_default',
+      confidence: 0.88,
+      source: [call(50, 55)],
+    },
+  ],
+  workPerformed: [
+    {
+      area: '4. kat',
+      activity: 'Döşeme betonu dökümü',
+      status: 'complete',
+      quantity: { value: 52, unit: 'm³', heardAs: 'elli iki metreküp' },
+      source: [call(12, 19)],
+    },
+    {
+      area: '3. kat',
+      activity: 'Elektrik tesisatı',
+      status: 'in_progress',
+      percentComplete: 60,
+      source: [call(21, 27)],
+    },
+    {
+      area: 'Dış cephe',
+      activity: 'Sıva hazırlığı',
+      status: 'stopped',
+      source: [call(38, 46)],
+    },
+    {
+      area: 'Zemin kat',
+      activity: 'Kalıp sökümü yapıldı',
+      status: 'complete',
+      source: [call(57, 61)],
+    },
+  ],
+  deliveries: [
+    {
+      item: 'Hazır beton',
+      quantity: '7 mikser',
+      supplier: 'Usta Beton',
+      time: '08:15',
+      source: [call(63, 68)],
+    },
+  ],
+  equipment: [],
+  safety: {
+    toolboxTalk: 'Islak zeminde güvenli çalışma',
+    incidents: [],
+    noIncidentsStated: true,
+    visitors: [],
+    source: [call(70, 76)],
+  },
+  issues: [],
+  nextWorkday: [{ item: 'Pazartesi 07:30 5. kat kalıp montajı', source: [call(80, 86)] }],
+  photos: [
+    { uploadId: 'u-p1', caption: '4. kat döşeme betonu', takenAt: '2026-10-09T14:20:00Z' },
+    { uploadId: 'u-p2', caption: 'Yağmurda dış cephe', takenAt: '2026-10-09T05:10:00Z' },
+  ],
+  newTerms: [],
+  missingRequired: [],
+  lowConfidence: [],
+  proposedQuestions: [],
+};
+
+export const demirReportInput: ReportPdfInput = {
+  org: {
+    name: 'Demir Yapı A.Ş.',
+    address: null,
+    licenseNo: null,
+    taxNo: null,
+    letterheadLines: [],
+    logo: null,
+  },
+  site: {
+    name: 'Kartal Konutları — B Blok',
+    projectCode: 'KK-1203',
+    address: null,
+    workingHours: '07:30–17:30',
+    timezone: 'Europe/Istanbul',
+  },
+  report: {
+    reportNo: 'KK-1203-0005',
+    version: 1,
+    status: 'filed',
+    kind: 'daily',
+    filedAt: '2026-10-09T15:46:00Z',
+    confirmedAt: '2026-10-09T15:46:00Z',
+    signedOffAt: null,
+    signedOffByName: null,
+    isLate: false,
+    reviewReasons: [],
+    channel: 'voice',
+    confirmedVia: 'voice',
+  },
+  data: demirReportData,
+  reporterName: 'Emre Yıldız',
+  sources: {
+    audioCount: 1,
+    totalAudioSeconds: 252,
+    languages: ['tr'],
+    receivedAt: '2026-10-09T15:41:00Z',
+    textCount: 0,
+  },
+  photos: [
+    { ...samplePhotos[0]!, takenAt: '2026-10-09T14:20:00Z', caption: '4. kat döşeme betonu' },
+    { ...samplePhotos[1]!, takenAt: '2026-10-09T05:10:00Z', caption: 'Yağmurda dış cephe' },
+  ],
+  companies: [
+    { id: 'c-usta', name: 'Usta Beton', status: 'confirmed', isSelfPerform: false },
+    { id: 'c-volt', name: 'Volt Elektrik', status: 'confirmed', isSelfPerform: false },
+    { id: 'c-akis', name: 'Akış Mekanik', status: 'confirmed', isSelfPerform: false },
+    { id: 'c-oz', name: 'Demir Yapı öz ekip', status: 'confirmed', isSelfPerform: true },
+  ],
+  edits: [{ version: 1, author: 'agent', changeNote: null, createdAt: '2026-10-09T15:46:00Z' }],
+  answers: { 'q-akis': { answeredAt: '2026-10-09T15:44:00Z', field: 'manpower.workers' } },
+  settings: { paper: 'a4', footerEnabled: true, maxPhotos: 4 },
+  generatedAt: '2026-10-09T15:47:00Z',
 };
 
 export const sampleEvidencePackInput: EvidencePackInput = {
@@ -258,21 +476,30 @@ export const sampleEvidencePackInput: EvidencePackInput = {
     address: '400 Riverside Dr, Austin, TX',
     timezone: 'America/Chicago',
   },
+  language: 'en',
+  units: 'imperial',
   periodStart: '2026-10-01',
   periodEnd: '2026-10-09',
+  sections: ['summary', 'reports', 'transcripts', 'photos', 'weather'],
   days: [
     {
       date: '2026-10-02',
       reportNo: 'RL-2041-0182',
       version: 1,
       signedOff: true,
-      data: {
-        ...heroReportData,
+      signedOffByName: 'Sam Kowalski',
+      signedOffAt: '2026-10-05T13:30:00Z',
+      confirmation: 'whatsapp',
+      typed: false,
+      confirmedAt: '2026-10-02T22:41:00Z',
+      filedAt: '2026-10-02T22:41:00Z',
+      data: upgradeV1toV2({
+        ...heroReportDataV1,
         reportDate: '2026-10-02',
         summary:
           'Rain from 06:30 to 10:00 stopped exterior masonry for 3.5 h; crew reassigned to interior blockwork. Level 3 slab prep continued.',
         weather: {
-          ...heroReportData.weather,
+          ...heroReportDataV1.weather,
           periods: [
             {
               start: '06:30',
@@ -284,17 +511,21 @@ export const sampleEvidencePackInput: EvidencePackInput = {
             },
           ],
         },
-      },
+      }),
       lostHours: 3.5,
       fullDay: false,
       claimReady: true,
       transcriptExcerpts: [
         {
+          clip: 'voice_note',
+          clipNo: null,
           start: 18.2,
           end: 24.9,
           text: 'llovió desde las seis y media hasta las diez, no pudimos hacer block afuera',
         },
         {
+          clip: 'voice_note',
+          clipNo: null,
           start: 24.9,
           end: 31,
           text: 'so we moved everybody inside for the interior block on three',
@@ -332,17 +563,27 @@ export const sampleEvidencePackInput: EvidencePackInput = {
       reportNo: 'RL-2041-0187',
       version: 2,
       signedOff: true,
+      signedOffByName: 'Sam Kowalski',
+      signedOffAt: '2026-10-10T13:30:00Z',
+      confirmation: 'recorder',
+      typed: false,
+      confirmedAt: '2026-10-09T23:12:00Z',
+      filedAt: '2026-10-09T23:12:00Z',
       data: heroReportData,
       lostHours: 3.5,
       fullDay: false,
       claimReady: true,
       transcriptExcerpts: [
         {
+          clip: 'voice_note',
+          clipNo: null,
           start: 41,
           end: 47.2,
           text: 'llovió desde las siete hasta las diez y media, no pudimos hacer block afuera',
         },
         {
+          clip: 'voice_note',
+          clipNo: null,
           start: 47.2,
           end: 52,
           text: 'we lost about three and a half hours on the south elevation',
@@ -357,4 +598,111 @@ export const sampleEvidencePackInput: EvidencePackInput = {
   settings: { paper: 'letter' },
   generatedAt: '2026-10-10T09:00:00Z',
   requestedBy: 'Sam Kowalski',
+};
+
+/** Observed hours of a rainy Istanbul morning, as fetch_weather stores them (imperial). */
+const demirObserved = {
+  date: '2026-10-09',
+  provider: 'Open-Meteo' as const,
+  fetchedAt: '2026-10-09T20:30:00Z',
+  units: { precip: 'in' as const, temp: 'F' as const, wind: 'mph' as const },
+  hours: Array.from({ length: 24 }, (_, h) => ({
+    time: `${String(h).padStart(2, '0')}:00`,
+    precipIn: h >= 7 && h <= 9 ? 0.15 : 0,
+    tempF: 57 + (h > 12 ? 9 : 0),
+    windMph: 11,
+    gustMph: 21,
+  })),
+  summary: {
+    precipIn: 0.44,
+    tempMinF: 57,
+    tempMaxF: 66,
+    windMph: 11,
+    gustMph: 21,
+    provider: 'Open-Meteo' as const,
+    precipWorkingHoursIn: 0.44,
+    maxGustWorkingHoursMph: 21,
+  },
+};
+
+/**
+ * Demir Yapı's October pack (§18.2, Turkish, A4, metric): a day filed after the 2 h timeout that
+ * the office has not signed off, and a day confirmed by voice on a call (the reporter's lane).
+ */
+export const demirEvidencePackInput: EvidencePackInput = {
+  org: { name: 'Demir Yapı A.Ş.', logo: null },
+  site: {
+    name: 'Kartal Konutları — B Blok',
+    projectCode: 'KK-1203',
+    address: 'Kartal, İstanbul',
+    timezone: 'Europe/Istanbul',
+  },
+  language: 'tr',
+  units: 'metric',
+  periodStart: '2026-10-01',
+  periodEnd: '2026-10-31',
+  sections: ['summary', 'reports', 'transcripts', 'photos', 'weather'],
+  days: [
+    {
+      date: '2026-10-08',
+      reportNo: 'KK-1203-0004',
+      version: 1,
+      signedOff: false,
+      signedOffByName: null,
+      signedOffAt: null,
+      confirmation: 'unconfirmed',
+      typed: false,
+      confirmedAt: null,
+      filedAt: '2026-10-08T17:45:00Z',
+      data: { ...demirReportData, reportDate: '2026-10-08' },
+      lostHours: 2.5,
+      fullDay: false,
+      claimReady: false,
+      transcriptExcerpts: [
+        {
+          clip: 'voice_note',
+          clipNo: null,
+          start: 12,
+          end: 19.5,
+          text: 'sabah yedi buçuktan ona kadar yağmur yağdı, dış cephede çalışamadık',
+        },
+      ],
+      photos: [],
+      observed: { ...demirObserved, date: '2026-10-08' },
+      photoCount: 0,
+      audioCount: 1,
+    },
+    {
+      date: '2026-10-09',
+      reportNo: 'KK-1203-0005',
+      version: 1,
+      signedOff: false,
+      signedOffByName: null,
+      signedOffAt: null,
+      confirmation: 'call',
+      typed: false,
+      confirmedAt: '2026-10-09T15:46:00Z',
+      filedAt: '2026-10-09T15:46:00Z',
+      data: demirReportData,
+      lostHours: 2.5,
+      fullDay: false,
+      claimReady: true,
+      transcriptExcerpts: [
+        {
+          clip: 'call',
+          clipNo: null,
+          start: 135,
+          end: 142.4,
+          text: 'yağmur yüzünden dış cephe iki buçuk saat durdu, ekibi içeri aldık',
+        },
+      ],
+      photos: samplePhotos,
+      observed: demirObserved,
+      photoCount: 2,
+      audioCount: 1,
+    },
+  ],
+  settings: { paper: 'a4' },
+  generatedAt: '2026-11-02T07:00:00Z',
+  requestedBy: 'Ayşe Demir',
 };

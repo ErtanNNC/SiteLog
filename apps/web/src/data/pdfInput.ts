@@ -4,6 +4,7 @@
  * database, so both render the same document.
  */
 import type { PdfImage, PdfPhoto, ReportPdfInput } from '@sitelog/pdf';
+import { versionPdfStatus, versionSignedOff } from '@sitelog/shared/status.ts';
 import type { ReportDetail, SettingsData } from './types';
 
 export function imageFormatOf(
@@ -23,6 +24,18 @@ export function officeEntryAuthor(detail: ReportDetail): string | null {
   return first.authorName || 'Office';
 }
 
+/** Answered questions by id and by answering message, as the worker's buildReportPdfInput. */
+function answersOf(detail: ReportDetail): NonNullable<ReportPdfInput['answers']> {
+  const out: NonNullable<ReportPdfInput['answers']> = {};
+  for (const q of detail.questions) {
+    if (!q.answeredAt) continue;
+    const a = { answeredAt: q.answeredAt, field: q.field };
+    out[q.id] = a;
+    if (q.answeredMessageId) out[q.answeredMessageId] = a;
+  }
+  return out;
+}
+
 export function buildReportPdfInput(
   detail: ReportDetail,
   settings: SettingsData,
@@ -30,6 +43,7 @@ export function buildReportPdfInput(
 ): ReportPdfInput {
   const s = settings.settings;
   const r = detail.report;
+  const voiceNotes = detail.clips.filter((c) => c.kind === 'voice_note');
   const maxPhotos = s.pdf_max_photos;
   const photos: PdfPhoto[] = [];
   // The version's photos in its order, as the worker's loadPhotos: react-pdf embeds JPEG and PNG
@@ -45,6 +59,8 @@ export function buildReportPdfInput(
       caption: p.caption,
     });
   }
+  // `r.status` and the sign-off describe the current version: an older one (`?v=`) was filed.
+  const signedOff = versionSignedOff(r, detail.version);
   const languages = detail.data.languageDetected.length
     ? detail.data.languageDetected
     : detail.transcript?.language
@@ -55,6 +71,7 @@ export function buildReportPdfInput(
       name: settings.org.name,
       address: settings.org.address,
       licenseNo: settings.org.licenseNo,
+      taxNo: settings.org.taxNo,
       letterheadLines: s.letterhead_lines ?? [],
       logo: opts.logo,
     },
@@ -68,14 +85,16 @@ export function buildReportPdfInput(
     report: {
       reportNo: r.reportNo,
       version: detail.version,
-      status: r.status,
+      status: versionPdfStatus(r, detail.version),
       kind: r.kind === 'weather_day' || r.kind === 'no_work' ? r.kind : 'daily',
       filedAt: r.filedAt,
       confirmedAt: r.confirmedAt,
-      signedOffAt: r.signedOffAt,
-      signedOffByName: r.signedOffByName,
+      signedOffAt: signedOff ? r.signedOffAt : null,
+      signedOffByName: signedOff ? r.signedOffByName : null,
       isLate: r.isLate,
       reviewReasons: r.reviewReasons,
+      channel: r.channel,
+      confirmedVia: r.confirmedVia,
     },
     data: detail.data.languageDetected.length
       ? detail.data
@@ -83,8 +102,9 @@ export function buildReportPdfInput(
     reporterName: detail.reporter?.name ?? null,
     enteredBy: officeEntryAuthor(detail),
     sources: {
-      audioCount: detail.audio ? 1 : 0,
-      totalAudioSeconds: detail.audio?.durationS ?? 0,
+      // Every voice note of the report (W1-17 loads them all), as the worker counts its sources.
+      audioCount: voiceNotes.length,
+      totalAudioSeconds: voiceNotes.reduce((a, c) => a + c.durationS, 0),
       languages,
       receivedAt: r.receivedAt,
       textCount: detail.messages.filter((m) => m.direction === 'in' && m.type === 'text').length,
@@ -102,6 +122,7 @@ export function buildReportPdfInput(
       changeNote: v.changeNote,
       createdAt: v.createdAt,
     })),
+    answers: answersOf(detail),
     settings: {
       paper: s.pdf_paper === 'a4' ? 'a4' : 'letter',
       footerEnabled: s.pdf_footer_enabled,

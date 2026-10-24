@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
@@ -7,6 +7,7 @@ import type { DemoDataset } from '@sitelog/shared/demo/types.ts';
 import { DemoSource } from '@/data/demo/DemoSource';
 import { DemoStore, demoUserFor } from '@/data/demo/store';
 import type { PdfLinkBatch, PdfSelection } from '@/data/source';
+import { i18n } from '@/i18n/i18n';
 import { renderWithProviders } from '@/test/render';
 import OverviewPage from './Page';
 
@@ -21,8 +22,8 @@ describe('OverviewPage (demo data, Fri Oct 9 2026)', () => {
     expect(
       screen.getByRole('img', { name: 'Breakdown: Filed 4, Weather day 1, Missing 1, Awaiting 0' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('Crew on site').parentElement).toHaveTextContent('68');
-    expect(screen.getByText('Labor hours logged').parentElement).toHaveTextContent('544');
+    expect(screen.getByText('Crew on site').parentElement).toHaveTextContent('74');
+    expect(screen.getByText('Labor hours logged').parentElement).toHaveTextContent('580');
     expect(screen.getByText('Weather-affected sites').parentElement).toHaveTextContent('3');
   });
 
@@ -59,21 +60,104 @@ describe('OverviewPage (demo data, Fri Oct 9 2026)', () => {
       'needs_review',
       'invoice_gap',
       'invoice_gap',
-      'unknown_sender',
+      'unknown_contact',
       'glossary_review',
     ]);
-    expect(within(list).getByText('Elm St. Townhomes — no report')).toBeInTheDocument();
-    expect(within(list).getByText('Priya didn’t answer 2 reminders.')).toBeInTheDocument();
-    expect(within(list).getByRole('link', { name: 'Call Priya' })).toHaveAttribute(
+    // The Web-Overview artboard's cards, verbatim (the 19:00 alert is the §19 Q55 notice).
+    const missing = within(list).getByText('Elm St. Townhomes — no report').closest('li')!;
+    expect(within(missing).getByText('Missing')).toBeInTheDocument();
+    expect(
+      within(missing).getByText('Priya didn’t answer 2 reminders. Office alerted at 19:00.'),
+    ).toBeInTheDocument();
+    expect(within(missing).getByRole('link', { name: 'Call Priya' })).toHaveAttribute(
       'href',
       'tel:+15550147719',
     );
-    expect(within(list).getByText('Invoice gap: BrightLine Electric +16 h')).toBeInTheDocument();
-    expect(within(list).getByText('Invoice gap: ClearView Glazing +8 h')).toBeInTheDocument();
+    expect(within(missing).getByRole('button', { name: 'Text today’s link' })).toBeVisible();
+    expect(within(missing).getByRole('button', { name: 'Mark no work' })).toBeVisible();
+    const review = within(list).getByText('Oakmont — unknown sub “Ridgeway”').closest('li')!;
+    expect(within(review).getByText('Needs review')).toBeInTheDocument();
     expect(
-      within(list).getByText('Unknown subcontractor “Ridgeway” · 6 workers'),
+      within(review).getByText('6 workers mentioned, not in your subcontractor list.'),
     ).toBeInTheDocument();
+    expect(within(review).getByRole('button', { name: 'Review report' })).toBeVisible();
+    const invoice = within(list).getByText('BrightLine Electric: 212 h billed').closest('li')!;
+    expect(within(invoice).getByText('Invoice check')).toBeInTheDocument();
+    expect(
+      within(invoice).getByText('Daily reports this week show 196 h — 16 h gap.'),
+    ).toBeInTheDocument();
+    expect(within(list).getByText('ClearView Glazing: 160 h billed')).toBeInTheDocument();
+    expect(within(list).getByText('Unknown caller')).toBeInTheDocument();
     expect(within(list).getByText('3 glossary terms to review')).toBeInTheDocument();
+  });
+
+  it('shows how each site reports in the channel column (D35)', async () => {
+    renderWithProviders(<OverviewPage />);
+    const table = await screen.findByRole('table', { name: 'Sites today' });
+    expect(within(table).getByRole('columnheader', { name: 'Channel' })).toBeInTheDocument();
+    const row = (name: string) => within(table).getByRole('link', { name }).closest('tr')!;
+    expect(
+      within(row('Riverside Lofts — Block B')).getByText('Reported by text link'),
+    ).toBeTruthy();
+    expect(within(row('Northgate Parking Structure')).getByText('Reported by call')).toBeTruthy();
+    // No report yet: how Priya reports, and the reminders she got (Web-Overview).
+    expect(within(row('Elm St. Townhomes')).getByText('Reports by text link')).toBeTruthy();
+    expect(within(row('Elm St. Townhomes')).getByText('2 reminders sent')).toBeInTheDocument();
+  });
+
+  it('texts today’s link from the missing card and says so', async () => {
+    const store = new DemoStore();
+    const success = vi.spyOn(toast, 'success');
+    renderWithProviders(<OverviewPage />, { store, as: 'pm' });
+    const list = await screen.findByTestId('needs-attention');
+    const before = store.data.messages.length;
+    await userEvent.click(within(list).getByRole('button', { name: 'Text today’s link' }));
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Today’s link texted to Priya.'));
+    expect(store.data.messages.length).toBe(before + 1);
+    expect(store.data.messages.at(-1)!.copy_key).toBe('daily_link');
+    expect(store.data.audit.at(-1)!.action).toBe('daily_link.texted');
+  });
+
+  it('the Demo phone card replaces "Try it on WhatsApp" for a demo org’s admins (D29)', async () => {
+    const { unmount } = renderWithProviders(<OverviewPage />);
+    const card = await screen.findByTestId('demo-phone-card');
+    expect(within(card).getByRole('link', { name: 'Open the Demo phone' })).toHaveAttribute(
+      'href',
+      '/dev/phone',
+    );
+    expect(screen.queryByText('Try it on WhatsApp')).toBeNull();
+    unmount();
+    renderWithProviders(<OverviewPage />, { as: 'pm' });
+    await screen.findByTestId('needs-attention');
+    expect(screen.queryByTestId('demo-phone-card')).toBeNull();
+  });
+
+  it('a project manager sees no Link number action (Team & numbers is admin and ops)', async () => {
+    renderWithProviders(<OverviewPage />, { as: 'pm' });
+    const list = await screen.findByTestId('needs-attention');
+    expect(within(list).getByText('Unknown caller')).toBeInTheDocument();
+    expect(within(list).queryByRole('button', { name: 'Link number' })).toBeNull();
+  });
+
+  it('speaks Turkish when the panel does', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    renderWithProviders(<OverviewPage />);
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Bugün 6 şantiyede' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('CUM, 9 EKİ 2026 · 19:05')).toBeInTheDocument();
+    const table = screen.getByRole('table', { name: 'Bugün şantiyeler' });
+    expect(within(table).getByRole('columnheader', { name: 'Kanal' })).toBeInTheDocument();
+    expect(within(table).getAllByText('Dosyalandı').length).toBeGreaterThan(0);
+    expect(within(table).getByText('3,5 sa kayıp')).toBeInTheDocument();
+    const list = screen.getByTestId('needs-attention');
+    expect(within(list).getByText('Elm St. Townhomes: rapor yok')).toBeInTheDocument();
+    expect(
+      within(list).getByText('Priya 2 hatırlatmaya yanıt vermedi. Ofise bildirildi: 19:00.'),
+    ).toBeInTheDocument();
+    expect(within(list).getByText('BrightLine Electric: 212 sa faturalandı')).toBeInTheDocument();
+    expect(within(list).getByRole('button', { name: 'Günün linkini gönder' })).toBeVisible();
+    expect(screen.getByText('Kaydedilen işçilik saati').parentElement).toHaveTextContent('580');
   });
 
   it('marks a missing site-day as no work through the confirm dialog', async () => {
@@ -114,6 +198,8 @@ describe('OverviewPage (demo data, Fri Oct 9 2026)', () => {
           files: ids.map((id, i) => ({
             reportId: id,
             reportNo: `NO-${i}`,
+            date: '2026-10-09',
+            version: 1,
             url: `https://storage.test/${i}.pdf`,
           })),
           missing: [],
@@ -133,7 +219,7 @@ describe('OverviewPage (demo data, Fri Oct 9 2026)', () => {
     await userEvent.click(await screen.findByTestId('todays-pdfs'));
     await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
     expect((click.mock.instances[0] as unknown as HTMLAnchorElement).download).toBe(
-      'SiteLog_daily-reports_2026-10-09.zip',
+      'TalkOlog_daily-reports_2026-10-09.zip',
     );
     // The four reports filed today (Riverside, Oakmont, Pier 9, Northgate).
     expect(calls).toEqual([{ reportIds: expect.any(Array) }]);
@@ -180,7 +266,7 @@ function newOrg(
     conversations: [],
     messages: [],
     transcripts: [],
-    unknownSenders: [],
+    unknownContacts: [],
     siteDays: [],
     reports: [],
     versions: [],
@@ -254,7 +340,7 @@ describe('OverviewPage empty states', () => {
     expect(screen.queryByText(/Every site has reported/)).not.toBeInTheDocument();
 
     expect(
-      screen.getByRole('heading', { name: 'No site manager reports by WhatsApp yet' }),
+      screen.getByRole('heading', { name: 'No site manager reports yet' }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Reminders go out/)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'New report' })).toHaveAttribute(

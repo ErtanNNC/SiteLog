@@ -11,6 +11,7 @@ import { DemoSource } from '@/data/demo/DemoSource';
 import { DemoStore, demoUserFor, type DemoLoginKey } from '@/data/demo/store';
 import type { DataSource } from '@/data/source';
 import type { OrgSummary } from '@/data/types';
+import { DEMO_SITELOG_NUMBER } from '@sitelog/shared/demo/kestrel.ts';
 
 export interface ProviderOptions {
   as?: DemoLoginKey;
@@ -33,6 +34,11 @@ export function makeAuthState(
     timezone: 'America/Chicago',
     activeSites: 6,
     role: du.role,
+    locale: 'en-US',
+    country: 'US',
+    sitelogNumbers: [DEMO_SITELOG_NUMBER],
+    // §18.1: the org's own price (W4-10, spec §19 Q234).
+    price: { minor: 39900, currency: 'USD' },
   };
   return {
     status: 'signed_in',
@@ -87,6 +93,10 @@ export function Providers({
             timezone: 'America/Chicago',
             activeSites: 6,
             role: demoUserFor(as).role,
+            locale: 'en-US',
+            country: 'US',
+            sitelogNumbers: [DEMO_SITELOG_NUMBER],
+            price: { minor: 39900, currency: 'USD' },
           },
   });
   return (

@@ -1,21 +1,32 @@
-import { ParsedAnswerSchema, toolInputSchema, type ParsedAnswer } from '@sitelog/shared';
+import {
+  PARSE_ANSWER_MIN_CONFIDENCE,
+  ParsedAnswerSchema,
+  toolInputSchema,
+  unstatedAnswerNumber,
+  type ParsedAnswer,
+  type QuestionField,
+} from '@sitelog/shared';
 import type { Logger } from '../log';
 import { callTool, type MessagesClient, type ToolCallResult } from './claude';
-import { ANSWER_SYSTEM_PROMPT, buildAnswerUserMessage } from './prompts/replies';
+import {
+  ANSWER_SYSTEM_PROMPT,
+  buildAnswerUserMessage,
+  type AnswerPromptInput,
+} from './prompts/answer';
 
-/** §10.7 — `parse_answer` tool. Below 0.7 confidence the caller re-asks once. */
+/**
+ * §10.7 `parse_answer` (channel-neutral since W2-09): the web recorder's spoken *Other…* answer
+ * (`jobs/parse_answer.ts`) and, until step 22, the WhatsApp worker's replies
+ * (`router/handlers/question.ts`) call it. Below `PARSE_ANSWER_MIN_CONFIDENCE` (0.7) the caller
+ * asks once more. `callTool` takes phone numbers out of every text block first (§10.12).
+ */
 export const ANSWER_TOOL = {
   name: 'parse_answer',
   description:
-    'Interpret the reply to the open clarifying question and return the structured answer with a confidence.',
+    'Interpret the answer to the open question about the daily report and return the structured value with a confidence.',
 } as const;
 
-export interface AnswerRequest {
-  question: { field: string; prompt: string; options: string[]; target: unknown };
-  replyText: string;
-  companies: Array<{ id: string; name: string; aliases: string[] }>;
-  defaultShiftHours: number;
-}
+export type AnswerRequest = AnswerPromptInput;
 
 export async function parseAnswerWithModel(
   client: MessagesClient,
@@ -36,4 +47,32 @@ export async function parseAnswerWithModel(
     },
     log,
   );
+}
+
+/** Why code does not apply a parsed answer to the question (W2-09, F7), or null to apply it. */
+export type AnswerRefusal = 'low_confidence' | 'number_not_stated' | 'other_field';
+
+/**
+ * Code's rule for a parsed answer (§10.7, CLAUDE.md "never invent numbers"): below 0.7 it is
+ * asked once more; an answer for another field, a headcount without a number, a weather stoppage
+ * without its lost hours, or a number (or a full day, half day, no stoppage) the answer does not
+ * state (`unstatedAnswerNumber`) is treated the same way. Pure.
+ */
+export function answerRefusal(
+  field: QuestionField,
+  parsed: ParsedAnswer,
+  transcript: string,
+  /** The question's gap path (`target.path`, e.g. "manpower.workers:Delta Mechanical"). */
+  path?: string,
+): AnswerRefusal | null {
+  if (parsed.confidence < PARSE_ANSWER_MIN_CONFIDENCE) return 'low_confidence';
+  // The model may name the question by its gap path, which the TARGET it is shown carries: the
+  // same question. Any other path (another crew) stays another field.
+  if (parsed.field !== field && !(path && parsed.field === path)) return 'other_field';
+  if (field === 'manpower.workers' && parsed.value.workers == null) return 'low_confidence';
+  // A stoppage with no lost hours would be logged as 0 h lost (applyAnswer): a number nobody said.
+  if (field === 'weather.impact' && parsed.value.impact && parsed.value.lostHours == null)
+    return 'number_not_stated';
+  if (unstatedAnswerNumber(parsed.value, transcript) !== null) return 'number_not_stated';
+  return null;
 }

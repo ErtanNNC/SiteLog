@@ -1,7 +1,7 @@
-import type { DailyReportData, SiteDayWeather } from '@sitelog/shared';
+import type { DailyReportDataV1, SiteDayWeather } from '@sitelog/shared';
 
 /** §10.4 system prompt (v1) — verbatim. */
-export const EXTRACTION_SYSTEM_PROMPT = `You are SiteLog's report writer for construction daily site reports.
+export const EXTRACTION_SYSTEM_PROMPT = `You are TalkOlog's report writer for construction daily site reports.
 You receive a site manager's end-of-day voice note transcript (with timestamps), photo captions,
 earlier answers to clarifying questions, site context, the company list and the site glossary.
 Return the report ONLY by calling the tool submit_daily_report.
@@ -68,7 +68,7 @@ export interface ExtractionInput {
   rejectedMappings: Array<{ heard: string; official: string }>;
   observedWeather: SiteDayWeather | null;
   previousAnswers: Array<{ field: string; question: string; answer: string; messageId: string }>;
-  previousDraft: DailyReportData | null;
+  previousDraft: DailyReportDataV1 | null;
   photos: Array<{ messageId: string; caption?: string; takenAt: string }>;
   /** Voice notes: segments grouped by message in arrival order. */
   segments: ExtractionSegment[];

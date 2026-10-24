@@ -1,10 +1,12 @@
+import { Link } from 'react-router';
 import { REQUIRED_FIELD_KEYS, type FilingMode } from '@sitelog/shared/enums.ts';
+import { DEFAULT_DAILY_LINK_TIME } from '@sitelog/shared/schedule/remind.ts';
 import { Checkbox, RadioGroup, RadioGroupItem } from '@/components/ui/Checkbox';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
-import { copy } from '@/copy/en';
 import { addMinutesToHHMM, hhmm } from '@/data/assemble';
 import type { OrgSettings } from '@/data/types';
+import { useCopy } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
 import { SettingsCard, SwitchRow, ToggleChip } from './fields';
 
@@ -25,10 +27,21 @@ export interface SectionProps {
   update: (patch: Partial<OrgSettings>) => void;
 }
 
-/** Reports & reminders: deadline, working days, ladder, required fields, filing (§F18). */
-export function ReportsSection({ draft, update }: SectionProps) {
-  const c = copy.settings;
+interface ReportsSectionProps extends SectionProps {
+  /** Settings links the daily link card to Field channels; the setup wizard does not. */
+  channelsLink?: boolean;
+}
+
+const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const;
+
+/**
+ * Reports & reminders (§F18, P12 on v1.2, W4-05): deadline, working days, the ladder with the
+ * daily link (its time is set on Field channels), required fields, filing.
+ */
+export function ReportsSection({ draft, update, channelsLink = false }: ReportsSectionProps) {
+  const { t } = useCopy();
   const deadline = hhmm(draft.default_deadline);
+  const dailyLinkTime = hhmm(draft.daily_link_time, DEFAULT_DAILY_LINK_TIME);
   const toggleDay = (day: number, on: boolean) => {
     const set = new Set(draft.working_days);
     if (on) set.add(day);
@@ -42,10 +55,10 @@ export function ReportsSection({ draft, update }: SectionProps) {
 
   return (
     <div className="grid gap-6">
-      <SettingsCard title={c.deadline} hint={c.deadlineHint}>
+      <SettingsCard title={t('settings.deadline')} hint={t('settings.deadlineHint')}>
         <div className="grid gap-5 md:grid-cols-[200px_minmax(0,1fr)]">
           <div className="grid gap-1.5">
-            <Label htmlFor="set-deadline">{c.deadline}</Label>
+            <Label htmlFor="set-deadline">{t('settings.deadline')}</Label>
             <Input
               id="set-deadline"
               type="time"
@@ -55,24 +68,55 @@ export function ReportsSection({ draft, update }: SectionProps) {
             />
           </div>
           <fieldset className="grid gap-1.5">
-            <legend className="text-caption font-medium">{c.workingDays}</legend>
+            <legend className="text-caption font-medium">{t('settings.workingDays')}</legend>
             <div className="flex flex-wrap gap-2" data-testid="working-days">
-              {c.workingDayNames.map((name, i) => (
+              {WEEKDAYS.map((day) => (
                 <ToggleChip
-                  key={name}
-                  label={name}
-                  pressed={draft.working_days.includes(i + 1)}
-                  onPressedChange={(on) => toggleDay(i + 1, on)}
+                  key={day}
+                  label={t(`settings.weekdays.d${day}`)}
+                  pressed={draft.working_days.includes(day)}
+                  onPressedChange={(on) => toggleDay(day, on)}
                 />
               ))}
             </div>
-            <p className="text-caption text-dust">{c.workingDaysHint}</p>
+            <p className="text-caption text-dust">{t('settings.workingDaysHint')}</p>
           </fieldset>
         </div>
       </SettingsCard>
 
-      <SettingsCard title={c.ladder} hint={c.offsetHint(deadline)} data-testid="ladder">
+      <SettingsCard
+        title={t('settings.ladder')}
+        hint={t('settings.offsetHint', { deadline })}
+        data-testid="ladder"
+      >
         <div className="grid gap-3 md:grid-cols-2">
+          {/* §7.4: the daily link at its own time (Field channels), before R1. */}
+          <div
+            className="rounded-card border border-rebar bg-chalk p-4"
+            data-testid="stage-dailyLink"
+          >
+            <div className="flex min-h-target flex-col justify-center">
+              <span className="block text-[15px] font-medium">
+                {t('settings.stages.dailyLink')}
+              </span>
+              <span className="block text-caption text-dust">
+                {t('settings.stageHints.dailyLink')}
+              </span>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="font-mono text-[13px] text-dust">
+                {t('settings.stageTime', { time: dailyLinkTime })}
+              </span>
+              {channelsLink ? (
+                <Link
+                  to="/settings/channels"
+                  className="inline-flex min-h-target items-center text-[15px] font-medium underline underline-offset-2"
+                >
+                  {t('settings.dailyLinkChange')}
+                </Link>
+              ) : null}
+            </div>
+          </div>
           {STAGES.map((s) => {
             const enabled = draft[s.enabled] as boolean;
             const offset = draft[s.offset] as number;
@@ -87,14 +131,14 @@ export function ReportsSection({ draft, update }: SectionProps) {
               >
                 <SwitchRow
                   id={`stage-${s.key}`}
-                  label={c.stages[s.key]}
-                  hint={c.stageHints[s.key]}
+                  label={t(`settings.stages.${s.key}`)}
+                  hint={t(`settings.stageHints.${s.key}`)}
                   checked={enabled}
                   onCheckedChange={(v) => update({ [s.enabled]: v } as Partial<OrgSettings>)}
                 />
                 <div className="mt-3 flex items-center gap-3">
                   <Label htmlFor={`offset-${s.key}`} className="sr-only">
-                    {c.offset}
+                    {t('settings.offset')}
                   </Label>
                   <Input
                     id={`offset-${s.key}`}
@@ -106,11 +150,11 @@ export function ReportsSection({ draft, update }: SectionProps) {
                       update({ [s.offset]: Number(e.target.value) } as Partial<OrgSettings>)
                     }
                     className="w-24 font-mono tabular"
-                    aria-label={`${c.stages[s.key]} · ${c.offset}`}
+                    aria-label={`${t(`settings.stages.${s.key}`)} · ${t('settings.offset')}`}
                   />
                   <span className="font-mono text-[13px] text-dust">
-                    {offset >= 0 ? `+${offset}` : offset} min ·{' '}
-                    {c.stageTime(addMinutesToHHMM(deadline, offset))}
+                    {t('settings.offsetMinutes', { offset: offset >= 0 ? `+${offset}` : offset })} ·{' '}
+                    {t('settings.stageTime', { time: addMinutesToHHMM(deadline, offset) })}
                   </span>
                 </div>
               </div>
@@ -119,37 +163,37 @@ export function ReportsSection({ draft, update }: SectionProps) {
         </div>
       </SettingsCard>
 
-      <SettingsCard title={c.required} hint={c.requiredHint}>
+      <SettingsCard title={t('settings.required')} hint={t('settings.requiredHint')}>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="required-fields">
           {REQUIRED_FIELD_KEYS.map((key) => (
             <label
               key={key}
-              className="flex min-h-11 cursor-pointer items-center gap-3 rounded-chip border border-rebar px-3 text-[15px] hover:bg-concrete/60"
+              className="flex min-h-target cursor-pointer items-center gap-3 rounded-chip border border-rebar px-3 text-[15px] hover:bg-concrete/60"
             >
               <Checkbox
                 checked={draft.required_fields.includes(key)}
                 onCheckedChange={(v) => toggleField(key, v === true)}
-                aria-label={c.requiredFields[key]}
+                aria-label={t(`settings.requiredFields.${key}`)}
               />
-              {c.requiredFields[key]}
+              {t(`settings.requiredFields.${key}`)}
             </label>
           ))}
         </div>
       </SettingsCard>
 
-      <SettingsCard title={c.filing}>
+      <SettingsCard title={t('settings.filing')}>
         <RadioGroup
           value={draft.filing_mode}
           onValueChange={(v) => update({ filing_mode: v as FilingMode })}
-          aria-label={c.filing}
+          aria-label={t('settings.filing')}
         >
           {(
             [
-              ['confirm', c.filingConfirm, c.filingConfirmHint],
-              ['auto_15min', c.filingAuto, c.filingAutoHint],
+              ['confirm', t('settings.filingConfirm'), t('settings.filingConfirmHint')],
+              ['auto_15min', t('settings.filingAuto'), t('settings.filingAutoHint')],
             ] as const
           ).map(([value, label, hint]) => (
-            <label key={value} className="flex min-h-11 cursor-pointer items-start gap-3">
+            <label key={value} className="flex min-h-target cursor-pointer items-start gap-3">
               <RadioGroupItem value={value} className="mt-0.5" aria-label={label} />
               <span>
                 <span className="block text-[15px] font-medium">{label}</span>
@@ -161,15 +205,15 @@ export function ReportsSection({ draft, update }: SectionProps) {
         <div className="mt-5 grid gap-2 border-t border-rebar pt-4">
           <SwitchRow
             id="set-signoff"
-            label={c.signoffRequired}
-            hint={c.signoffRequiredHint}
+            label={t('settings.signoffRequired')}
+            hint={t('settings.signoffRequiredHint')}
             checked={draft.signoff_required}
             onCheckedChange={(v) => update({ signoff_required: v })}
           />
           <SwitchRow
             id="set-email-pdf"
-            label={c.emailPdf}
-            hint={c.emailPdfHint}
+            label={t('settings.emailPdf')}
+            hint={t('settings.emailPdfHint')}
             checked={draft.email_pdf_on_file}
             onCheckedChange={(v) => update({ email_pdf_on_file: v })}
           />

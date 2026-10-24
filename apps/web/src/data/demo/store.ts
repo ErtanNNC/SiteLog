@@ -6,6 +6,7 @@
 import { DEMO_NOW, DEMO_ORG_ID, DEMO_USERS, kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
 import type { DemoDataset, DemoUser } from '@sitelog/shared/demo/types.ts';
 import { demoId, demoRand } from '@sitelog/shared/demo/ids.ts';
+import { V12_ROW_DEFAULTS } from '@sitelog/shared/db/defaults.ts';
 import type {
   AuditLogRow,
   CompanyRow,
@@ -17,20 +18,24 @@ import type {
   ReportRow,
   ReportSourceRow,
   ReportVersionRow,
+  ReporterRow,
   SiteDayRow,
+  SiteReporterRow,
   SiteRow,
   TranscriptRow,
   WeatherEventRow,
   WorkItemRow,
 } from '@sitelog/shared/db/types.ts';
-import type {
-  InvoiceStatus,
-  MemberRole,
-  ReporterStatus,
-  SiteDayStatus,
+import {
+  INVITE_MESSAGES_ATTESTATION,
+  isActiveReporterStatus,
+  type InvoiceStatus,
+  type MemberRole,
+  type ReporterStatus,
+  type SiteDayStatus,
 } from '@sitelog/shared/enums.ts';
-import type { DailyReportData, Photo } from '@sitelog/shared/schemas/report.ts';
-import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
+import type { DailyReportDataV1, StoredReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import {
   OFFICE_PHOTO_MAX,
   PHOTO_CAPTION_MAX,
@@ -40,31 +45,80 @@ import {
   type OfficePhotoUpload,
 } from '@sitelog/shared/report/photos.ts';
 import {
+  evidencePackStoragePath,
   formatReportNo,
   logoStoragePath,
   pdfStoragePath,
 } from '@sitelog/shared/report/numbering.ts';
 import { deriveTotals } from '@sitelog/shared/report/hours.ts';
-import { formatDateInTz } from '@sitelog/shared/format.ts';
+import { sourceMediaId } from '@sitelog/shared/report/media.ts';
+import { reportLanguageFor } from '@sitelog/shared/locale.ts';
+import { formatDateInTz, isoWeekOf } from '@sitelog/shared/format.ts';
+import { noticeData } from '@sitelog/shared/notifications.ts';
+import {
+  billingPrice,
+  billingProviderOf,
+  type BillingPrice,
+  type BillingStatus,
+} from '@sitelog/shared/billing.ts';
+import {
+  invoiceHours,
+  invoiceUploadPath,
+  roundHours,
+  shouldNotifyInvoiceGap,
+  type SubInvoiceStatus,
+} from '@sitelog/shared/invoices.ts';
 import { deadlineInstant } from '@sitelog/shared/schedule/reminders.ts';
 import { fromZonedTime } from 'date-fns-tz';
 import { copy } from '@/copy/en';
-import { localId } from '@/lib/utils';
+import { translate } from '@/i18n/useCopy';
+import { CodedError, localId } from '@/lib/utils';
 import type { RowSet } from '../assemble';
+import { reporterDefaultsFor, reporterLocaleFor } from '@sitelog/shared/countries.ts';
+import {
+  demoDailyLink,
+  demoOrgPack,
+  demoPhoneData,
+  demoPhoneThread,
+  demoReply,
+  demoWelcome,
+} from './demoPhone';
 import type {
   AddGlossaryTermInput,
   AddInvoiceInput,
   CreateSiteInput,
   InviteReporterInput,
   LinkUnknownSenderInput,
+  OfficeCallNowInput,
   RequestEvidencePackInput,
   ResolveUnknownCompanyInput,
   ReviewGlossaryTermInput,
   UpdateOrgInput,
+  SendTestMessageInput,
+  SendTestMessageResult,
+  CallMeNowInput,
+  CallMeNowResult,
+  UpdateReporterContactInput,
   UpdateReporterInput,
   UpdateSitePatch,
 } from '../source';
-import type { ChangeEvent, OrgSettingsPatch } from '../types';
+import type {
+  ChangeEvent,
+  DemoPhoneData,
+  DemoPhoneEmail,
+  DemoPhoneMessage,
+  OrgSettingsPatch,
+  OrglessContacts,
+  TeamReporterState,
+  OpsOrgBilling,
+  TextDailyLinkErrorCode,
+  TextDailyLinkResult,
+} from '../types';
+import { attemptNumber } from '@sitelog/shared/notify/walk.ts';
+import { settingsMessageChannels } from '@sitelog/shared/channels.ts';
+import { DEFAULT_CALL_WINDOW, insideWindow } from '@sitelog/shared/schedule/remind.ts';
+import { OFFICE_CALL_POLICY, SETTINGS_TEST_CALL_POLICY } from '@sitelog/shared/voice-outbound.ts';
+import type { OrgLocale } from '@sitelog/shared/locale.ts';
 
 /** Extra demo office user so `?as=ops` has someone to be (not part of the §18 seed). */
 export const DEMO_OPS_USER: DemoUser = {
@@ -100,6 +154,26 @@ interface CheckedPhoto {
   position: number | null;
 }
 
+/** The key a version's data.photos entries use: `uploadId` in v2 data, `messageId` in v1. */
+type PhotoKey = 'uploadId' | 'messageId';
+/** A data.photos entry of either version. */
+type PhotoEntry = Partial<{
+  uploadId: unknown;
+  messageId: unknown;
+  caption: unknown;
+  takenAt: unknown;
+}>;
+type KeyedPhoto = { caption?: string; takenAt: string } & Partial<Record<PhotoKey, string>>;
+
+/** The media id of a data.photos entry (lower case), whichever key it has. */
+function photoEntryId(p: PhotoEntry | null | undefined): string {
+  const id = typeof p?.uploadId === 'string' ? p.uploadId : p?.messageId;
+  return typeof id === 'string' ? id.toLowerCase() : '';
+}
+
+/** A demo office call rings the Demo phone this long before it counts as not answered (§19 Q132). */
+export const OFFICE_RING_MS = 30_000;
+
 export class DemoStore {
   readonly data: DemoDataset;
   private listeners = new Set<(e: ChangeEvent) => void>();
@@ -108,12 +182,15 @@ export class DemoStore {
   logoUrl: string | null = null;
   /** The demo `photos` bucket: paths of office uploads (DemoSource keeps their object URLs). */
   private readonly uploadedPhotos = new Set<string>();
+  /** What the console email provider would have sent in this session (the Demo phone's Email tab). */
+  readonly consoleEmails: DemoPhoneEmail[] = [];
 
   constructor(dataset: DemoDataset = kestrelDemo()) {
     this.data = structuredClone(dataset);
     if (!this.data.users.some((u) => u.id === DEMO_OPS_USER.id)) {
       this.data.users.push({ ...DEMO_OPS_USER });
       this.data.members.push({
+        ...V12_ROW_DEFAULTS.org_members,
         org_id: this.data.org.id,
         user_id: DEMO_OPS_USER.id,
         role: DEMO_OPS_USER.role,
@@ -147,10 +224,12 @@ export class DemoStore {
       glossary: d.glossary,
       messages: d.messages,
       transcripts: d.transcripts,
-      unknownSenders: d.unknownSenders,
+      calls: d.calls,
+      unknownContacts: d.unknownContacts,
       siteDays: d.siteDays,
       reports: d.reports,
       versions: d.versions,
+      uploads: d.uploads,
       sources: d.sources,
       manpower: d.manpower,
       weatherEvents: d.weatherEvents,
@@ -159,15 +238,15 @@ export class DemoStore {
       packs: d.packs,
       notifications: d.notifications,
       audit: d.audit,
+      // What Stripe would know (§18.1's card and invoices); the price and the sites are the rows.
       billing: {
-        monthlyCents: d.billing.monthlyCents,
-        activeSites: d.sites.filter((s) => s.status === 'active').length,
-        pricePerSiteCents: 39_900,
         nextInvoiceDate: d.billing.nextInvoiceDate,
         paymentMethod: d.billing.paymentMethod,
-        status: d.org.billing_status,
-        trialEndsAt: d.org.trial_ends_at,
-        invoices: d.billing.invoices,
+        invoices: d.billing.invoices.map(({ amountCents, ...i }) => ({
+          ...i,
+          amountMinor: amountCents,
+          currency: d.org.price_currency ?? d.org.currency,
+        })),
       },
     };
   }
@@ -214,8 +293,14 @@ export class DemoStore {
     return s;
   }
 
-  /** Mirror of denormalize_report_version() in the migrations. */
-  private denormalize(report: ReportRow, version: number, data: DailyReportData): void {
+  /**
+   * Mirror of denormalize_report_version() in the migrations, for v1 and v2 data: the fields it
+   * copies have one shape in both (the voice note of a weather period is a v1 `audio` or a v2
+   * `voice_note` source; `observed` is copied as written). The report_sources sync of the SQL is
+   * not mirrored: the demo's sources are written with the media.
+   */
+  private denormalize(report: ReportRow, version: number, stored: StoredReportData): void {
+    const data = stored as DailyReportDataV1;
     const d = this.data;
     d.manpower = d.manpower.filter((m) => !(m.report_id === report.id && m.version === version));
     d.workItems = d.workItems.filter((w) => !(w.report_id === report.id && w.version === version));
@@ -256,7 +341,17 @@ export class DemoStore {
     });
     const date = data.reportDate;
     data.weather.periods.forEach((p, i) => {
-      const audio = p.source.find((s) => s.type === 'audio') ?? null;
+      // A voice note, else a call second (20261016000280: P9's *Call ts* chip).
+      const audio =
+        p.source.find((s) => {
+          const type: string = s.type;
+          return type === 'audio' || type === 'voice_note';
+        }) ??
+        p.source.find((s) => {
+          const type: string = s.type;
+          return type === 'call';
+        }) ??
+        null;
       const row: WeatherEventRow = {
         id: demoId(`wx:${report.id}:${version}:${i}`),
         report_id: report.id,
@@ -280,7 +375,7 @@ export class DemoStore {
 
   private pushVersion(
     report: ReportRow,
-    data: DailyReportData,
+    data: StoredReportData,
     author: ReportVersionRow['author'],
     userId: string | null,
     changeNote: string | null,
@@ -289,6 +384,7 @@ export class DemoStore {
     const next = report.current_version + 1;
     const site = this.site(report.site_id);
     this.data.versions.push({
+      ...V12_ROW_DEFAULTS.report_versions,
       report_id: report.id,
       version: next,
       data: data as unknown as ReportVersionRow['data'],
@@ -333,9 +429,89 @@ export class DemoStore {
         title: `${report.report_no} was edited after sign-off`,
         body: changeNote,
         target_path: `/reports/${report.id}`,
+        data: noticeData('report_edited', { reportNo: report.report_no }),
       });
     }
+    this.checkReportInvoiceGaps(report, userId);
     return next;
+  }
+
+  /** A company's filed hours in a period, as `invoice_reported_hours()` (W3-06). */
+  private reportedHours(companyId: string, start: string, end: string): number {
+    const d = this.data;
+    let total = 0;
+    for (const r of d.reports) {
+      if (r.status !== 'filed' && r.status !== 'signed_off') continue;
+      const sd = d.siteDays.find((x) => x.id === r.site_day_id);
+      if (!sd || sd.date < start || sd.date > end) continue;
+      for (const m of d.manpower)
+        if (m.report_id === r.id && m.version === r.current_version && m.company_id === companyId)
+          total += Number(m.hours);
+    }
+    return total;
+  }
+
+  /**
+   * Spec §19 Q133's default (`INVOICE_GAP_POLICY`), as `invoice_gap_check()` does it: one
+   * `invoice_gap` notice per invoice and gap, for admin, ops and accounts (W3-06).
+   */
+  private checkInvoiceGap(invoiceId: string, userId: string | null, cause: string): void {
+    const inv = this.data.invoices.find((i) => i.id === invoiceId);
+    if (!inv || !inv.period_start || !inv.period_end) return;
+    if (inv.total_hours === null && !(Array.isArray(inv.lines) && inv.lines.length)) return;
+    const invoiced = roundHours(invoiceHours(inv));
+    const reported = roundHours(
+      this.reportedHours(inv.company_id, inv.period_start, inv.period_end),
+    );
+    const gap = roundHours(invoiced - reported);
+    const lastNotified = inv.gap_notified === null ? null : Number(inv.gap_notified);
+    if (!shouldNotifyInvoiceGap({ status: inv.status as SubInvoiceStatus, gap, lastNotified }))
+      return;
+    const company = this.data.companies.find((c) => c.id === inv.company_id)?.name ?? '';
+    inv.gap_notified = gap;
+    const sign = gap > 0 ? '+' : '−';
+    this.notify({
+      user_id: null,
+      kind: 'invoice_gap',
+      title: `Invoice gap: ${company} ${sign}${Math.abs(gap)} h`,
+      body: `${inv.invoice_no ?? ''} invoices ${invoiced} h · reports show ${reported} h`,
+      target_path: `/hours?week=${isoWeekOf(inv.period_start)}`,
+      data: noticeData('invoice_gap', {
+        company,
+        invoiceNo: inv.invoice_no ?? '',
+        invoiced,
+        reported,
+        gap,
+      }),
+    });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: userId ? 'user' : 'system',
+      actor_id: userId,
+      action: 'invoice.gap_notified',
+      entity: 'sub_invoice',
+      entity_id: inv.id,
+      diff: { gap, previous: lastNotified, invoiced, reported, cause },
+    });
+  }
+
+  /** A new version of a report: the open invoices of its companies covering its day (W3-06). */
+  private checkReportInvoiceGaps(report: ReportRow, userId: string | null): void {
+    const date = this.data.siteDays.find((x) => x.id === report.site_day_id)?.date;
+    if (!date) return;
+    const companies = new Set(
+      this.data.manpower.filter((m) => m.report_id === report.id).map((m) => m.company_id),
+    );
+    for (const inv of this.data.invoices)
+      if (
+        inv.status === 'open' &&
+        companies.has(inv.company_id) &&
+        inv.period_start &&
+        inv.period_end &&
+        inv.period_start <= date &&
+        inv.period_end >= date
+      )
+        this.checkInvoiceGap(inv.id, userId, 'report_version');
   }
 
   // ─── Mutations ───
@@ -384,12 +560,14 @@ export class DemoStore {
    * a new confirmed company, with an audit row. Names in `skip` (pending `unknown_company:`
    * review reasons) stay unlinked for the review banner.
    */
-  private linkTypedCompanies(
-    data: DailyReportData,
+  private linkTypedCompanies<D extends StoredReportData>(
+    stored: D,
     reportId: string,
     userId: string,
     skip: string[] = [],
-  ): DailyReportData {
+  ): D {
+    // The crew rows it reads and writes have one shape in v1 and v2 data.
+    const data = stored as DailyReportDataV1;
     const d = this.data;
     const skipped = new Set(skip.map((s) => s.trim().toLowerCase()));
     const links = new Map<string, CompanyRow>();
@@ -446,79 +624,98 @@ export class DemoStore {
       }
       links.set(key, company);
     }
-    if (!links.size) return data;
+    if (!links.size) return stored;
     return {
       ...data,
       manpower: data.manpower.map((m) => {
         const company = m.companyId === null ? links.get(m.companyName.trim().toLowerCase()) : null;
         return company ? { ...m, companyId: company.id, companyName: company.name } : m;
       }),
-    };
+    } as D;
   }
 
   /**
-   * Mirror of create_report_version(): `data.photos` keeps the report's photos it still lists
-   * (first occurrence, caption as sent, time as recorded), with `photos` (new uploads) placed
-   * among them at their positions (placeOfficePhotos).
+   * Mirror of create_report_version() for v1 and v2 data: `data.photos` keeps the report's photos
+   * it still lists (by `uploadId` or `messageId`: first occurrence, caption as sent, time as
+   * recorded), with `photos` (new uploads) placed among them at their positions
+   * (placeOfficePhotos), each keyed as the version's data keys photos (`uploadId` in v2,
+   * `messageId` in v1).
    */
   createReportVersion(
     reportId: string,
-    data: DailyReportData,
+    stored: StoredReportData,
     changeNote: string,
     userId: string,
     photos: OfficePhotoUpload[] = [],
+    baseVersion?: number,
   ): number {
+    const key: PhotoKey = stored.schemaVersion === 2 ? 'uploadId' : 'messageId';
     const r = this.report(reportId);
+    // §19 Q106 (create_report_version's base version): a newer version is never overwritten.
+    if (baseVersion !== undefined && baseVersion !== r.current_version)
+      throw new CodedError('version_changed', translate('report.editMode.versionChanged'));
     if (!changeNote.trim()) throw new Error(copy.report.edit.changeNoteRequired);
     const pending = r.review_reasons
       .filter((x) => x.startsWith('unknown_company:'))
       .map((x) => x.slice('unknown_company:'.length));
 
     const photoSources = this.data.sources.filter(
-      (s) => s.report_id === r.id && s.kind === 'photo',
+      (s) => s.report_id === r.id && s.kind === 'photo' && sourceMediaId(s),
     );
-    const byMessage = new Map(photoSources.map((s) => [s.message_id.toLowerCase(), s]));
+    const byMedia = new Map(photoSources.map((s) => [sourceMediaId(s)!.toLowerCase(), s]));
     const prevData = this.data.versions.find(
       (v) => v.report_id === r.id && v.version === r.current_version,
-    )?.data as unknown as Partial<DailyReportData> | undefined;
-    const prevList = Array.isArray(prevData?.photos) ? prevData.photos : null;
+    )?.data as unknown as { photos?: unknown } | undefined;
+    const prevList: PhotoEntry[] | null = Array.isArray(prevData?.photos)
+      ? (prevData.photos as PhotoEntry[])
+      : null;
     const prevIds = prevList
-      ? prevList.flatMap((p) => byMessage.get(String(p.messageId).toLowerCase())?.message_id ?? [])
-      : photoSources.map((s) => s.message_id);
-    const listed: Array<Partial<Photo>> = Array.isArray(data.photos)
-      ? data.photos
+      ? prevList.flatMap((p) => {
+          const src = byMedia.get(photoEntryId(p));
+          return src ? [sourceMediaId(src)!] : [];
+        })
+      : photoSources.map((s) => sourceMediaId(s)!);
+    const listed: PhotoEntry[] = Array.isArray(stored.photos)
+      ? (stored.photos as PhotoEntry[])
       : (prevList ??
-        photoSources.map((s) => ({ messageId: s.message_id, caption: s.caption ?? undefined })));
+        photoSources.map((s) => ({
+          uploadId: sourceMediaId(s)!,
+          caption: s.caption ?? undefined,
+        })));
     const seen = new Set<string>();
-    const kept: Photo[] = [];
+    const kept: KeyedPhoto[] = [];
     for (const p of listed) {
-      const key = typeof p?.messageId === 'string' ? p.messageId.toLowerCase() : '';
-      const src = byMessage.get(key);
-      if (!src || seen.has(key)) continue;
-      seen.add(key);
+      const id = photoEntryId(p);
+      const src = byMedia.get(id);
+      if (!src || seen.has(id)) continue;
+      seen.add(id);
       const caption = typeof p.caption === 'string' ? p.caption.trim() : '';
       if (caption.length > PHOTO_CAPTION_MAX) throw new Error('photo caption is too long');
       const recorded = prevList?.find(
-        (x) => String(x.messageId).toLowerCase() === key && typeof x.takenAt === 'string',
+        (x) => photoEntryId(x) === id && typeof x.takenAt === 'string',
       )?.takenAt;
-      const message = this.data.messages.find((m) => m.id === src.message_id);
+      const mediaId = sourceMediaId(src)!;
+      const file =
+        this.data.uploads.find((u) => u.id === mediaId) ??
+        this.data.messages.find((m) => m.id === src.message_id);
+      const fileTime = file && ('received_at' in file ? file.received_at : file.created_at);
       kept.push({
-        messageId: src.message_id,
+        [key]: mediaId,
         ...(caption ? { caption } : {}),
-        takenAt: recorded ?? src.taken_at ?? message?.created_at ?? this.nowIso(),
-      });
+        takenAt: recorded ?? src.taken_at ?? fileTime ?? this.nowIso(),
+      } as KeyedPhoto);
     }
     const uploads = this.checkOfficePhotos(r.org_id, r.site_id, photos);
-    const added = this.insertOfficePhotos(r.id, r.org_id, uploads, userId);
+    const added = this.insertOfficePhotos(r.id, r.site_id, uploads, userId, key);
     const shown = placeOfficePhotos(kept, added, uploads);
-    const ids = shown.map((p) => p.messageId);
+    const ids = shown.map((p) => photoEntryId(p));
 
     const next = this.pushVersion(
       r,
       {
-        ...this.linkTypedCompanies(structuredClone(data), r.id, userId, pending),
+        ...this.linkTypedCompanies(structuredClone(stored), r.id, userId, pending),
         photos: shown,
-      },
+      } as StoredReportData,
       'office_user',
       userId,
       changeNote.trim(),
@@ -584,7 +781,11 @@ export class DemoStore {
           position > 1000)
       )
         throw new Error('invalid photo position');
-      if (seen.has(path) || this.data.messages.some((m) => m.storage_path === path))
+      if (
+        seen.has(path) ||
+        this.data.uploads.some((u) => u.storage_path === path) ||
+        this.data.messages.some((m) => m.storage_path === path)
+      )
         throw new Error('photo already attached');
       if (!this.uploadedPhotos.has(path)) throw new Error('photo not uploaded');
       seen.add(path);
@@ -592,42 +793,56 @@ export class DemoStore {
     });
   }
 
-  /** Each checked upload as an org-level message + photo source; returns its data.photos entry. */
+  /**
+   * Each checked upload as an office upload (no reporter, uploaded_by the user, D14) + a photo
+   * source with its upload_id; returns its data.photos entry, keyed as `key`.
+   */
   private insertOfficePhotos(
     reportId: string,
-    orgId: string,
+    siteId: string,
     uploads: CheckedPhoto[],
     userId: string,
-  ): Photo[] {
+    key: PhotoKey,
+  ): KeyedPhoto[] {
     return uploads.map((u) => {
-      const id = localId('msg');
-      this.data.messages.push({
+      const id = localId('upload');
+      this.data.uploads.push({
         id,
-        conversation_id: null,
-        org_id: orgId,
-        direction: 'in',
-        wa_message_id: null,
-        type: 'image',
-        body: u.caption,
-        payload: { source: 'office_upload', uploaded_by: userId },
-        media_id: null,
-        media_mime: u.mime,
+        report_id: reportId,
+        reporter_id: null,
+        site_id: siteId,
+        kind: 'photo',
         storage_path: u.path,
+        mime: u.mime,
+        bytes: null,
         duration_s: null,
-        template_name: null,
-        status: 'received',
-        error: null,
-        created_at: this.nowIso(),
+        peaks: null,
+        recorded_at: u.takenAt,
+        received_at: this.nowIso(),
+        caption: u.caption,
+        uploaded_by: userId,
+        purged_at: null,
+        batch_id: null,
+        question_id: null,
+        batch_size: null,
+        correction_report_id: null,
       });
       this.data.sources.push({
+        ...V12_ROW_DEFAULTS.report_sources,
         id: localId('src'),
         report_id: reportId,
-        message_id: id,
+        message_id: null,
+        upload_id: id,
         kind: 'photo',
         caption: u.caption,
         taken_at: u.takenAt,
+        created_at: this.nowIso(),
       });
-      return { messageId: id, ...(u.caption ? { caption: u.caption } : {}), takenAt: u.takenAt };
+      return {
+        [key]: id,
+        ...(u.caption ? { caption: u.caption } : {}),
+        takenAt: u.takenAt,
+      } as KeyedPhoto;
     });
   }
 
@@ -638,11 +853,15 @@ export class DemoStore {
     return r ? { reportId: r.id, reportNo: r.report_no } : null;
   }
 
-  /** Mirror of create_office_report(): a report typed in the panel, filed at once as version 1. */
+  /**
+   * Mirror of create_office_report(): a report typed in the panel, filed at once as version 1, in
+   * report data v2 (W1-12: the date, the org's report language and units stamped; v1 data from a
+   * panel built before W1-12 stays v1, as in SQL).
+   */
   createOfficeReport(input: {
     siteId: string;
     date: string;
-    data: DailyReportData;
+    data: StoredReportData;
     userId: string;
     photos?: OfficePhotoUpload[];
   }): { reportId: string; reportNo: string; created: boolean } {
@@ -664,19 +883,35 @@ export class DemoStore {
     const at = this.nowIso();
     const isLate = Date.parse(at) > Date.parse(sd.deadline_at);
     const reportId = localId('report');
+    const v1 = input.data.schemaVersion === 1;
     // Version 1 shows exactly the photos uploaded with it, ordered by their positions.
     const photos = placeOfficePhotos(
       [],
-      this.insertOfficePhotos(reportId, d.org.id, uploads, input.userId),
+      this.insertOfficePhotos(
+        reportId,
+        site.id,
+        uploads,
+        input.userId,
+        v1 ? 'messageId' : 'uploadId',
+      ),
       uploads,
     );
+    const stamped = (
+      v1
+        ? { ...structuredClone(input.data), reportDate: input.date, schemaVersion: 1, photos }
+        : {
+            ...structuredClone(input.data),
+            schemaVersion: 2,
+            reportDate: input.date,
+            reportLanguage: reportLanguageFor(d.org.locale),
+            units: d.org.units,
+            photos,
+          }
+    ) as StoredReportData;
     // Every crew row here was typed by the office: each "Add new…" name becomes a company.
-    const data: DailyReportData = this.linkTypedCompanies(
-      { ...structuredClone(input.data), reportDate: input.date, schemaVersion: 1, photos },
-      reportId,
-      input.userId,
-    );
+    const data = this.linkTypedCompanies(stamped, reportId, input.userId);
     const report: ReportRow = {
+      ...V12_ROW_DEFAULTS.reports,
       id: reportId,
       org_id: d.org.id,
       site_id: site.id,
@@ -696,9 +931,13 @@ export class DemoStore {
       kind: 'daily',
       created_at: at,
       updated_at: at,
+      // As create_office_report: typed in the panel, in the org's report language (D13).
+      channel: 'office',
+      language: reportLanguageFor(d.org.locale),
     };
     d.reports.push(report);
     d.versions.push({
+      ...V12_ROW_DEFAULTS.report_versions,
       report_id: report.id,
       version: 1,
       data: data as unknown as ReportVersionRow['data'],
@@ -775,6 +1014,102 @@ export class DemoStore {
     this.emit({ table: 'site_days', id: sd.id });
   }
 
+  /** "Text today's link" request ids already answered: one tap, one text (api-text-daily-link). */
+  private readonly dailyLinkRequests = new Map<string, TextDailyLinkResult>();
+
+  /**
+   * F17 "Text today's link" (W1-16), as api-text-daily-link does it: the site's primary reporter
+   * (else its first active one), today's daily link in the site's day, and the `daily_link` text
+   * unless they cannot get texts (disabled, opted out, no SMS consent). Audited like the function.
+   */
+  textDailyLink(
+    siteId: string,
+    requestId: string,
+    userId: string,
+    reporterId?: string,
+  ): TextDailyLinkResult {
+    const done = this.dailyLinkRequests.get(requestId);
+    if (done) return done;
+    const d = this.data;
+    const site = d.sites.find((x) => x.id === siteId);
+    if (!site) throw new Error(copy.errors.notFound);
+    if (site.status !== 'active') throw new Error('This site is not active');
+    // As api-text-daily-link's pickReporter: the primary among the active reporters, else the
+    // first active one; nobody linked → 409 no_reporter, nobody active → 409 no_active_reporter.
+    const links = d.siteReporters.filter((sr) => sr.site_id === siteId);
+    const reporters = links
+      .map((sr) => ({ sr, r: d.reporters.find((x) => x.id === sr.reporter_id) }))
+      .filter((x): x is { sr: SiteReporterRow; r: ReporterRow } => !!x.r);
+    if (!reporters.length) {
+      throw new CodedError(
+        'no_reporter' satisfies TextDailyLinkErrorCode,
+        'No site manager is linked to this site',
+      );
+    }
+    const active = reporters.filter((x) => isActiveReporterStatus(x.r.status));
+    // W4-03: Team's row menu names the reporter.
+    const named = reporterId ? reporters.find((x) => x.r.id === reporterId) : undefined;
+    if (reporterId && !named) {
+      throw new CodedError(
+        'reporter_not_linked' satisfies TextDailyLinkErrorCode,
+        'This reporter is not linked to this site',
+      );
+    }
+    if (named && !isActiveReporterStatus(named.r.status)) {
+      throw new CodedError(
+        'reporter_not_active' satisfies TextDailyLinkErrorCode,
+        'This reporter is not active',
+      );
+    }
+    const reporter = named?.r ?? (active.find((x) => x.sr.is_primary) ?? active[0])?.r;
+    if (!reporter) {
+      throw new CodedError(
+        'no_active_reporter' satisfies TextDailyLinkErrorCode,
+        'No active site manager on this site: the linked ones are disabled, opted out or have not accepted their invite yet',
+      );
+    }
+    const date = formatDateInTz(this.now, site.timezone);
+    const sms = d.consents.some(
+      (c) => c.reporter_id === reporter.id && c.type === 'sms' && c.revoked_at === null,
+    );
+    // An active reporter: the Notifier's only refusal left is consent.
+    const reason = sms ? null : ('no_consent' as const);
+    let result: TextDailyLinkResult;
+    if (reason) {
+      result = { sent: false, reason, detail: null };
+    } else {
+      const row = demoDailyLink(d, reporter, site, date, this.nowIso());
+      this.audit({
+        org_id: d.org.id,
+        actor_type: 'system',
+        actor_id: null,
+        action: 'sms.sent',
+        entity: 'message',
+        entity_id: row.id,
+        diff: { copy_key: 'daily_link', provider: 'console' },
+      });
+      result = { sent: true, channel: 'sms' };
+    }
+    this.audit({
+      org_id: d.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'daily_link.texted',
+      entity: 'reporter',
+      entity_id: reporter.id,
+      diff: {
+        site_id: site.id,
+        report_date: date,
+        request_id: requestId,
+        channel: result.sent ? 'sms' : null,
+        ...(result.sent ? {} : { reason: result.reason }),
+      },
+    });
+    this.dailyLinkRequests.set(requestId, result);
+    this.emit({ table: 'all' });
+    return result;
+  }
+
   resolveUnknownCompany(input: ResolveUnknownCompanyInput, userId: string): void {
     const r = this.report(input.reportId);
     const d = this.data;
@@ -826,7 +1161,7 @@ export class DemoStore {
       });
     }
     const cur = d.versions.find((v) => v.report_id === r.id && v.version === r.current_version)!;
-    const data = structuredClone(cur.data as unknown as DailyReportData);
+    const data = structuredClone(cur.data as unknown as DailyReportDataV1);
     const cid = company.id;
     const cname = company.name;
     data.manpower = data.manpower.map((m) =>
@@ -930,7 +1265,34 @@ export class DemoStore {
     this.emit({ table: 'all' });
   }
 
+  /** As `add_glossary_term` (W3-08): the same phrase (any case), kind and scope updates its row. */
   addGlossaryTerm(input: AddGlossaryTermInput, userId: string): void {
+    const heard = input.heard.trim();
+    const scope = input.scopeSiteId ?? null;
+    const existing = this.data.glossary.find(
+      (g) =>
+        g.org_id === this.data.org.id &&
+        g.kind === input.kind &&
+        g.heard.toLocaleLowerCase() === heard.toLocaleLowerCase() &&
+        g.scope_site_id === scope &&
+        g.scope_reporter_id === null,
+    );
+    if (existing) {
+      existing.official = input.official.trim();
+      existing.language = input.language ?? 'en';
+      existing.status = 'confirmed';
+      this.audit({
+        org_id: this.data.org.id,
+        actor_type: 'user',
+        actor_id: userId,
+        action: 'glossary.added',
+        entity: 'glossary_term',
+        entity_id: existing.id,
+        diff: { heard: existing.heard, official: existing.official, existing: true },
+      });
+      this.emit({ table: 'all' });
+      return;
+    }
     const row: GlossaryTermRow = {
       id: localId('term'),
       org_id: this.data.org.id,
@@ -991,8 +1353,9 @@ export class DemoStore {
 
   addInvoice(input: AddInvoiceInput, userId: string): void {
     const total = input.totalHours ?? input.lines.reduce((a, l) => a + l.hours, 0);
+    const id = localId('invoice');
     this.data.invoices.push({
-      id: localId('invoice'),
+      id,
       org_id: this.data.org.id,
       company_id: input.companyId,
       invoice_no: input.invoiceNo,
@@ -1000,11 +1363,12 @@ export class DemoStore {
       period_end: input.periodEnd,
       lines: input.lines,
       total_hours: total,
-      file_path: input.file ? `${this.data.org.id}/invoices/${input.file.name}` : null,
+      file_path: input.file ? invoiceUploadPath(this.data.org.id, input.file.name, id) : null,
       status: 'open',
       queried_at: null,
       resolved_at: null,
       created_at: this.nowIso(),
+      gap_notified: null,
     });
     this.audit({
       org_id: this.data.org.id,
@@ -1015,6 +1379,7 @@ export class DemoStore {
       entity_id: input.companyId,
       diff: { invoice_no: input.invoiceNo, total },
     });
+    this.checkInvoiceGap(id, userId, 'invoice_added');
     this.emit({ table: 'all' });
   }
 
@@ -1036,15 +1401,36 @@ export class DemoStore {
     this.emit({ table: 'all' });
   }
 
+  /**
+   * Team's invite and the setup wizard (as api-invite-reporter): refused without the office's SMS
+   * attestation (owner decision 2026-10-20); its version goes into the `reporter.invited` entry.
+   */
   inviteReporter(input: InviteReporterInput, userId: string): string {
+    if (input.smsAttested !== true) throw new Error(copy.team.invite.attestation_required);
+    return this.addReporter(input, userId, { sms_attestation: INVITE_MESSAGES_ATTESTATION });
+  }
+
+  private addReporter(
+    input: Omit<InviteReporterInput, 'smsAttested'>,
+    userId: string,
+    auditDiff: Record<string, unknown> = {},
+  ): string {
     const id = localId('reporter');
+    // As api-invite-reporter: the first pack locale among the "Speaks" languages, else the pack's.
+    const pack = demoOrgPack(this.data);
     this.data.reporters.push({
+      ...V12_ROW_DEFAULTS.reporters,
       id,
       org_id: this.data.org.id,
       name: input.name.trim(),
       phone_e164: input.phone,
       role: input.role,
       languages: input.languages,
+      locale:
+        input.locale && pack.fieldLocales.includes(input.locale)
+          ? input.locale
+          : (reporterLocaleFor(pack, input.languages) ?? reporterDefaultsFor(pack).locale),
+      contact_pref: input.contactPref ?? 'link',
       status: 'invited',
       invited_at: this.nowIso(),
       verified_at: null,
@@ -1068,39 +1454,156 @@ export class DemoStore {
       action: 'reporter.invited',
       entity: 'reporter',
       entity_id: id,
-      diff: { sites: input.siteIds },
+      diff: { sites: input.siteIds, ...auditDiff },
     });
+    // The worker's send_welcome (F3): a demo org's welcome text lands in the Demo phone.
+    demoWelcome(this.data, this.data.reporters.at(-1)!, input.siteIds[0], this.nowIso());
     this.emit({ table: 'all' });
     return id;
   }
 
+  // ─── Demo phone (/dev/phone, §11.1) ───
+  demoPhone(): DemoPhoneData {
+    return demoPhoneData(this.data);
+  }
+
+  demoPhoneThread(reporterId: string): DemoPhoneMessage[] {
+    return demoPhoneThread(this.data, reporterId);
+  }
+
+  demoPhoneReply(reporterId: string, body: string, channel: 'sms' | 'whatsapp' = 'sms'): void {
+    demoReply(this.data, reporterId, body.trim(), this.nowIso(), channel);
+    this.emit({ table: 'all' });
+  }
+
   linkUnknownSender(input: LinkUnknownSenderInput, userId: string): void {
-    const u = this.data.unknownSenders.find((x) => x.id === input.unknownSenderId);
+    const u = this.data.unknownContacts.find((x) => x.id === input.unknownSenderId);
     if (!u) throw new Error(copy.errors.notFound);
-    const id = this.inviteReporter(
-      {
-        name: input.name,
-        phone: u.phone_e164,
-        role: input.role ?? 'backup',
-        siteIds: [input.siteId],
-        languages: ['en'],
-      },
-      userId,
-    );
+    if (u.status !== 'pending') throw new Error(`This contact was already ${u.status}`);
+    // As api-link-unknown-contact (checkContactLink, W1-16): a number that opted out or whose
+    // reporter is disabled is not linked by the office.
+    const existing = this.data.reporters.find((r) => r.phone_e164 === u.phone_e164);
+    if (existing?.status === 'opted_out' || existing?.status === 'disabled') {
+      throw new Error(copy.errors.notAllowed);
+    }
+    let id: string;
+    if (existing) {
+      // Already a reporter of the org: link the site, keep their status.
+      id = existing.id;
+      if (
+        !this.data.siteReporters.some((sr) => sr.site_id === input.siteId && sr.reporter_id === id)
+      ) {
+        this.data.siteReporters.push({
+          site_id: input.siteId,
+          reporter_id: id,
+          is_primary: !this.data.siteReporters.some(
+            (sr) => sr.site_id === input.siteId && sr.is_primary,
+          ),
+        });
+      }
+      demoWelcome(this.data, existing, input.siteId, this.nowIso());
+    } else {
+      // As api-link-unknown-contact: the person reached TalkOlog first, so no office attestation.
+      id = this.addReporter(
+        {
+          name: input.name,
+          phone: u.phone_e164,
+          role: input.role ?? 'backup',
+          siteIds: [input.siteId],
+          languages: ['en'],
+        },
+        userId,
+      );
+    }
     const r = this.data.reporters.find((x) => x.id === id)!;
-    r.status = 'verified';
-    r.verified_at = this.nowIso();
+    // A WhatsApp-era sender already wrote to us, so it is active; a caller or texter is invited
+    // until their first consent (F3, F13 step 4).
+    if (u.channel === null && !isActiveReporterStatus(r.status)) {
+      r.status = 'active';
+      r.verified_at = this.nowIso();
+      r.activated_at = r.verified_at;
+    }
     u.status = 'linked';
+    u.org_id = this.data.org.id;
+    u.guessed_site_id = input.siteId;
     this.audit({
       org_id: this.data.org.id,
       actor_type: 'user',
       actor_id: userId,
-      action: 'unknown_sender.linked',
-      entity: 'reporter',
-      entity_id: id,
-      diff: { site_id: input.siteId },
+      action: 'unknown_contact.linked',
+      entity: 'unknown_contact',
+      entity_id: u.id,
+      diff: {
+        reporterId: id,
+        siteId: input.siteId,
+        channel: u.channel,
+        consent: u.channel === null ? 'whatsapp' : 'pending',
+      },
     });
-    this.emit({ table: 'unknown_senders', id: u.id });
+    this.emit({ table: 'unknown_contacts', id: u.id });
+  }
+
+  // ─── /ops: org-less unknown contacts (spec §19 Q44, W1-16) ───
+
+  /** As ops_unknown_contacts() and ops_real_orgs(): the demo has no real org to give one to. */
+  orglessContacts(): OrglessContacts {
+    return {
+      contacts: this.data.unknownContacts
+        .filter((u) => u.org_id === null && u.status === 'pending')
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .map((u) => ({
+          id: u.id,
+          phone: u.phone_e164,
+          channel: u.channel,
+          snippet: u.snippet,
+          createdAt: u.created_at,
+        })),
+      orgs: this.data.org.is_demo
+        ? []
+        : [{ id: this.data.org.id, name: this.data.org.name, country: this.data.org.country }],
+    };
+  }
+
+  private orgless(contactId: string) {
+    const u = this.data.unknownContacts.find((x) => x.id === contactId);
+    if (!u) throw new Error(copy.errors.notFound);
+    if (u.org_id !== null || u.status !== 'pending') {
+      throw new Error('only a pending contact with no organisation can be changed here');
+    }
+    return u;
+  }
+
+  assignUnknownContact(contactId: string, orgId: string, userId: string): void {
+    const u = this.orgless(contactId);
+    if (orgId !== this.data.org.id || this.data.org.is_demo) {
+      throw new Error('a demo organisation cannot take a real contact');
+    }
+    u.org_id = orgId;
+    this.audit({
+      org_id: orgId,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'ops.unknown_contact_assigned',
+      entity: 'unknown_contact',
+      entity_id: u.id,
+      diff: { channel: u.channel },
+    });
+    this.emit({ table: 'unknown_contacts', id: u.id });
+  }
+
+  ignoreOrglessContact(contactId: string, userId: string): void {
+    const u = this.orgless(contactId);
+    u.status = 'ignored';
+    this.audit({
+      org_id: null,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'ops.unknown_contact_ignored',
+      entity: 'unknown_contact',
+      entity_id: u.id,
+      diff: { channel: u.channel },
+    });
+    this.emit({ table: 'unknown_contacts', id: u.id });
   }
 
   setReporterStatus(reporterId: string, status: ReporterStatus, userId: string): void {
@@ -1139,6 +1642,360 @@ export class DemoStore {
       diff: null,
     });
     this.emit({ table: 'all' });
+  }
+
+  // ─── Team on v1.2 (W4-03): mirrors of 20261017000420_team_v1_2.sql ───
+
+  /**
+   * The demo's signed-in phones (F16): one per reporter who consented on it (the §18 consents
+   * stand for the first open), until Team revokes them. Not part of the §18 rows.
+   */
+  private readonly revokedDevices = new Set<string>();
+  /** Phone-level opt-outs (`sms_opt_outs.method`) this session knows of; tests set them. */
+  readonly smsOptOuts = new Map<string, 'sms_keyword' | 'provider_opt_out'>();
+
+  private devicesOf(reporterId: string): number {
+    if (this.revokedDevices.has(reporterId)) return 0;
+    return this.data.consents.some(
+      (c) => c.reporter_id === reporterId && c.type === 'recording' && c.revoked_at === null,
+    )
+      ? 1
+      : 0;
+  }
+
+  /** What team_reporter_states() answers, from the demo's rows. */
+  teamStates(): TeamReporterState[] {
+    const d = this.data;
+    return d.reporters.map((r) => {
+      const welcomes = d.messages
+        .filter((m) => m.reporter_id === r.id && m.copy_key === 'welcome' && m.direction === 'out')
+        .sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
+      const latest = welcomes.at(-1);
+      const keyOf = (m: { payload: unknown }) =>
+        ((m.payload as { dedupe_key?: unknown } | null)?.dedupe_key as string | undefined) ?? null;
+      const key = latest ? keyOf(latest) : null;
+      const attempts = latest
+        ? welcomes.filter((m) => m === latest || (key !== null && keyOf(m) === key))
+        : [];
+      // A STOP on the Demo phone is audited as the reporter with its method (demoReply).
+      const stop = d.audit
+        .filter((a) => a.entity_id === r.id && a.action === 'reporter.opted_out')
+        .at(-1);
+      const audited = (stop?.diff as { method?: string } | null)?.method;
+      const method =
+        this.smsOptOuts.get(r.phone_e164) ??
+        (r.status === 'opted_out' && audited === 'provider_opt_out'
+          ? 'provider_opt_out'
+          : r.status === 'opted_out' && audited === 'sms_keyword'
+            ? 'sms_keyword'
+            : null);
+      return {
+        reporterId: r.id,
+        optOutMethod: method,
+        devices: this.devicesOf(r.id),
+        consents: [
+          ...new Set(
+            d.consents
+              .filter((c) => c.reporter_id === r.id && c.revoked_at === null)
+              .map((c) => c.type as string),
+          ),
+        ].sort(),
+        welcome: attempts.map((m) => ({
+          status: m.status,
+          channel: m.channel,
+          provider_message_id: m.provider_message_id,
+          attempt: attemptNumber(m.payload),
+          dedupe_key: keyOf(m),
+        })),
+      };
+    });
+  }
+
+  /** update_reporter_contact(): preference, channel, language; the attestation for the first two. */
+  updateReporterContact(input: UpdateReporterContactInput, userId: string): { changed: boolean } {
+    const r = this.data.reporters.find((x) => x.id === input.reporterId);
+    if (!r) throw new Error(copy.errors.notFound);
+    const pack = demoOrgPack(this.data);
+    if (!pack.fieldLocales.includes(input.locale))
+      throw new CodedError('locale_not_offered', 'locale_not_offered');
+    if (
+      input.messageChannel !== null &&
+      !settingsMessageChannels(pack).includes(input.messageChannel)
+    )
+      throw new CodedError('channel_not_offered', 'channel_not_offered');
+    const from: Record<string, string | null> = {};
+    const to: Record<string, string | null> = {};
+    if (r.contact_pref !== input.contactPref) {
+      from.contact_pref = r.contact_pref;
+      to.contact_pref = input.contactPref;
+    }
+    if (r.message_channel !== input.messageChannel) {
+      from.message_channel = r.message_channel;
+      to.message_channel = input.messageChannel;
+    }
+    if (Object.keys(to).length && !input.attested)
+      throw new CodedError('attestation_required', 'attestation_required');
+    if (r.locale !== input.locale) {
+      from.locale = r.locale;
+      to.locale = input.locale;
+    }
+    if (!Object.keys(to).length) return { changed: false };
+    r.contact_pref = input.contactPref;
+    r.message_channel = input.messageChannel;
+    r.locale = input.locale;
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'reporter.preferences_changed',
+      entity: 'reporter',
+      entity_id: r.id,
+      diff: { from, to, via: 'office', attested: input.attested },
+    });
+    this.emit({ table: 'all' });
+    return { changed: true };
+  }
+
+  /** revoke_reporter_devices() (§19 Q244): consents and the personal link stay. */
+  revokeReporterDevices(reporterId: string, userId: string): { devices: number } {
+    const r = this.data.reporters.find((x) => x.id === reporterId);
+    if (!r) throw new Error(copy.errors.notFound);
+    const devices = this.devicesOf(r.id);
+    this.revokedDevices.add(r.id);
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'device.revoked',
+      entity: 'reporter',
+      entity_id: r.id,
+      diff: { via: 'office', devices, push_subscriptions: 0 },
+    });
+    this.emit({ table: 'all' });
+    return { devices };
+  }
+
+  /** clear_reporter_opt_out() (§19 Q242): an admin, one-way packs, a provider's opt-out only. */
+  clearReporterOptOut(reporterId: string, attested: boolean, userId: string): void {
+    const r = this.data.reporters.find((x) => x.id === reporterId);
+    if (!r) throw new Error(copy.errors.notFound);
+    if (demoOrgPack(this.data).twoWaySms) throw new CodedError('two_way_pack', 'two_way_pack');
+    if (!attested) throw new CodedError('attestation_required', 'attestation_required');
+    const method = this.teamStates().find((x) => x.reporterId === r.id)?.optOutMethod ?? null;
+    if (method === 'sms_keyword')
+      throw new CodedError('opted_out_by_person', 'opted_out_by_person');
+    if (method === null && r.status !== 'opted_out' && r.opted_out_at === null)
+      throw new CodedError('not_opted_out', 'not_opted_out');
+    this.smsOptOuts.delete(r.phone_e164);
+    const from = r.status;
+    if (r.status === 'opted_out') r.status = r.activated_at ? 'active' : 'invited';
+    r.opted_out_at = null;
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'reporter.opt_out_cleared',
+      entity: 'reporter',
+      entity_id: r.id,
+      diff: { via: 'office', method: method ?? 'provider_opt_out', status: { from, to: r.status } },
+    });
+    if (
+      !this.data.consents.some(
+        (c) => c.reporter_id === r.id && c.type === 'sms' && c.revoked_at === null,
+      )
+    ) {
+      const id = localId('consent');
+      this.data.consents.push({
+        id,
+        reporter_id: r.id,
+        type: 'sms',
+        method: 'office_attested',
+        text_version: 'team.texts_again.v1',
+        evidence: { user_id: userId, via: 'office', at: this.nowIso() },
+        given_at: this.nowIso(),
+        revoked_at: null,
+      });
+      this.audit({
+        org_id: this.data.org.id,
+        actor_type: 'user',
+        actor_id: userId,
+        action: 'consent.given',
+        entity: 'consent',
+        entity_id: id,
+        diff: { type: 'sms', method: 'office_attested', via: 'office', reporter_id: r.id },
+      });
+    }
+    this.emit({ table: 'all' });
+  }
+
+  /**
+   * Mirror of office_call_start() (20261017000500, W4-04, §19 Q230): the guards in its order, the
+   * attestation as an `auto_call` consent `office_attested`, the call row, both audited. A demo
+   * org's call is the console's: it rings the Demo phone at once and, unanswered, ends
+   * `no_answer` / `not_reached` after OFFICE_RING_MS, with no text (no `missed_call`).
+   */
+  officeCallNow(input: OfficeCallNowInput, userId: string): { callId: string } {
+    const d = this.data;
+    const r = d.reporters.find((x) => x.id === input.reporterId);
+    if (!r) throw new Error(copy.errors.notFound);
+    const site = d.sites.find((x) => x.id === input.siteId);
+    if (!site || !d.siteReporters.some((sr) => sr.site_id === site.id && sr.reporter_id === r.id))
+      throw new Error(copy.errors.notFound);
+    const refuse = (reason: string) => {
+      throw new CodedError(reason, reason);
+    };
+    const now = this.now;
+    if (!input.attested) refuse('attestation_required');
+    if (r.status === 'disabled' || r.status === 'opted_out') refuse('reporter_inactive');
+    const own = d.consents
+      .filter(
+        (c) => c.reporter_id === r.id && c.type === 'auto_call' && c.method !== 'office_attested',
+      )
+      .sort((a, b) => (a.given_at < b.given_at ? 1 : -1))[0];
+    if (own?.revoked_at) refuse('calls_turned_off');
+    if (r.no_calls_until && Date.parse(r.no_calls_until) > now.getTime()) refuse('no_calls_today');
+    if (site.status !== 'active') refuse('site_not_active');
+    const window = {
+      start: d.settings.call_window_start ?? DEFAULT_CALL_WINDOW.start,
+      end: d.settings.call_window_end ?? DEFAULT_CALL_WINDOW.end,
+    };
+    if (!insideWindow(now, site.timezone, window)) refuse('outside_window');
+    const today = formatDateInTz(now, site.timezone);
+    const day = d.siteDays.find((x) => x.site_id === site.id && x.date === today);
+    if (
+      day &&
+      (['filed', 'weather_day', 'no_work'].includes(day.status) ||
+        d.reports.some(
+          (x) => x.site_day_id === day.id && (x.status === 'filed' || x.status === 'signed_off'),
+        ))
+    )
+      refuse('day_filed');
+    if (
+      d.calls.some(
+        (c) =>
+          c.reporter_id === r.id &&
+          !c.ended_at &&
+          ['queued', 'ringing', 'in_progress'].includes(c.status),
+      )
+    )
+      refuse('call_live');
+    const n = d.calls.filter(
+      (c) =>
+        c.reporter_id === r.id &&
+        c.site_id === site.id &&
+        c.direction === 'outbound' &&
+        c.purpose === 'daily_report' &&
+        c.created_at !== null &&
+        formatDateInTz(new Date(c.created_at), site.timezone) === today,
+    ).length;
+    if (n >= OFFICE_CALL_POLICY.maxPerDay) refuse('limit_reached');
+
+    const callId = localId('call');
+    const consentId = localId('consent');
+    d.consents.push({
+      id: consentId,
+      reporter_id: r.id,
+      type: 'auto_call',
+      method: 'office_attested',
+      text_version: OFFICE_CALL_POLICY.attestVersion,
+      evidence: { user_id: userId, via: 'office', at: this.nowIso(), call_id: callId },
+      given_at: this.nowIso(),
+      revoked_at: null,
+    });
+    this.audit({
+      org_id: d.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'consent.given',
+      entity: 'consent',
+      entity_id: consentId,
+      diff: {
+        type: 'auto_call',
+        method: 'office_attested',
+        text_version: OFFICE_CALL_POLICY.attestVersion,
+        via: 'office',
+        reporter_id: r.id,
+        call_id: callId,
+      },
+    });
+    d.calls.push({
+      id: callId,
+      org_id: d.org.id,
+      reporter_id: r.id,
+      site_id: site.id,
+      report_id: null,
+      direction: 'outbound',
+      transport: 'pstn',
+      purpose: 'daily_report',
+      provider_call_id: `call-${callId}`,
+      from_e164: demoOrgPack(d).voiceNumber,
+      to_e164: r.phone_e164,
+      // The console telephony rings the Demo phone at once (§19 Q132).
+      status: 'ringing',
+      outcome: null,
+      disclosure_played: false,
+      disclosure_version: null,
+      started_at: this.nowIso(),
+      answered_at: null,
+      ended_at: null,
+      duration_s: null,
+      recording_path: null,
+      peaks: null,
+      dialog_log: null,
+      metrics: { telephony: 'console', stage: 'office', via: 'office', requested_by: userId },
+      created_at: this.nowIso(),
+      language: r.locale,
+      call_token_issued_at: null,
+      attempt: null,
+      site_day_id: day?.id ?? null,
+      fallback: null,
+      reconcile: null,
+      consent_declined_at: null,
+    });
+    this.audit({
+      org_id: d.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'call.requested',
+      entity: 'call',
+      entity_id: callId,
+      diff: {
+        direction: 'outbound',
+        purpose: 'daily_report',
+        stage: 'office',
+        via: 'office',
+        office_call: n + 1,
+        telephony: 'console',
+        site_id: site.id,
+        reporter_id: r.id,
+      },
+    });
+    this.emit({ table: 'all' });
+    const t = setTimeout(() => {
+      const c = this.data.calls.find((x) => x.id === callId);
+      if (!c || c.ended_at || c.status !== 'ringing') return;
+      c.status = 'no_answer';
+      c.outcome = 'not_reached';
+      c.ended_at = this.nowIso();
+      c.duration_s = 0;
+      this.audit({
+        org_id: d.org.id,
+        actor_type: 'system',
+        actor_id: null,
+        action: 'call.ended',
+        entity: 'call',
+        entity_id: callId,
+        diff: {
+          outcome: 'not_reached',
+          status: 'no_answer',
+          direction: 'outbound',
+          stage: 'office',
+        },
+      });
+      this.emit({ table: 'all' });
+    }, OFFICE_RING_MS);
+    this.timers.push(t);
+    return { callId };
   }
 
   /** Mirror of update_reporter() (20261012000001_web_gaps.sql). The phone never changes. */
@@ -1211,6 +2068,9 @@ export class DemoStore {
       timezone: input.timezone.trim() || org.timezone,
       address: input.address?.trim() || null,
       license_no: input.licenseNo?.trim() || null,
+      // W4-05 (§19 Q233): the report language and units, unchanged when not given.
+      locale: input.locale ?? org.locale,
+      units: input.units ?? org.units,
     };
     const diff: Record<string, { from: string | null; to: string | null }> = {};
     for (const key of Object.keys(next) as Array<keyof typeof next>) {
@@ -1228,6 +2088,77 @@ export class DemoStore {
       diff,
     });
     this.emit({ table: 'all' });
+  }
+
+  /**
+   * api-test-message for a demo org (§19 Q232): `console`, nothing sent; five an hour per org,
+   * each audited `settings.test_message` with the number masked, as the Supabase path.
+   */
+  sendTestMessage(input: SendTestMessageInput, userId: string): SendTestMessageResult {
+    const org = this.data.org;
+    const now = Date.parse(this.nowIso());
+    const recent = this.data.audit.filter(
+      (a) =>
+        a.org_id === org.id &&
+        a.action === 'settings.test_message' &&
+        now - Date.parse(a.created_at) < 3_600_000,
+    );
+    if (recent.length >= 5) throw new CodedError('rate_limited', 'rate_limited');
+    const digits = input.phone.replace(/\D/g, '');
+    if (digits.length < 7) throw new CodedError('invalid_phone', 'invalid_phone');
+    this.audit({
+      org_id: org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'settings.test_message',
+      entity: 'org',
+      entity_id: org.id,
+      diff: {
+        to: `+${digits.slice(0, 4)}***${digits.slice(-3)}`,
+        driver: 'console',
+        language: input.language,
+      },
+    });
+    this.emit({ table: 'all' });
+    return { outcome: 'console', reason: 'demo' };
+  }
+
+  /**
+   * settings_test_call_start() for the in-memory demo (§19 Q232, Q350): a demo org's test call is
+   * the console's, so nothing rings and no call row is kept here; five an hour per org, each
+   * audited `settings.test_call` with the number masked, as the Supabase path.
+   */
+  callMeNow(input: CallMeNowInput, userId: string): CallMeNowResult {
+    const org = this.data.org;
+    if (!/^\+[1-9]\d{6,14}$/.test(input.phone))
+      throw new CodedError('invalid_phone', 'invalid_phone');
+    const now = Date.parse(this.nowIso());
+    const recent = this.data.audit.filter(
+      (a) =>
+        a.org_id === org.id &&
+        a.action === 'settings.test_call' &&
+        now - Date.parse(a.created_at) < 3_600_000,
+    );
+    if (recent.length >= SETTINGS_TEST_CALL_POLICY.maxPerHour)
+      throw new CodedError('rate_limited', 'rate_limited');
+    const digits = input.phone.replace(/\D/g, '');
+    const callId = localId('call');
+    this.audit({
+      org_id: org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'settings.test_call',
+      entity: 'org',
+      entity_id: org.id,
+      diff: {
+        to: `+${digits.slice(0, 4)}***${digits.slice(-3)}`,
+        telephony: 'console',
+        language: input.language,
+        call_id: callId,
+      },
+    });
+    this.emit({ table: 'all' });
+    return { callId, telephony: 'console' };
   }
 
   setLogo(file: { url: string; ext: 'png' | 'svg' } | null, userId: string): void {
@@ -1249,22 +2180,25 @@ export class DemoStore {
   }
 
   ignoreUnknownSender(id: string, userId: string): void {
-    const u = this.data.unknownSenders.find((x) => x.id === id);
+    const u = this.data.unknownContacts.find((x) => x.id === id);
     if (!u) throw new Error(copy.errors.notFound);
     u.status = 'ignored';
     this.audit({
       org_id: this.data.org.id,
       actor_type: 'user',
       actor_id: userId,
-      action: 'unknown_sender.ignored',
-      entity: 'unknown_sender',
+      action: 'unknown_contact.ignored',
+      entity: 'unknown_contact',
       entity_id: id,
       diff: null,
     });
-    this.emit({ table: 'unknown_senders', id });
+    this.emit({ table: 'unknown_contacts', id });
   }
 
-  addOfficeUser(input: { email: string; role: MemberRole; name?: string }, userId: string): void {
+  addOfficeUser(
+    input: { email: string; role: MemberRole; name?: string; uiLocale?: OrgLocale | null },
+    userId: string,
+  ): void {
     const id = localId('user');
     this.data.users.push({
       id,
@@ -1274,12 +2208,14 @@ export class DemoStore {
       role: input.role,
     });
     this.data.members.push({
+      ...V12_ROW_DEFAULTS.org_members,
       org_id: this.data.org.id,
       user_id: id,
       role: input.role,
       display_name: input.name ?? input.email,
       title: null,
       created_at: this.nowIso(),
+      ui_locale: input.uiLocale ?? null,
     });
     this.audit({
       org_id: this.data.org.id,
@@ -1288,7 +2224,7 @@ export class DemoStore {
       action: 'member.invited',
       entity: 'org',
       entity_id: this.data.org.id,
-      diff: { email: input.email, role: input.role },
+      diff: { email: input.email, role: input.role, ui_locale: input.uiLocale ?? null },
     });
     this.emit({ table: 'all' });
   }
@@ -1336,6 +2272,10 @@ export class DemoStore {
   }
 
   createSite(input: CreateSiteInput, userId: string): string {
+    // Checked before the site exists, so a refused manager invite never leaves half a site.
+    if (input.reporter && input.reporter.smsAttested !== true) {
+      throw new Error(copy.team.invite.attestation_required);
+    }
     const id = localId('site');
     const today = formatDateInTz(this.now, input.timezone);
     this.data.sites.push({
@@ -1408,6 +2348,63 @@ export class DemoStore {
     this.emit({ table: 'all' });
   }
 
+  /** /ops (W4-10): `ops_org_billing()` over the store's one org. */
+  opsOrgBilling(): OpsOrgBilling[] {
+    const o = this.data.org;
+    return [
+      {
+        orgId: o.id,
+        orgName: o.name,
+        country: o.country,
+        isDemo: o.is_demo,
+        provider: billingProviderOf(o),
+        status: o.billing_status,
+        trialEndsAt: o.trial_ends_at,
+        hasSubscription: o.billing_subscription_id !== null,
+        price: billingPrice(o),
+        activeSites: this.data.sites.filter((s) => s.status === 'active').length,
+      },
+    ];
+  }
+
+  /** `ops_set_org_price()` (§19 Q234): staff set or clear an org's price, audited. */
+  setOrgPrice(orgId: string, price: BillingPrice | null, userId: string): void {
+    const o = this.data.org;
+    if (orgId !== o.id) throw new Error(copy.errors.notFound);
+    const from = billingPrice(o);
+    o.price_per_site_minor = price?.minor ?? null;
+    o.price_currency = price?.currency ?? null;
+    this.audit({
+      org_id: o.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'billing.price_set',
+      entity: 'org',
+      entity_id: o.id,
+      diff: { from, to: price, via: 'ops' } as unknown as AuditLogRow['diff'],
+    });
+    this.emit({ table: 'all' });
+  }
+
+  /** `ops_set_org_billing_status()` (§19 Q236): a manual org's status, audited; Stripe's refused. */
+  setOrgBillingStatus(orgId: string, status: BillingStatus, userId: string): void {
+    const o = this.data.org;
+    if (orgId !== o.id) throw new Error(copy.errors.notFound);
+    if (billingProviderOf(o) !== 'manual') throw new Error('a Stripe org’s status follows Stripe');
+    const from = o.billing_status;
+    o.billing_status = status;
+    this.audit({
+      org_id: o.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'billing.status_changed',
+      entity: 'org',
+      entity_id: o.id,
+      diff: { from, to: status, via: 'ops' },
+    });
+    this.emit({ table: 'all' });
+  }
+
   requestEvidencePack(input: RequestEvidencePackInput, userId: string): string {
     const id = localId('pack');
     const site = input.siteId ? this.site(input.siteId) : null;
@@ -1440,13 +2437,24 @@ export class DemoStore {
       if (!p) return;
       p.status = 'ready';
       p.ready_at = this.nowIso();
-      p.pdf_path = `${this.data.org.id}/${input.siteId ?? 'all'}/eot_${input.periodStart}_${input.periodEnd}.pdf`;
+      p.pdf_path = evidencePackStoragePath(
+        this.data.org.id,
+        input.siteId ?? 'all',
+        input.periodStart,
+        input.periodEnd,
+        id,
+      );
       this.notify({
         user_id: userId,
         kind: 'pack_ready',
         title: `EOT evidence pack ready — ${site?.name ?? copy.hours.allSites}`,
         body: null,
         target_path: '/weather',
+        data: noticeData('pack_ready', {
+          site: site?.name ?? null,
+          from: input.periodStart,
+          to: input.periodEnd,
+        }),
       });
       this.emit({ table: 'evidence_packs', id });
     }, 1500);
@@ -1477,8 +2485,8 @@ export class DemoStore {
     const reportId = localId('report');
     site.report_seq += 1;
     const reportNo = formatReportNo(site.project_code, site.report_seq);
-    const data: DailyReportData = {
-      ...emptyReportData(today),
+    const data: DailyReportDataV1 = {
+      ...emptyReportDataV1(today),
       languageDetected: ['en'],
       summary:
         'Framing continued at Units 1–4 with 6 on site (48 h). Roof trusses set on Unit 2; backfill at the north trench completed. Dry all day. No incidents reported.',
@@ -1535,6 +2543,7 @@ export class DemoStore {
     };
     if (convo) {
       const msg: MessageRow = {
+        ...V12_ROW_DEFAULTS.messages,
         id: audioId,
         conversation_id: convo.id,
         org_id: null,
@@ -1559,6 +2568,7 @@ export class DemoStore {
       };
       d.messages.push(msg);
       d.transcripts.push({
+        ...V12_ROW_DEFAULTS.transcripts,
         id: localId('transcript'),
         message_id: audioId,
         language: 'en',
@@ -1574,6 +2584,7 @@ export class DemoStore {
         created_at: receivedAt,
       });
       d.sources.push({
+        ...V12_ROW_DEFAULTS.report_sources,
         id: localId('src'),
         report_id: reportId,
         message_id: audioId,
@@ -1583,6 +2594,7 @@ export class DemoStore {
       });
     }
     const report: ReportRow = {
+      ...V12_ROW_DEFAULTS.reports,
       id: reportId,
       org_id: d.org.id,
       site_id: site.id,
@@ -1605,6 +2617,7 @@ export class DemoStore {
     };
     d.reports.push(report);
     d.versions.push({
+      ...V12_ROW_DEFAULTS.report_versions,
       report_id: reportId,
       version: 1,
       data: data as unknown as ReportVersionRow['data'],
@@ -1639,6 +2652,12 @@ export class DemoStore {
       title: `${site.name} — late report in`,
       body: `${reportNo} · ${totals.crewOnSite} on site · ${totals.totalHours} h`,
       target_path: `/reports/${reportId}`,
+      data: noticeData('late_report', {
+        site: site.name,
+        reportNo,
+        crew: totals.crewOnSite,
+        hours: totals.totalHours,
+      }),
     });
     const missingNotif = d.notifications.find(
       (n) => n.kind === 'missing_report' && !n.read_at && n.title.startsWith(site.name),
@@ -1747,6 +2766,13 @@ export class DemoStore {
     d.notifications = d.notifications.filter(
       (n) => !removed.some((r) => n.target_path === `/reports/${r.id}`),
     );
+    // The day's recorder files and their transcripts go with the reports; a call stays, unlinked.
+    const goneUploads = new Set(
+      d.uploads.filter((u) => u.report_id && ids.has(u.report_id)).map((u) => u.id),
+    );
+    d.uploads = d.uploads.filter((u) => !goneUploads.has(u.id));
+    d.transcripts = d.transcripts.filter((t) => !(t.upload_id && goneUploads.has(t.upload_id)));
+    for (const c of d.calls) if (c.report_id && ids.has(c.report_id)) c.report_id = null;
     const convo = d.conversations.find((c) => c.reporter_id === reporterId);
     if (convo) {
       const gone = new Set(
@@ -1760,7 +2786,7 @@ export class DemoStore {
           .map((m) => m.id),
       );
       d.messages = d.messages.filter((m) => !gone.has(m.id));
-      d.transcripts = d.transcripts.filter((t) => !gone.has(t.message_id));
+      d.transcripts = d.transcripts.filter((t) => !(t.message_id && gone.has(t.message_id)));
     }
     site.report_seq = info.reportSeqAfterReset;
     sd.status = info.statusAfterReset;
@@ -1786,6 +2812,7 @@ export class DemoStore {
     if (!convo) return;
     for (const m of messages) {
       this.data.messages.push({
+        ...V12_ROW_DEFAULTS.messages,
         id: m.id,
         conversation_id: convo.id,
         org_id: null,
@@ -1805,6 +2832,7 @@ export class DemoStore {
       });
       if (m.transcript) {
         this.data.transcripts.push({
+          ...V12_ROW_DEFAULTS.transcripts,
           id: localId('transcript'),
           message_id: m.id,
           language: m.transcript.language,
@@ -1830,7 +2858,9 @@ export class DemoStore {
     );
     if (gone.size === 0) return;
     this.data.messages = this.data.messages.filter((m) => !gone.has(m.id));
-    this.data.transcripts = this.data.transcripts.filter((t) => !gone.has(t.message_id));
+    this.data.transcripts = this.data.transcripts.filter(
+      (t) => !(t.message_id && gone.has(t.message_id)),
+    );
   }
 
   /** §F5 step 1: report row (collecting) with the site's next number. */
@@ -1847,6 +2877,7 @@ export class DemoStore {
     const seq = Number(input.reportNo.slice(site.project_code.length + 1));
     if (Number.isInteger(seq)) site.report_seq = Math.max(site.report_seq, seq);
     this.data.reports.push({
+      ...V12_ROW_DEFAULTS.reports,
       id: input.id,
       org_id: this.data.org.id,
       site_id: site.id,
@@ -1893,7 +2924,7 @@ export class DemoStore {
   /** storeDraft: the working draft lives in version 1 until filing freezes it. */
   storeFieldDraft(input: {
     reportId: string;
-    data: DailyReportData;
+    data: DailyReportDataV1;
     messageId: string | null;
     at: string;
   }): void {
@@ -1904,6 +2935,7 @@ export class DemoStore {
     const existing = d.versions.find((v) => v.report_id === r.id && v.version === 1);
     d.versions = d.versions.filter((v) => !(v.report_id === r.id && v.version === 1));
     d.versions.push({
+      ...V12_ROW_DEFAULTS.report_versions,
       report_id: r.id,
       version: 1,
       data: data as unknown as ReportVersionRow['data'],
@@ -1998,6 +3030,7 @@ export class DemoStore {
     r.kind = input.kind;
     d.versions = d.versions.filter((v) => !(v.report_id === r.id && v.version === 1));
     d.versions.push({
+      ...V12_ROW_DEFAULTS.report_versions,
       report_id: r.id,
       version: 1,
       data: data as unknown as ReportVersionRow['data'],
@@ -2012,6 +3045,7 @@ export class DemoStore {
     d.sources = d.sources.filter((s) => s.report_id !== r.id);
     input.sources.forEach((s, i) =>
       d.sources.push({
+        ...V12_ROW_DEFAULTS.report_sources,
         id: `${r.id}-s${i + 1}`,
         report_id: r.id,
         message_id: s.messageId,
@@ -2023,6 +3057,7 @@ export class DemoStore {
     d.questions = d.questions.filter((q) => q.report_id !== r.id);
     for (const q of input.questions) {
       d.questions.push({
+        ...V12_ROW_DEFAULTS.questions,
         id: q.id,
         report_id: r.id,
         field: q.field,
@@ -2076,6 +3111,7 @@ export class DemoStore {
         title: `${r.report_no} needs review`,
         body: input.reasons.join(', '),
         target_path: `/reports/${r.id}`,
+        data: noticeData('needs_review', { reportNo: r.report_no, reasons: input.reasons }),
       });
     }
     if (input.kind !== 'no_work' || d.settings.no_work_pdf) this.pdfRendered(r, 1, input.at);
@@ -2094,6 +3130,7 @@ export class DemoStore {
     const site = this.site(r.site_id);
     const data = structuredClone(input.data);
     d.versions.push({
+      ...V12_ROW_DEFAULTS.report_versions,
       report_id: r.id,
       version: input.version,
       data: data as unknown as ReportVersionRow['data'],
@@ -2107,6 +3144,7 @@ export class DemoStore {
     });
     if (input.source) {
       d.sources.push({
+        ...V12_ROW_DEFAULTS.report_sources,
         id: `${r.id}-s${d.sources.filter((s) => s.report_id === r.id).length + 1}`,
         report_id: r.id,
         message_id: input.source.messageId,
@@ -2124,8 +3162,8 @@ export class DemoStore {
     this.denormalize(r, input.version, data);
     this.audit({
       org_id: d.org.id,
-      actor_type: input.author === 'reporter_reply' ? 'reporter' : 'agent',
-      actor_id: input.author === 'reporter_reply' ? r.reporter_id : null,
+      actor_type: input.author === 'reporter' ? 'reporter' : 'agent',
+      actor_id: input.author === 'reporter' ? r.reporter_id : null,
       action: 'report.version_created',
       entity: 'report',
       entity_id: r.id,
@@ -2214,7 +3252,7 @@ export interface FieldSourceInput {
 export interface FieldFileInput {
   reportId: string;
   kind: 'daily' | 'weather_day' | 'no_work';
-  data: DailyReportData;
+  data: DailyReportDataV1;
   trigger: 'confirm' | 'weather_day' | 'no_work';
   reasons: string[];
   at: string;
@@ -2237,8 +3275,8 @@ export interface FieldFileInput {
 export interface FieldVersionInput {
   reportId: string;
   version: number;
-  data: DailyReportData;
-  author: 'agent' | 'reporter_reply';
+  data: DailyReportDataV1;
+  author: 'agent' | 'reporter';
   changeNote: string;
   messageId: string | null;
   source: FieldSourceInput | null;

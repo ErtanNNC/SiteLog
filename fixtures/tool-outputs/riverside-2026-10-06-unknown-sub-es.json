@@ -1,7 +1,10 @@
 {
   "languageDetected": ["es"],
   "summary": "Apex Concrete continued formwork for the Level 4 elevated slab. A new crew, Ramírez (4 workers), patched the Level 3 columns until 12:00. BrightLine Electric worked on Level 3 and Delta Mechanical on Level 2. Dry; no weather impact. Toolbox talk on fall protection at slab edges; no incidents.",
-  "weather": { "conditionsText": "Dry, no weather impact", "periods": [] },
+  "weather": {
+    "conditionsText": "Dry, no weather impact",
+    "periods": []
+  },
   "manpower": [
     {
       "companyId": "00000000-0000-4000-8000-00000000d001",
@@ -16,8 +19,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "type": "voice_note",
+          "uploadId": "e0000022-0000-4000-8000-000000002201",
           "start": 6,
           "end": 14.5
         }
@@ -36,8 +39,8 @@
       "confidence": 0.85,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "type": "voice_note",
+          "uploadId": "e0000022-0000-4000-8000-000000002201",
           "start": 14.5,
           "end": 22
         }
@@ -56,8 +59,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "type": "voice_note",
+          "uploadId": "e0000022-0000-4000-8000-000000002201",
           "start": 22,
           "end": 29
         }
@@ -76,8 +79,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "type": "voice_note",
+          "uploadId": "e0000022-0000-4000-8000-000000002201",
           "start": 22,
           "end": 29
         }
@@ -96,8 +99,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "type": "voice_note",
+          "uploadId": "e0000022-0000-4000-8000-000000002201",
           "start": 29,
           "end": 35
         }
@@ -111,8 +114,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "type": "voice_note",
+          "uploadId": "e0000022-0000-4000-8000-000000002201",
           "start": 6,
           "end": 14.5
         }
@@ -124,8 +127,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "type": "voice_note",
+          "uploadId": "e0000022-0000-4000-8000-000000002201",
           "start": 14.5,
           "end": 22
         }
@@ -137,8 +140,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "type": "voice_note",
+          "uploadId": "e0000022-0000-4000-8000-000000002201",
           "start": 29,
           "end": 35
         }
@@ -154,8 +157,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000022-0000-4000-8000-000000002201",
+        "type": "voice_note",
+        "uploadId": "e0000022-0000-4000-8000-000000002201",
         "start": 35,
         "end": 41.5
       }
@@ -166,20 +169,26 @@
   "newTerms": [
     {
       "heard": "los de Ramírez",
+      "heardLanguage": "es",
       "proposedOfficial": "Ramírez",
       "kind": "company",
       "confidence": 0.8
     },
-    { "heard": "cimbra", "proposedOfficial": "Formwork", "kind": "term", "confidence": 0.85 }
+    {
+      "heard": "cimbra",
+      "heardLanguage": "es",
+      "proposedOfficial": "Formwork",
+      "kind": "term",
+      "confidence": 0.85
+    }
   ],
   "missingRequired": [],
   "lowConfidence": [],
   "proposedQuestions": [
     {
-      "field": "company.unknown",
+      "field": "company.unknown:Ramírez",
       "question": "I heard \"los de Ramírez\" — is that a new subcontractor?",
-      "options": ["Add \"Ramírez\""],
-      "target": { "companyNameHeard": "los de Ramírez", "manpowerIndex": 1 }
+      "options": ["Add \"Ramírez\""]
     }
   ]
 }

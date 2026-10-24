@@ -1,0 +1,60 @@
+{
+  "id": "tr-akis-alti",
+  "description": "Turkish, said on a call (W4-07): Akış Mekanik of the Kartal call (no headcount, no hours said) answered “Altı kişi, tam gün.” → 6 × full day (8 h) = 48 h (fixtures/calls/kartal-question-tr).",
+  "voice": "answer-tr-kartal-akis-alti",
+  "language": "tr",
+  "question": {
+    "field": "manpower.workers",
+    "prompt": "Kısa bir soru: Akış Mekanik ikinci katta kaç kişiydi, tam gün mü çalıştılar?",
+    "options": [],
+    "target": {
+      "manpowerIndex": 0,
+      "companyName": "Akış Mekanik",
+      "companyNameHeard": "Akış Mekanik",
+      "path": "manpower.workers:Akış Mekanik"
+    }
+  },
+  "companies": [
+    {
+      "id": "usta",
+      "name": "Usta Beton",
+      "aliases": []
+    },
+    {
+      "id": "volt",
+      "name": "Volt Elektrik",
+      "aliases": []
+    },
+    {
+      "id": "akis",
+      "name": "Akış Mekanik",
+      "aliases": []
+    }
+  ],
+  "defaultShiftHours": 8,
+  "crew": {
+    "companyName": "Akış Mekanik",
+    "companyNameHeard": "Akış Mekanik",
+    "area": "2. Kat"
+  },
+  "recorded": {
+    "field": "manpower.workers",
+    "value": {
+      "workers": 6,
+      "fullDay": true
+    },
+    "confidence": 0.95
+  },
+  "expected": {
+    "applies": true,
+    "value": {
+      "workers": 6,
+      "fullDay": true
+    },
+    "crew": {
+      "workers": 6,
+      "hoursPerWorker": 8,
+      "totalHours": 48
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { abortableFetch } from './abort';
 
 /**
  * Supabase Storage via the service role (§4.2, §6.5): private buckets, signed URLs only.
@@ -6,7 +7,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
  * evidencePackStoragePath) and always start with `{org_id}/`.
  */
 
-export type Bucket = 'audio' | 'photos' | 'pdfs' | 'exports' | 'logos';
+/** `calls` (W3-11): the voice agent's dual-channel recordings, `{org}/{call}.ogg` (§9.4). */
+export type Bucket = 'audio' | 'photos' | 'pdfs' | 'exports' | 'logos' | 'calls';
 
 export const SIGNED_URL_TTL_S = 10 * 60;
 
@@ -35,6 +37,8 @@ export function createStorage(url: string, serviceRoleKey: string): Storage {
   }
   const client: SupabaseClient = createClient(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
+    // A timed-out job's uploads and downloads stop with it (W1-10, src/abort.ts).
+    global: { fetch: abortableFetch() },
   });
   return createStorageFromClient(client);
 }
@@ -108,6 +112,8 @@ export function mimeExtension(mime: string | null | undefined, fallback: string)
     case 'audio/ogg':
     case 'audio/opus':
       return 'ogg';
+    case 'audio/webm':
+      return 'webm';
     case 'audio/mpeg':
     case 'audio/mp3':
       return 'mp3';

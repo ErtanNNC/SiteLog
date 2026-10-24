@@ -1,0 +1,24 @@
+{
+  "id": "correction-en-which-crew",
+  "description": "English. Marco Ruiz says a number without the crew: the model asks which crew (needsClarification), nothing is applied. The correction case fixtures/corrections/en-which-crew.",
+  "kind": "correction",
+  "audio": null,
+  "mime": "audio/webm;codecs=opus",
+  "site": "Riverside Lofts — Block B",
+  "reporter": {
+    "locale": "en-US",
+    "languages": ["es", "en"]
+  },
+  "transcriptionLanguage": "multi",
+  "expectedLanguage": "en",
+  "goldenCase": null,
+  "durationS": 1.8,
+  "text": "Change it to three.",
+  "segments": [
+    {
+      "start": 0,
+      "end": 1.5,
+      "text": "Change it to three."
+    }
+  ]
+}

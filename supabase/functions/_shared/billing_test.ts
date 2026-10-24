@@ -3,7 +3,6 @@ import {
   idOf,
   isBillingBlocked,
   mapStripeStatus,
-  monthlyTotalCents,
   periodEndOf,
   prorationFor,
   checkoutTrial,
@@ -32,9 +31,7 @@ Deno.test('statusAfterInvoicePaid recovers past_due and converts trials, never c
   assertEquals(statusAfterInvoicePaid('canceled', 39_900), null);
 });
 
-Deno.test('money and trial helpers', () => {
-  assertEquals(monthlyTotalCents(0), 0);
-  assertEquals(monthlyTotalCents(6), 239_400);
+Deno.test('proration (from the shared rules)', () => {
   assertEquals(prorationFor(2, 3), 'create_prorations');
   assertEquals(prorationFor(3, 2), 'none');
   assertEquals(prorationFor(3, 3), 'none');

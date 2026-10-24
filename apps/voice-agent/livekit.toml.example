@@ -1,0 +1,9 @@
+# `lk agent create` writes livekit.toml once the LiveKit Cloud project exists (owner, W3-16); this
+# is its shape. It holds no secret (keys stay in LiveKit's agent secrets), so it can be committed.
+[project]
+  subdomain = "<project>"
+
+[agent]
+  id = "<CA_xxx from lk agent create>"
+  # Explicit dispatch name for SIP and web calls; must equal LIVEKIT_AGENT_NAME (§5.1).
+  name = "sitelog-voice"

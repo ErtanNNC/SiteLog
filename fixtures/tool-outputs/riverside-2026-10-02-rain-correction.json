@@ -12,8 +12,8 @@
         "lostHours": 3.5,
         "source": [
           {
-            "type": "audio",
-            "messageId": "e0000005-0000-4000-8000-000000000501",
+            "type": "voice_note",
+            "uploadId": "e0000005-0000-4000-8000-000000000501",
             "start": 5.4,
             "end": 19.6
           }
@@ -35,8 +35,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000005-0000-4000-8000-000000000501",
+          "type": "voice_note",
+          "uploadId": "e0000005-0000-4000-8000-000000000501",
           "start": 19.6,
           "end": 27.9
         }
@@ -55,8 +55,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000005-0000-4000-8000-000000000501",
+          "type": "voice_note",
+          "uploadId": "e0000005-0000-4000-8000-000000000501",
           "start": 27.9,
           "end": 34
         }
@@ -75,8 +75,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000005-0000-4000-8000-000000000501",
+          "type": "voice_note",
+          "uploadId": "e0000005-0000-4000-8000-000000000501",
           "start": 34,
           "end": 41.2
         }
@@ -90,8 +90,8 @@
       "status": "stopped",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000005-0000-4000-8000-000000000501",
+          "type": "voice_note",
+          "uploadId": "e0000005-0000-4000-8000-000000000501",
           "start": 5.4,
           "end": 19.6
         }
@@ -103,8 +103,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000005-0000-4000-8000-000000000501",
+          "type": "voice_note",
+          "uploadId": "e0000005-0000-4000-8000-000000000501",
           "start": 19.6,
           "end": 27.9
         }
@@ -116,8 +116,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000005-0000-4000-8000-000000000501",
+          "type": "voice_note",
+          "uploadId": "e0000005-0000-4000-8000-000000000501",
           "start": 27.9,
           "end": 34
         }
@@ -133,8 +133,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000005-0000-4000-8000-000000000501",
+        "type": "voice_note",
+        "uploadId": "e0000005-0000-4000-8000-000000000501",
         "start": 45.5,
         "end": 53.5
       }
@@ -145,8 +145,8 @@
       "description": "Delta Mechanical did not attend site",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000005-0000-4000-8000-000000000501",
+          "type": "voice_note",
+          "uploadId": "e0000005-0000-4000-8000-000000000501",
           "start": 41.2,
           "end": 45.5
         }

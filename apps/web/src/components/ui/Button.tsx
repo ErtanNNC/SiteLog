@@ -5,7 +5,8 @@ import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * §14.3 buttons: 44 px (dense 40 px), radius 6. Primary = Signal bg + Asphalt text 700.
+ * §14.3 buttons: 44 px (dense 40 px, `sm` for inline text actions), radius 6. Heights come from the
+ * `target` tokens in pixels: the panel's 15 px root would make `h-11` 41.25 px. Primary = Signal bg + Asphalt text 700.
  * Secondary = Asphalt bg + Chalk text. Ghost = Chalk + Rebar border. Destructive = text-only red.
  */
 export const buttonVariants = cva(
@@ -21,11 +22,11 @@ export const buttonVariants = cva(
         link: 'h-auto rounded-none bg-transparent p-0 text-level underline-offset-4 hover:underline',
       },
       size: {
-        default: 'h-11 px-4',
-        dense: 'h-10 px-3 text-sm',
+        default: 'h-target px-4',
+        dense: 'h-target-dense px-3 text-sm',
         sm: 'h-9 px-3 text-sm',
-        icon: 'h-11 w-11 p-0',
-        iconDense: 'h-10 w-10 p-0',
+        icon: 'size-target p-0',
+        iconDense: 'size-target-dense p-0',
       },
     },
     defaultVariants: { variant: 'ghost', size: 'default' },

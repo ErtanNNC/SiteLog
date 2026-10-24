@@ -10,7 +10,11 @@ export type JobInput<K extends JobType> = z.input<(typeof JobPayloadSchemas)[K]>
 export interface EnqueueOptions {
   /** Earliest time the worker may pick the job up (default: now). */
   runAfter?: Date | null;
-  /** While a job with this key is queued or running, enqueueing again returns the existing job id. */
+  /**
+   * A key names one job for good (GAP D16, 20261015000001): enqueueing a taken key returns that
+   * job's id whatever its status (done and dead included) and runs nothing. Use a per-occurrence
+   * key (`jobKeys`, packages/shared/src/schemas/jobs.ts) for work that must run again.
+   */
   dedupeKey?: string | null;
 }
 

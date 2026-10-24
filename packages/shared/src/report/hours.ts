@@ -1,4 +1,30 @@
-import type { DailyReportData, ManpowerEntry } from '../schemas/report.ts';
+import type {
+  DailyReportData,
+  DailyReportDataV1,
+  ManpowerEntry,
+  WeatherPeriod,
+} from '../schemas/report.ts';
+
+/**
+ * The manpower fields the totals read. They are the same in report data v1 and v2, so writers (v1
+ * until W1-12) and readers (v2, report/upgrade.ts) share these helpers.
+ */
+export type TotalsEntry = Pick<
+  ManpowerEntry,
+  'companyId' | 'companyNameHeard' | 'companyName' | 'workers' | 'hoursPerWorker' | 'totalHours'
+>;
+
+/** The parts of a report the totals read: v2 (readers) or v1 (writers until W1-12). */
+export type ReportTotalsData =
+  Pick<DailyReportData, 'manpower' | 'weather'> | Pick<DailyReportDataV1, 'manpower' | 'weather'>;
+
+/** What deriveTotals reads of either version. */
+interface TotalsInput {
+  manpower: ReadonlyArray<
+    Pick<TotalsEntry, 'companyId' | 'companyNameHeard' | 'workers' | 'totalHours'>
+  >;
+  weather: { periods: ReadonlyArray<Pick<WeatherPeriod, 'lostHours' | 'fullDay'>> };
+}
 
 /** Round to 2 decimals to keep numeric(6,2) friendly values. */
 export function round2(n: number): number {
@@ -17,8 +43,10 @@ export interface HoursDiscrepancy {
  * When workers and hoursPerWorker are both known the total is workers × hoursPerWorker;
  * a model total that disagrees is replaced and reported.
  */
-export function recomputeManpowerTotals(entries: ManpowerEntry[]): {
-  entries: ManpowerEntry[];
+export function recomputeManpowerTotals<E extends TotalsEntry>(
+  entries: E[],
+): {
+  entries: E[];
   discrepancies: HoursDiscrepancy[];
 } {
   const discrepancies: HoursDiscrepancy[] = [];
@@ -62,8 +90,15 @@ export interface ReportTotals {
 
 /** Derived numbers shown in the draft card, PDF and panel (§10.3 "computed in code"). */
 export function deriveTotals(
-  data: Pick<DailyReportData, 'manpower' | 'weather'>,
+  report: ReportTotalsData,
   opts: { selfPerformCompanyIds?: ReadonlySet<string> } = {},
+): ReportTotals {
+  return deriveFrom(report, opts);
+}
+
+function deriveFrom(
+  data: TotalsInput,
+  opts: { selfPerformCompanyIds?: ReadonlySet<string> },
 ): ReportTotals {
   const self = opts.selfPerformCompanyIds ?? new Set<string>();
   let crew = 0;
@@ -91,6 +126,32 @@ export function deriveTotals(
     headcountKnown,
     lostHours: round2(lost),
     weatherAffected: lost > 0 || data.weather.periods.some((p) => p.fullDay === true),
+  };
+}
+
+export interface ComputedTotals<E extends TotalsEntry = ManpowerEntry> {
+  /** Manpower with every total recomputed in code (workers × hoursPerWorker). */
+  manpower: E[];
+  /** Model totals that disagreed with the arithmetic and were replaced. */
+  discrepancies: HoursDiscrepancy[];
+  /** Crew, hours, lost hours and weather impact derived from the recomputed manpower. */
+  totals: ReportTotals;
+}
+
+/**
+ * §10.3 / §10.5: one call for "totals are computed in code, never by the model". Recomputes the
+ * manpower totals, then derives the report totals from the recomputed entries (never from the
+ * input's own totalHours).
+ */
+export function computeTotals<D extends ReportTotalsData>(
+  data: D,
+  opts: { selfPerformCompanyIds?: ReadonlySet<string> } = {},
+): ComputedTotals<D['manpower'][number]> {
+  const { entries, discrepancies } = recomputeManpowerTotals<D['manpower'][number]>(data.manpower);
+  return {
+    manpower: entries,
+    discrepancies,
+    totals: deriveFrom({ manpower: entries, weather: data.weather }, opts),
   };
 }
 

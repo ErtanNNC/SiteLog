@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 2,
+  "reportDate": "2026-10-02",
+  "reportLanguage": "tr",
+  "units": "metric",
+  "languageDetected": ["tr"],
+  "summary": "Volt Elektrik 5. katta priz ve anahtar montajı yaptı. Usta Beton merdiven sahanlığına grobeton döktü. Öz ekip 6. katta alçı sıva işlerine devam etti. Elektrik panolarında güvenli çalışma konulu iş güvenliği bilgilendirmesi yapıldı; kaza olmadı.",
+  "weather": {
+    "observed": {
+      "precip": 0,
+      "tempMin": 15,
+      "tempMax": 22,
+      "wind": 11,
+      "gust": 24,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "Kapalı, yağış yok",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c002",
+      "companyNameHeard": "Volt Elektrik",
+      "companyName": "Volt Elektrik",
+      "trade": "Elektrik",
+      "area": "5. Kat",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a8",
+          "start": 6.0,
+          "end": 15.5
+        }
+      ]
+    },
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c001",
+      "companyNameHeard": "Usta Beton",
+      "companyName": "Usta Beton",
+      "trade": "Beton",
+      "area": "Merdiven sahanlığı",
+      "workers": 2,
+      "hoursPerWorker": 4,
+      "totalHours": 8,
+      "hoursBasis": "stated",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a8",
+          "start": 15.5,
+          "end": 23.0
+        }
+      ]
+    },
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c004",
+      "companyNameHeard": "Öz ekip",
+      "companyName": "Demir Yapı öz ekip",
+      "trade": "Genel işçilik",
+      "area": "6. Kat",
+      "workers": 7,
+      "hoursPerWorker": 8,
+      "totalHours": 56,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a8",
+          "start": 23.0,
+          "end": 29.0
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "5. Kat",
+      "activity": "Priz ve anahtar montajı",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a8",
+          "start": 6.0,
+          "end": 15.5
+        }
+      ]
+    },
+    {
+      "area": "Merdiven sahanlığı",
+      "activity": "Grobeton dökümü",
+      "status": "complete",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a8",
+          "start": 15.5,
+          "end": 23.0
+        }
+      ]
+    },
+    {
+      "area": "6. Kat",
+      "activity": "Alçı sıva",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a8",
+          "start": 23.0,
+          "end": 29.0
+        }
+      ]
+    }
+  ],
+  "deliveries": [],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Elektrik panolarında güvenli çalışma",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "voice_note",
+        "uploadId": "d1000000-0000-4000-8000-0000000000a8",
+        "start": 29.0,
+        "end": 35.0
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [],
+  "photos": [
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000d3",
+      "caption": "6. kat alçı",
+      "takenAt": "2026-10-02T13:05:00Z"
+    }
+  ],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": []
+}

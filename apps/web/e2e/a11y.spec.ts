@@ -24,6 +24,13 @@ async function signInFast(page: Page, key: 'admin' | 'pm' | 'accounts' = 'admin'
   }, key);
 }
 
+/** The viewer chose Turkish on this device (what the language switch saves). */
+async function chooseTurkish(page: Page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('sitelog.language', JSON.stringify('tr'));
+  });
+}
+
 function describeViolations(violations: Awaited<ReturnType<AxeBuilder['analyze']>>['violations']) {
   return violations
     .map(
@@ -74,7 +81,11 @@ const ROUTES: RouteCase[] = [
   },
   { name: 'reports', path: '/reports', ready: (p) => p.getByRole('table', { name: 'Reports' }) },
   { name: 'new report', path: '/reports/new', ready: (p) => p.getByTestId('report-editor') },
-  { name: 'report', path: `/reports/${HERO_REPORT}`, ready: (p) => p.getByTestId('voice-player') },
+  {
+    name: 'report',
+    path: `/reports/${HERO_REPORT}`,
+    ready: (p) => p.getByTestId('media-player').first(),
+  },
   { name: 'hours', path: '/hours', ready: (p) => p.getByTestId('hours-matrix') },
   { name: 'weather', path: '/weather', ready: (p) => p.getByTestId('delay-log') },
   { name: 'team', path: '/team', ready: (p) => p.getByTestId('unknown-sender') },
@@ -84,6 +95,12 @@ const ROUTES: RouteCase[] = [
   { name: 'settings-recipients', path: '/settings/recipients', ready: (p) => h1(p, 'Settings') },
   { name: 'settings-payroll', path: '/settings/payroll', ready: (p) => h1(p, 'Settings') },
   { name: 'billing', path: '/billing', ready: (p) => p.getByTestId('plan-card') },
+  {
+    name: 'settings-channels',
+    path: '/settings/channels',
+    ready: (p) => p.getByTestId('pack-card'),
+  },
+  { name: 'dev-phone', path: '/dev/phone', ready: (p) => h1(p, 'Demo phone') },
   { name: 'ops', path: '/ops', ready: (p) => p.getByTestId('ops-kpis') },
   { name: 'try', path: '/try', ready: (p) => p.getByTestId('try-log') },
   { name: 'setup-company', path: '/setup/company', ready: (p) => h1(p, /./) },
@@ -109,6 +126,85 @@ for (const width of WIDTHS) {
       });
     }
 
+    test('login in Turkish', async ({ page }) => {
+      await chooseTurkish(page);
+      await page.goto('/login');
+      await expect(
+        page.getByRole('heading', { level: 1, name: 'Ofis paneline giriş yapın' }),
+      ).toBeVisible();
+      await expect(page.locator('html')).toHaveAttribute('lang', 'tr');
+      await expectNoViolations(page);
+    });
+
+    test('the Turkish shell and Overview (W1-16), with its menus open', async ({ page }) => {
+      await chooseTurkish(page);
+      await signInFast(page);
+      await page.goto('/');
+      await expect(h1(page, 'Bugün 6 şantiyede')).toBeVisible();
+      await expect(page.locator('main [lang="en"]')).toHaveCount(0);
+      await expectNoViolations(page);
+      if (width === 375) {
+        await page.getByRole('button', { name: 'Menüyü aç' }).click();
+        await expect(page.getByRole('dialog', { name: 'Ana gezinme' })).toBeVisible();
+      }
+      await page.getByRole('button', { name: 'Hesap menüsü' }).click();
+      await expect(page.getByRole('menu')).toBeVisible();
+      await expectNoViolations(page);
+    });
+
+    // WCAG 3.1.2: what a page portals to <body> carries the page's language. New report speaks
+    // Turkish since W4-09 (only /try and /ops stay English, Q240): its select's list is Turkish.
+    test('the Turkish shell: New report and its select are Turkish (W4-09)', async ({ page }) => {
+      await chooseTurkish(page);
+      await signInFast(page);
+      const langOf = (l: Locator) =>
+        l.evaluate((el) => el.closest('[lang]')?.getAttribute('lang') ?? null);
+      await page.goto('/reports/new');
+      await expect(h1(page, 'Yeni rapor')).toBeVisible();
+      const siteSelect = page.getByRole('combobox', { name: 'Şantiye' });
+      await expect(siteSelect).toBeVisible();
+      await siteSelect.click();
+      const options = page.getByRole('listbox');
+      await expect(options).toBeVisible();
+      expect(await langOf(options)).toBe('tr');
+      // Axe runs once the list is closed: an open Radix select hides the rest of the page.
+      await page.keyboard.press('Escape');
+      await expect(options).toHaveCount(0);
+      await expectNoViolations(page);
+      // No English-only page has W4-01's country-code picker any more (Setup speaks Turkish since
+      // W4-02, Team since W4-03): its Turkish case is the setup wizard's test below.
+    });
+
+    // W4-02: the setup wizard in Turkish, its site step with W4-01's picker open, the preference,
+    // the language select and the welcome preview (the SMS in its own language, lang="tr" here).
+    test('the setup wizard in Turkish (W4-02)', async ({ page }) => {
+      await chooseTurkish(page);
+      await signInFast(page);
+      const langOf = (l: Locator) =>
+        l.evaluate((el) => el.closest('[lang]')?.getAttribute('lang') ?? null);
+      await page.goto('/setup/company');
+      await expect(h1(page, 'Şirketinizi kurun')).toBeVisible();
+      await expect(page.getByLabel('Şirket adı')).toHaveValue('Kestrel Build Group');
+      await expectNoViolations(page);
+      await page.goto('/setup/site');
+      await expect(page.getByLabel('Şantiye adı')).toBeVisible();
+      await page.getByLabel('Ad', { exact: true }).fill('Elena Vasquez');
+      await page.getByRole('radio', { name: 'Arama' }).click();
+      await expect(page.getByTestId('welcome-text')).toHaveAttribute('lang', 'en');
+      await expectNoViolations(page);
+      const country = page.getByRole('button', { name: /^Ülke kodu: / }).first();
+      await country.click();
+      const listbox = page.getByRole('listbox', { name: 'Ülke kodu' });
+      await expect(listbox).toBeVisible();
+      expect(await langOf(listbox)).toBe('tr');
+      await expectNoViolations(page);
+      await page.keyboard.press('Escape');
+      // No horizontal scroll at either width.
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+    });
+
     test('accounts user: crew hours', async ({ page }) => {
       await signInFast(page, 'accounts');
       await page.goto('/hours');
@@ -116,10 +212,39 @@ for (const width of WIDTHS) {
       await expectNoViolations(page);
     });
 
+    // W1-17: both pages speak Turkish; the report's sources, players and activity pass too.
+    test('reports archive and report review in Turkish', async ({ page }) => {
+      await chooseTurkish(page);
+      await signInFast(page);
+      await page.goto('/reports');
+      await expect(page.getByRole('table', { name: 'Raporlar' })).toBeVisible();
+      await expect(page.locator('html')).toHaveAttribute('lang', 'tr');
+      await expectNoViolations(page);
+      await page.goto(`/reports/${HERO_REPORT}`);
+      await expect(page.getByTestId('media-player').first()).toBeVisible();
+      await expect(page.getByTestId('provenance')).toContainText('Rapor veren: Marco Ruiz');
+      await expectNoViolations(page);
+    });
+
+    test('report review after a source link played the rain stoppage', async ({ page }) => {
+      await signInFast(page);
+      await page.goto(`/reports/${HERO_REPORT}`);
+      await expect(page.getByTestId('media-player').first()).toBeVisible();
+      await page
+        .getByTestId('weather-period')
+        .first()
+        .getByRole('button', { name: /^audio 0:41/ })
+        .click();
+      await expect(
+        page.locator('[data-testid="transcript-excerpt"][data-active="true"]').first(),
+      ).toBeVisible();
+      await expectNoViolations(page);
+    });
+
     test('report in edit mode and the save dialog', async ({ page }) => {
       await signInFast(page);
       await page.goto(`/reports/${HERO_REPORT}`);
-      await expect(page.getByTestId('voice-player')).toBeVisible();
+      await expect(page.getByTestId('media-player').first()).toBeVisible();
       await page.getByRole('button', { name: 'Edit', exact: true }).click();
       await expect(page.getByTestId('save-version')).toBeVisible();
       await expectNoViolations(page);
@@ -388,18 +513,188 @@ test.describe('keyboard', () => {
 });
 
 test.describe('no sideways scroll on narrow phones', () => {
+  const overflow = (page: Page) =>
+    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+
   for (const width of [320, 360, 390]) {
     test(`/try and Overview at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 });
       await signInFast(page);
       await page.goto('/try');
       await expect(page.getByTestId('try-log')).toBeVisible();
-      const overflow = () =>
-        page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-      expect(await overflow()).toBeLessThanOrEqual(0);
+      expect(await overflow(page)).toBeLessThanOrEqual(0);
       await page.goto('/');
       await expect(h1(page, 'Today across 6 sites')).toBeVisible();
-      expect(await overflow()).toBeLessThanOrEqual(0);
+      expect(await overflow(page)).toBeLessThanOrEqual(0);
+    });
+  }
+
+  // /team: the Field reporters table scrolls inside its card; the page's grid track no longer
+  // grows with the table (it scrolled the page ~198 px sideways at 390 px).
+  test('Team & numbers at 390px: the reporters table scrolls inside its card', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signInFast(page);
+    await page.goto('/team');
+    const table = page.getByRole('table', { name: 'Field reporters' });
+    await expect(table).toBeVisible();
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    const region = page.getByTestId('data-table').filter({ has: table });
+    expect(
+      await region.evaluate((el) => el.scrollWidth > el.clientWidth),
+      'the table is wider than its card and scrolls in it',
+    ).toBe(true);
+  });
+
+  // W1-08: the Demo phone's tabs and reporter buttons are 44 px targets at phone width, the tab
+  // list grows with its triggers instead of clipping them, and picking a reporter moves focus to
+  // the thread (below 768 px the list and the thread take turns).
+  test('the Demo phone keeps 44 px targets at 390px', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signInFast(page);
+    await page.goto('/dev/phone');
+    await expect(h1(page, 'Demo phone')).toBeVisible();
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    const tab = page.getByRole('tab', { name: 'Texts' });
+    const tabBox = (await tab.boundingBox())!;
+    const listBox = (await page.getByRole('tablist').first().boundingBox())!;
+    expect(tabBox.height).toBeGreaterThanOrEqual(44);
+    expect(listBox.height).toBeGreaterThanOrEqual(tabBox.height);
+    const marco = page
+      .getByRole('navigation', { name: 'Reporters' })
+      .getByRole('button', { name: /Marco Ruiz/ });
+    expect((await marco.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await marco.click();
+    await expect(page.getByRole('heading', { level: 2, name: 'Marco Ruiz' })).toBeFocused();
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await page.getByRole('button', { name: 'All reporters' }).click();
+    await expect(marco).toBeFocused();
+    // A two-way thread: Back, the reply box and Send are 44 px too.
+    await page
+      .getByRole('navigation', { name: 'Reporters' })
+      .getByRole('button', { name: /Dana Whitfield/ })
+      .click();
+    await expect(page.getByRole('heading', { level: 2, name: 'Dana Whitfield' })).toBeFocused();
+    for (const target of [
+      page.getByRole('button', { name: 'All reporters' }),
+      page.getByRole('textbox', { name: 'Reply as Dana Whitfield' }),
+      page.getByRole('button', { name: 'Send' }),
+    ]) {
+      expect((await target.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+  });
+
+  // The shared Button, Input and Select are 44 px at every width: their heights are the
+  // `--spacing-target` token in pixels, not `h-11` (41.25 px on the panel's 15 px root,
+  // docs/AUDIT_BACKLOG.md). Dense variants (40 px, §14.3) are left out on purpose.
+  for (const width of [390, 1440]) {
+    test(`shared buttons and inputs are 44 px targets at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const expect44 = async (target: Locator, what: string) => {
+        await expect(target, what).toBeVisible();
+        const box = (await target.boundingBox())!;
+        expect(box.height, `${what} at ${width}px`).toBeGreaterThanOrEqual(44);
+      };
+
+      await page.goto('/login');
+      await expect(h1(page, 'Sign in to the office panel')).toBeVisible();
+      await expect44(page.getByRole('textbox', { name: 'Work email' }), 'login: email');
+      await expect44(
+        page.getByRole('button', { name: 'Email me a sign-in link' }),
+        'login: submit',
+      );
+      await expect44(page.getByRole('button', { name: 'Continue with company SSO' }), 'login: SSO');
+
+      await page.evaluate(() =>
+        window.localStorage.setItem('sitelog.demo.session', JSON.stringify({ key: 'admin' })),
+      );
+      await page.goto('/sites');
+      await expect(h1(page, 'Sites')).toBeVisible();
+      await expect44(page.getByRole('link', { name: 'Add site' }), 'sites: Add site');
+      const search = page.getByRole('combobox', { name: 'Search' });
+      if (await search.isVisible()) await expect44(search, 'top bar: search');
+
+      await page.goto('/team');
+      await expect(h1(page, 'Team & numbers')).toBeVisible();
+      const invite = page.getByRole('button', { name: 'Invite reporter' }).first();
+      await expect44(invite, 'team: Invite reporter');
+      await invite.click();
+      const dialog = page.getByRole('dialog', { name: 'Invite reporter' });
+      await expect44(dialog.getByRole('textbox', { name: 'Name' }), 'invite: name');
+      await expect44(dialog.getByRole('textbox', { name: 'Mobile number' }), 'invite: phone');
+      await expect44(dialog.getByRole('button', { name: /^Country code: / }), 'invite: country');
+      await expect44(
+        dialog.locator('label').filter({ has: page.getByTestId('invite-sms-attest') }),
+        'invite: SMS attestation',
+      );
+      await expect44(dialog.getByRole('button', { name: 'Send welcome text' }), 'invite: send');
+    });
+  }
+
+  // W1-03: the shell itself at 390 px, in both languages: sign-in, the shell's own pages, the top
+  // bar with a page's controls, the drawer and the account menu inside it.
+  for (const lang of ['en', 'tr'] as const) {
+    test(`the shell at 390px (${lang})`, async ({ page }) => {
+      const tr = lang === 'tr';
+      await page.setViewportSize({ width: 390, height: 844 });
+      if (tr) await chooseTurkish(page);
+      await page.goto('/login');
+      await expect(
+        h1(page, tr ? 'Ofis paneline giriş yapın' : 'Sign in to the office panel'),
+      ).toBeVisible();
+      expect(await overflow(page), '/login').toBeLessThanOrEqual(0);
+
+      await page.evaluate(() =>
+        window.localStorage.setItem('sitelog.demo.session', JSON.stringify({ key: 'admin' })),
+      );
+      const pages: Array<[string, (p: Page) => Locator]> = [
+        ['/', (p) => h1(p, tr ? 'Bugün 6 şantiyede' : 'Today across 6 sites')],
+        ['/dev/phone', (p) => h1(p, tr ? 'Demo telefon' : 'Demo phone')],
+        ['/settings/channels', (p) => p.getByTestId('pack-card')],
+        // Pages with controls in the top bar: below 768 px they get a row of their own.
+        ['/settings/reports', (p) => p.getByTestId('ladder')],
+        ['/weather', (p) => p.getByTestId('delay-log')],
+        [
+          '/no-such-page',
+          (p) => p.getByRole('heading', { name: tr ? 'Sayfa bulunamadı' : 'Page not found' }),
+        ],
+        [`/reports/${HERO_REPORT}`, (p) => p.getByTestId('media-player').first()],
+        ['/reports', (p) => p.getByRole('table', { name: tr ? 'Raporlar' : 'Reports' })],
+      ];
+      for (const [path, ready] of pages) {
+        await page.goto(path);
+        await expect(ready(page)).toBeVisible();
+        expect(await overflow(page), path).toBeLessThanOrEqual(0);
+      }
+
+      await page.getByRole('button', { name: tr ? 'Menüyü aç' : 'Open menu' }).click();
+      const drawer = page.getByRole('dialog', { name: tr ? 'Ana gezinme' : 'Main navigation' });
+      await expect(drawer).toBeVisible();
+      await expect(drawer.getByTestId('sidebar-footer')).toBeInViewport();
+      expect(await overflow(page), 'drawer').toBeLessThanOrEqual(0);
+      await drawer.getByRole('button', { name: tr ? 'Hesap menüsü' : 'Account menu' }).click();
+      await expect(page.getByRole('menu')).toBeVisible();
+      expect(await overflow(page), 'account menu').toBeLessThanOrEqual(0);
+
+      // WCAG 2.4.3: Tab follows the rows as seen: menu, bell (row 1), search (row 2), then the
+      // page's controls (row 3).
+      await page.goto('/weather');
+      await expect(page.getByTestId('delay-log')).toBeVisible();
+      const menuButton = page.getByRole('button', { name: tr ? 'Menüyü aç' : 'Open menu' });
+      const bell = page.getByTestId('notifications-bell');
+      const search = page.getByRole('combobox', { name: tr ? 'Arama' : 'Search', exact: true });
+      const siteSelect = page.getByRole('combobox', {
+        name: tr ? 'Şantiye' : 'Site',
+        exact: true,
+      });
+      const top = async (l: Locator) => (await l.boundingBox())!.y;
+      expect(await top(bell)).toBeLessThan(await top(search));
+      expect(await top(search)).toBeLessThan(await top(siteSelect));
+      await menuButton.focus();
+      for (const next of [bell, search, siteSelect]) {
+        await page.keyboard.press('Tab');
+        await expect(next).toBeFocused();
+      }
     });
   }
 });

@@ -1,0 +1,18 @@
+{
+  "path": "",
+  "params": {
+    "ToCountry": "US",
+    "SmsMessageSid": "{{sid}}",
+    "NumMedia": "0",
+    "SmsSid": "{{sid}}",
+    "SmsStatus": "received",
+    "Body": "Hi, this is Carlos from Apex. How do I send the report?",
+    "FromCountry": "US",
+    "To": "{{to}}",
+    "NumSegments": "1",
+    "MessageSid": "{{sid}}",
+    "AccountSid": "AC00000000000000000000000000000000",
+    "From": "+15550194410",
+    "ApiVersion": "2010-04-01"
+  }
+}

@@ -26,8 +26,15 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm format:check
+      # pdftotext for the worker's PDF text snapshots (apps/worker/src/pdf/snapshot.test.ts).
+      - name: Install poppler-utils
+        # The runner image's third-party apt sources (packages.microsoft.com) sometimes answer 403;
+        # only Ubuntu's own archive is needed for poppler-utils, so drop them before the update.
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/microsoft-prod.sources
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils
       - run: pnpm test
-      - name: Build web + worker
+      - name: Build web + field + worker
         run: pnpm build
 
   db:
@@ -43,6 +50,30 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:db
+
+  voice-agent:
+    name: Voice agent (ruff · pyright · pytest, no keys, no network)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: 0.11.32
+          enable-cache: true
+          cache-dependency-glob: apps/voice-agent/uv.lock
+      - run: pnpm install --frozen-lockfile
+      - name: uv sync (Python 3.12 from .python-version)
+        working-directory: apps/voice-agent
+        run: uv sync --locked
+      - run: pnpm voice:test
+      - name: Voice contract up to date
+        run: pnpm voice:contract -- --check
 
   edge-functions:
     name: Deno check (edge functions)
@@ -73,6 +104,13 @@ jobs:
         run: pnpm --filter @sitelog/web exec playwright install --with-deps chromium
       # Smoke flows + §15/M9 axe WCAG 2.2 AA scan of every route at 1440/375 px + keyboard checks.
       - run: pnpm --filter @sitelog/web e2e
+      # Field app: the placeholder routes and the W1-09 screens (device check, welcome, Today,
+      # Recording with Chromium's fake microphone, Processing, the offline queue, the No work and
+      # Weather sheets) in EN/ES/TR at 390 px on a fake field-api (Playwright routes), axe, no
+      # sideways scroll, PWA basics. Built with no env set: no Supabase URL, so no /api proxy.
+      - name: Field app smoke test
+        if: success() || failure()
+        run: pnpm --filter @sitelog/field e2e
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -80,12 +118,14 @@ jobs:
           path: |
             apps/web/playwright-report
             apps/web/test-results
+            apps/field/playwright-report
+            apps/field/test-results
           retention-days: 7
 
   e2e-supabase:
     name: E2E · local Supabase stack (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -97,49 +137,307 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: 2.118.0
-      # `supabase start` loads supabase/functions/.env into the Edge Runtime. Only APP_URL matters
-      # here (CORS origin of the panel under test); the rest are dummies so no function boots
-      # half-configured. Nothing here reaches Meta, Stripe or Anthropic.
+      # `supabase start` loads supabase/functions/.env into the Edge Runtime. APP_URL is the CORS
+      # origin of the panel under test; field-api signs device codes and derives personal link
+      # codes with LINK_SIGNING_SECRET (the worker below uses the same one) and accepts browser
+      # origins FIELD_APP_URL and CORS_EXTRA_ORIGINS (the field app's dev and preview servers, and
+      # :4176, its e2e:supabase preview). STORAGE_PUBLIC_URL re-bases the signed upload URLs from
+      # the Edge Runtime's internal http://kong:8000 to the API URL the browser reaches (W1-09).
+      # sms-webhook checks X-Twilio-Signature with TWILIO_AUTH_TOKEN against SMS_WEBHOOK_URL. The
+      # SCHEDULER_CLOCK_OVERRIDE lets scheduler-tick take `?now=` (the W2-06 ladder spec moves the
+      # clock; never set on a hosted project). VOICE_AGENT_TOOL_SECRET is the voice agent's bearer
+      # on field-api's /voice/* routes (the W3-15 call suite sends it as the agent would) and
+      # VOICE_CALL_TOKEN_SECRET signs the per-call tokens (field-api only); both test values. The
+      # rest are dummies so no function boots half-configured. No pack has a sender id here until
+      # the self-serve step at the end, so every text goes to the console driver; then (W4-12)
+      # SMS_PROVIDER_STUB sends the real drivers' texts to the local SMS stand-in on the runner
+      # (host.docker.internal from the Edge Runtime container): nothing reaches Meta, Stripe,
+      # Twilio, İletimerkezi or Anthropic.
       - name: Edge Function env
         run: |
           cat > supabase/functions/.env <<'ENV'
           APP_URL=http://localhost:5173
+          LINK_SIGNING_SECRET=e2e-link-signing-secret-not-for-production
+          FIELD_APP_URL=http://localhost:5174
+          CORS_EXTRA_ORIGINS=http://localhost:4174,http://localhost:4176
+          STORAGE_PUBLIC_URL=http://127.0.0.1:54321
+          TWILIO_AUTH_TOKEN=e2e-twilio-auth-token
+          SMS_WEBHOOK_URL=http://127.0.0.1:54321/functions/v1/sms-webhook
           WA_VERIFY_TOKEN=e2e-verify-token
           WA_APP_SECRET=e2e-app-secret
           SCHEDULER_SECRET=e2e-scheduler-secret
+          SCHEDULER_CLOCK_OVERRIDE=true
+          VOICE_AGENT_TOOL_SECRET=e2e-voice-agent-tool-secret-not-for-production
+          VOICE_CALL_TOKEN_SECRET=e2e-voice-call-token-secret-not-for-production
           STRIPE_SECRET_KEY=sk_test_e2e_dummy
           STRIPE_WEBHOOK_SECRET=whsec_e2e_dummy
-          STRIPE_PRICE_ID_SITE=price_e2e_dummy
+          STRIPE_PRICE_ID_SITE_US=price_e2e_dummy
+          SMS_PROVIDER_STUB=true
+          TWILIO_API_BASE=http://host.docker.internal:4010
+          ILETIMERKEZI_API_BASE=http://host.docker.internal:4010
+          TWILIO_ACCOUNT_SID=ACe2e00000000000000000000000000000
+          ILETIMERKEZI_API_KEY=e2e-iletimerkezi-key
+          ILETIMERKEZI_API_HASH=e2e-iletimerkezi-hash
           ENV
+      # Mailpit stays on (W4-09): auth-email.spec.ts reads the Turkish magic link it catches.
       - name: Start Supabase (migrations + seed.sql)
-        run: supabase start -x studio,imgproxy,logflare,vector,supavisor,postgres-meta,mailpit
+        run: supabase start -x studio,imgproxy,logflare,vector,supavisor,postgres-meta
       # The shared Database type is hand-maintained; fail when it drifts from the migrated schema.
       - name: Shared DB types match the schema
         run: |
           supabase gen types typescript --local --schema public > "$RUNNER_TEMP/db.gen.ts"
           pnpm --filter @sitelog/scripts db-types-drift -- "$RUNNER_TEMP/db.gen.ts"
-      - name: Export API URL and keys
+      - name: Export API URL, keys and DB URL
         run: |
           supabase status -o env 2>/dev/null \
             | sed -E 's/^([A-Z0-9_]+)="(.*)"$/\1=\2/' \
-            | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY)=' >> "$GITHUB_ENV"
+            | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY|DB_URL)=' >> "$GITHUB_ENV"
+      # Real-Postgres tests that PGlite (one session) cannot run, e.g. next_report_no under
+      # concurrency (supabase/db-tests/stack). They create and delete their own org.
+      - name: Real-Postgres tests (test:stack)
+        env:
+          SUPABASE_DB_URL: ${{ env.DB_URL }}
+        run: |
+          test -n "$SUPABASE_DB_URL" || { echo "::error::supabase status gave no DB_URL"; exit 1; }
+          pnpm test:stack
       # First request per function downloads its npm/jsr imports; do it before the browser waits.
       - name: Warm up Edge Functions
+        # Each function must boot and refuse: the api-* functions the anon key (401; the
+        # api-invite-reporter probe is a POST, its only method, for the stack test below, as are
+        # W1-16's api-link-unknown-contact and api-text-daily-link for the panel specs), field-api
+        # (no gateway JWT check) a request without a link code (401), sms-webhook (no gateway JWT
+        # check either) a POST without X-Twilio-Signature (403, so TWILIO_AUTH_TOKEN is loaded).
+        # The Edge Runtime container has no restart policy, so if it exits while booting the first
+        # worker it is started again (a run once failed with 502 here and 503 in the payroll and
+        # EOT specs).
         run: |
-          for fn in api-export-payroll api-evidence-pack; do
-            curl -sS -o /dev/null -m 180 -w "$fn %{http_code}\n" \
-              -H "Authorization: Bearer $ANON_KEY" "$API_URL/functions/v1/$fn" || true
+          container=supabase_edge_runtime_sitelog
+          for probe in GET:api-export-payroll:401 GET:api-evidence-pack:401 POST:api-invite-reporter:401 POST:api-link-unknown-contact:401 POST:api-text-daily-link:401 POST:api-test-message:401 GET:field-api/today:401 POST:sms-webhook:403; do
+            IFS=: read -r method fn want <<< "$probe"
+            code=000
+            for attempt in 1 2 3 4 5 6; do
+              code=$(curl -sS -o "$RUNNER_TEMP/warm.out" -m 180 -w '%{http_code}' -X "$method" \
+                -H "Authorization: Bearer $ANON_KEY" "$API_URL/functions/v1/$fn" || echo 000)
+              echo "$fn attempt $attempt: HTTP $code"
+              [ "$code" = "$want" ] && break
+              state=$(docker inspect -f '{{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' "$container" 2>&1 || true)
+              echo "Edge Runtime: $state"
+              case "$state" in running*) ;; *) docker start "$container" ;; esac
+              sleep 5
+            done
+            if [ "$code" != "$want" ]; then
+              echo "::error::$fn did not boot (last HTTP $code, want $want)"
+              cat "$RUNNER_TEMP/warm.out" || true
+              docker logs "$container" --tail 100 2>&1 || true
+              exit 1
+            fi
           done
+      # field-api (W1-07) through the gateway: resolve → send-code → verify (the code from the
+      # console messages row) → consent → upload by signed URL → complete (site-day, report, job),
+      # confirm, the device cookie, no-store and the refusals (supabase/db-tests/stack/
+      # field-api.test.ts; its RPC race on two sessions already ran in test:stack above).
+      # api-invite-reporter (W1-08) as Lena: the locale from "Speaks", the personal link and its
+      # audit, the welcome job, no code in the answer, a reused reporter, a number that sent STOP
+      # (supabase/db-tests/stack/api-invite-reporter.test.ts).
+      - name: field-api and api-invite-reporter against the stack
+        env:
+          SUPABASE_DB_URL: ${{ env.DB_URL }}
+          FIELD_API_URL: ${{ env.API_URL }}/functions/v1/field-api
+          INVITE_API_URL: ${{ env.API_URL }}/functions/v1/api-invite-reporter
+          LINK_SIGNING_SECRET: e2e-link-signing-secret-not-for-production
+        run: |
+          test -n "$API_URL" || { echo "::error::supabase status gave no API_URL"; exit 1; }
+          pnpm --filter @sitelog/db exec vitest run --config vitest.stack.config.ts stack/field-api.test.ts stack/api-invite-reporter.test.ts -t "on the local stack"
       - name: Install Chromium
         run: pnpm --filter @sitelog/web exec playwright install --with-deps chromium
-      - name: Login · realtime · edit → v2 · sign-off · payroll CSV · EOT pack
-        run: pnpm --filter @sitelog/web e2e:supabase
+      # W4-16: the M11 step reads Demir Yapı's filed PDF as text (pdftotext, as the check job).
+      - name: Install poppler-utils
+        # The runner image's third-party apt sources (packages.microsoft.com) sometimes answer 403;
+        # only Ubuntu's own archive is needed for poppler-utils, so drop them before the update.
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/microsoft-prod.sources
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils
+      # W3-18: the M9 acceptance suite (spec §16.2 M9 Done when), one command (`pnpm e2e:m9`):
+      # every panel spec tagged `@m9`, one flow tag each (@F19 crew hours: BrightLine +16 h with
+      # its voice-note evidence, an invoice gap's notice citing Northgate's call, the accounts
+      # role, the payroll CSV, Turkish; @F20 the EOT pack request on Riverside's October; @F21 the
+      # glossary's review and Add term through the audited RPCs). It runs first, on the seed as
+      # written, in the `supabase` project: no worker yet, so the pack it requests stays queued.
+      # The pack's < 2 min build is the worker's PGlite test (W3-07, the check job).
+      - name: M9 acceptance suite (W3-18, pnpm e2e:m9)
+        run: pnpm e2e:m9
+      # The `supabase` project: no worker runs, so the jobs these specs enqueue stay queued. The
+      # M10 and M11 specs of this project (W4-16: Team, Settings, Billing; Demir Yapı and every
+      # page in Turkish, the TR wizard, the Turkish magic link) run in their suites at the end.
+      - name: Login · realtime · edit → v2 · sign-off · fresh org · Demo phone
+        run: pnpm --filter @sitelog/web e2e:supabase --project=supabase --grep-invert "@m9|@m10|@m11"
+      # The worker (W1-08) against the stack, keyless: console SMS and console email (both land in
+      # the Demo phone), the fake transcriber (W1-11: a voice note gets a fixtures/voice
+      # transcript, no Deepgram key), the fake Claude (W2-09: extraction and parse_answer answer
+      # from the golden set, fixtures/tool-outputs and fixtures/answers; explicit, never in
+      # production), no weather key (those jobs fail and retry), the same LINK_SIGNING_SECRET as
+      # the functions. It starts after the panel specs, so their jobs (the
+      # EOT pack, PDFs) are processed now and the specs above still see them queued.
+      # WORKER_CLOCK_OVERRIDE (test only, refused in production; never on a hosted project): the
+      # worker's clock starts at WORKER_CLOCK_START, just after the ladder spec's 17:46 Chicago
+      # tick (scheduler-tick's `?now=2026-10-12T22:46Z`, SCHEDULER_CLOCK_OVERRIDE; the spec runs in
+      # the M6 step, minutes later, still well before 20:00 on that clock), and runs on in
+      # real time, so the ladder jobs' quiet-hours `notAfter` (20:00 Chicago that day) is ahead of
+      # it, not days behind. Queue timing (run_after, claim_jobs) stays on the database clock.
+      # W4-12: the local SMS stand-in (`pnpm sms:stand-in`, :4010 on all interfaces) in place of
+      # Twilio and İletimerkezi. Until the self-serve step gives the packs a sender id it receives
+      # nothing; the worker (127.0.0.1) and the functions (host.docker.internal) reach it through
+      # SMS_PROVIDER_STUB with TWILIO_API_BASE / ILETIMERKEZI_API_BASE.
+      - name: Start the SMS stand-in
+        run: |
+          nohup pnpm sms:stand-in > "$RUNNER_TEMP/sms-stand-in.log" 2>&1 &
+          for attempt in $(seq 1 60); do
+            curl -sf -m 2 http://127.0.0.1:4010/__stand-in/health > /dev/null && { echo "stand-in up after ${attempt}s"; exit 0; }
+            sleep 1
+          done
+          echo "::error::the SMS stand-in did not start"
+          cat "$RUNNER_TEMP/sms-stand-in.log" || true
+          exit 1
+      - name: Start the worker
+        env:
+          SUPABASE_DB_URL: ${{ env.DB_URL }}
+          SUPABASE_URL: ${{ env.API_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SERVICE_ROLE_KEY }}
+          EMAIL_PROVIDER: console
+          TRANSCRIBE_PROVIDER: fake
+          EXTRACT_PROVIDER: fake
+          LINK_SIGNING_SECRET: e2e-link-signing-secret-not-for-production
+          FIELD_APP_URL: http://localhost:5174
+          WORKER_PORT: '8080'
+          # W1-10: the worker wakes on NOTIFY jobs (LISTEN on DB_URL, a direct session connection).
+          # The poll is set past the specs' 60 s waits, so the invite's welcome cannot wait for the
+          # poll: NOTIFY (or the wake after another job finishes) claims it. The HELP reply is
+          # answered inline by sms-webhook's /demo-reply, not by the worker.
+          POLL_INTERVAL_MS: '120000'
+          WORKER_CLOCK_OVERRIDE: 'true'
+          WORKER_CLOCK_START: '2026-10-12T22:46:30Z'
+          # W4-12: real orgs' texts to the SMS stand-in once a pack has a sender id (the last step).
+          SMS_PROVIDER_STUB: 'true'
+          TWILIO_API_BASE: http://127.0.0.1:4010
+          ILETIMERKEZI_API_BASE: http://127.0.0.1:4010
+          TWILIO_ACCOUNT_SID: ACe2e00000000000000000000000000000
+          TWILIO_AUTH_TOKEN: e2e-twilio-auth-token
+          ILETIMERKEZI_API_KEY: e2e-iletimerkezi-key
+          ILETIMERKEZI_API_HASH: e2e-iletimerkezi-hash
+        run: |
+          nohup pnpm --filter @sitelog/worker exec tsx src/index.ts > "$RUNNER_TEMP/worker.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/worker.pid"
+          for attempt in $(seq 1 60); do
+            body=$(curl -sS -m 5 http://127.0.0.1:8080/health || true)
+            case "$body" in *'"listening":true'*) echo "worker healthy and listening after ${attempt}s"; exit 0 ;; esac
+            sleep 1
+          done
+          echo "::error::the worker did not answer /health with listening: true (last: $body)"
+          cat "$RUNNER_TEMP/worker.log" || true
+          exit 1
+      # The `worker` project: invite → the worker's welcome text in the Demo phone → the personal
+      # link resolves at field-api → HELP re-sends it (W1-08 Done when).
+      # The panel's `worker` project outside the M6 suite and the call suite (W3-17's outbound
+      # calls, `@m8`, run with the call suite below).
+      - name: Invite → welcome text in the Demo phone (worker)
+        env:
+          WORKER_HEALTH_URL: http://127.0.0.1:8080/health
+        run: pnpm --filter @sitelog/web e2e:supabase --project=worker --grep-invert "@m6|@m7|@m8|@m10|@m11" --pass-with-no-tests
+      # The field app's `worker` project outside the M6 suite (W2-04: photos after filing → v2, the
+      # `_v2` PDF and the Updated email). The rest of apps/field/e2e/supabase/ (W1-09's link →
+      # record → upload, W1-13's question → draft → filed, W2-09 … W2-13) is tagged `@m6` and runs
+      # in the M6 step below; the call suite (`@m7`, `@m8`, W3-15) in the last step.
+      - name: Field app · photos after filing (worker)
+        env:
+          WORKER_HEALTH_URL: http://127.0.0.1:8080/health
+        run: pnpm --filter @sitelog/field e2e:supabase --project=worker --grep-invert "@m6|@m7|@m8|@m10|@m11" --pass-with-no-tests
+      # W2-17: the M6 acceptance suite (spec §16.2 M6 Done when), one command (`pnpm e2e:m6`): every
+      # spec tagged `@m6`, one tag per flow (@F4 new phone, consent, preference, test clip; @F5
+      # record, upload, offline; @F7 buttons, Other by voice and by number; @F8 fix by voice and
+      # confirm; @F10 Past reports → change → v2; @F11 daily link → R1 → R2 → missing on the moved
+      # clock; @F12 weather and no work; @F14 two sites; @F15 preferences, consent off, STOP and
+      # START, sign out; @F16 expired link, new phone, the lock). Fake providers only (the worker
+      # above: TRANSCRIBE_PROVIDER and EXTRACT_PROVIDER fake, console SMS and email). It runs with
+      # the worker up, so the field app's `stack` specs (record, upload, offline …) see their
+      # transcription jobs queued or already picked up: they accept both. The ladder spec's ticks
+      # use scheduler-tick's `?now=` and the worker's test clock (WORKER_CLOCK_START, a few minutes
+      # behind by now, still before the 20:00 quiet-hours guard of its messages).
+      - name: M6 acceptance suite (W2-17, pnpm e2e:m6)
+        env:
+          WORKER_HEALTH_URL: http://127.0.0.1:8080/health
+        run: pnpm e2e:m6
+      # W3-15: the call suite (spec §16.2 M7 and M8 Done when, text level), one command
+      # (`pnpm e2e:voice`; W4-16: less the Turkish scripts, `@m11`, which the M11 step runs):
+      # every scripted call of fixtures/calls/ run by `pnpm simulate:call`
+      # through the real field-api /voice/* routes (the agent's bearer, VOICE_AGENT_TOOL_SECRET
+      # above) and the worker above on its fake providers, each on an org of its own; tagged
+      # `@m7` / `@m8` and one flow each (@F6 hero, fallback, hang-up; @F7 a question; @F8 a
+      # correction; @F10 Friday changed; @F12 weather day and no work; @F13 an unknown caller;
+      # @F14 two sites; @F15 text me instead); and, run first, the panel's outbound reminder
+      # calls on the console telephony (W3-17, `@m8`: @F11 R1 rings the Demo phone, missed_call,
+      # R2; @F15 "don't call me today"). The SIP scripts dial the US pack's voice number, set
+      # here with the audited set_country_endpoints() (this stack only, after the M6 step, whose
+      # R2 text would otherwise name it; the outbound spec's texts match with or without it). The voice agent's half (the same fixtures in
+      # pytest) is the voice-agent job.
+      - name: US voice number for the SIP scripts (this stack)
+        env:
+          SUPABASE_DB_URL: ${{ env.DB_URL }}
+        run: pnpm countries:set -- --code US --voice +15550142290
+      - name: Call suite (W3-15, W3-17, pnpm e2e:voice)
+        env:
+          WORKER_HEALTH_URL: http://127.0.0.1:8080/health
+          VOICE_AGENT_TOOL_SECRET: e2e-voice-agent-tool-secret-not-for-production
+        run: pnpm e2e:voice
+      # W4-12 / W4-16: the M10 and M11 suites run last, as they need both packs to have a sender
+      # id on this stack: one stand-in number (Twilio) for both packs, as the owner runs one
+      # number for every country (§19 Q370), through the audited set_country_endpoints().
+      - name: Stand-in senders for both packs (this stack)
+        env:
+          SUPABASE_DB_URL: ${{ env.DB_URL }}
+        run: |
+          pnpm countries:set -- --code US --sms-sender +18885550100
+          pnpm countries:set -- --code TR --sms-sender +18885550100
+      # W4-16: the M10 acceptance suite (spec §16.2 M10 Done when; `pnpm e2e:m10`): every panel
+      # spec tagged `@m10`, one flow tag each. The `supabase` project: Team (@F15 an ops user moves
+      # Marco to WhatsApp with the attestation, @F16 Revoke devices and the code asked again,
+      # @F17 Text today's link from the row, @F24 an office user whose panel opens in Turkish),
+      # Settings (@F22 Field channels as the pack row says, the daily link and the default
+      # preference saved, the test message on the console), Billing (@F23 the org's price, the
+      # pm's no access, a new US customer's Pause / Resume and the trial-end banner). The `worker`
+      # project: W4-12's self-serve run for the US pack (a brand-new user signs up, makes the org,
+      # site and invite; the welcome and the device code reach the stand-in through Twilio's
+      # driver; the manager files by link, the next day by Talk now, §19 Q246), W4-04's Call now
+      # (@F3) and W4-05's Call me now (@F22), both on the console telephony.
+      - name: M10 acceptance suite (W4-16, pnpm e2e:m10)
+        env:
+          WORKER_HEALTH_URL: http://127.0.0.1:8080/health
+          SMS_STAND_IN_URL: http://127.0.0.1:4010
+          VOICE_AGENT_TOOL_SECRET: e2e-voice-agent-tool-secret-not-for-production
+        run: pnpm e2e:m10
+      # W4-16: the M11 acceptance suite (spec §16.2 M11 Done when; `pnpm e2e:m11`): every spec
+      # tagged `@m11`. The panel: Demir Yapı's shell, Sites, Site detail and manual Billing in
+      # Turkish, Elif's typed report and every page in Turkish with no English text block but
+      # `/ops` and `/try` (§19 Q240), the setup wizard in a tr-TR browser (the TR self-serve
+      # variant), the Turkish magic link from Mailpit, and W4-12's self-serve run for the TR pack
+      # (İletimerkezi's driver to the stand-in, then Talk now). The field app: Demir Yapı's link
+      # report by Emre in Turkish through the worker, its A4 PDF read with pdftotext, and the
+      # Turkish Kartal calls by Talk now through the call simulator (W4-07's scripts, filed in
+      # Turkish with an A4 PDF).
+      - name: M11 acceptance suite (W4-16, pnpm e2e:m11)
+        env:
+          WORKER_HEALTH_URL: http://127.0.0.1:8080/health
+          SMS_STAND_IN_URL: http://127.0.0.1:4010
+          VOICE_AGENT_TOOL_SECRET: e2e-voice-agent-tool-secret-not-for-production
+        run: pnpm e2e:m11
       - name: Supabase logs
         if: failure()
         run: |
+          docker ps -a --filter name=supabase_ --format '{{.Names}} {{.Status}}' || true
           for c in edge_runtime realtime auth rest; do
             echo "::group::$c"; docker logs "supabase_${c}_sitelog" --tail 150 2>&1 || true; echo "::endgroup::"
           done
+          echo "::group::worker"; tail -n 200 "$RUNNER_TEMP/worker.log" 2>/dev/null || true; echo "::endgroup::"
+          echo "::group::sms stand-in"; tail -n 100 "$RUNNER_TEMP/sms-stand-in.log" 2>/dev/null || true; echo "::endgroup::"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -147,6 +445,8 @@ jobs:
           path: |
             apps/web/playwright-report
             apps/web/test-results
+            apps/field/playwright-report
+            apps/field/test-results
           retention-days: 7
 
   eval:

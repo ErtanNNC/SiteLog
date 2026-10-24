@@ -2,8 +2,10 @@
  * Panel formatters. Shared helpers come from @sitelog/shared/format.ts; everything here is
  * presentation-only (eyebrows, week labels, signed gaps…). Locale en-US, times in the site tz.
  */
+import type { Language } from '@sitelog/shared/locale.ts';
 import {
   addDays,
+  formatDate,
   formatDateInTz,
   formatDateLong,
   formatHours,
@@ -136,10 +138,20 @@ export function formatDateTimeShort(instant: string, tz: string): string {
   return `${formatMonthDay(formatDateInTz(instant, tz))} · ${formatTimeInTz(instant, tz)}`;
 }
 
-/** Relative wording for activity feeds, in the site tz: today → "17:38", else "Oct 7 · 09:12". */
-export function formatWhen(instant: string, tz: string, today: string): string {
+/**
+ * Relative wording for activity feeds, in the site tz: today → "17:38", else "Oct 7 · 09:12"
+ * ("7 Eki · 09:12" in Turkish).
+ */
+export function formatWhen(
+  instant: string,
+  tz: string,
+  today: string,
+  language: Language = 'en',
+): string {
   const date = formatDateInTz(instant, tz);
-  return date === today ? formatTimeInTz(instant, tz) : formatDateTimeShort(instant, tz);
+  if (date === today) return formatTimeInTz(instant, tz);
+  if (language === 'en') return formatDateTimeShort(instant, tz);
+  return `${formatDate(date, 'monthDay', language)} · ${formatTimeInTz(instant, tz)}`;
 }
 
 export function pluralize(n: number, one: string, many = `${one}s`): string {

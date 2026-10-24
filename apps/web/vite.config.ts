@@ -25,5 +25,7 @@ export default defineConfig({
     include: ['src/**/*.test.{ts,tsx}'],
     css: false,
     restoreMocks: true,
+    // Long user-event flows (the setup wizard types a dozen fields) on a loaded CI runner.
+    testTimeout: 20_000,
   },
 });

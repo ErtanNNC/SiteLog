@@ -154,6 +154,9 @@ const STATUS_RANK: Record<MsgStatus, number> = {
   delivered: 3,
   read: 4,
   failed: 5,
+  // SMS only (v1.2): terminal like `failed`; Meta never reports it, and no WhatsApp delivery
+  // status moves a message out of it.
+  undeliverable: 5,
 };
 
 /** Meta status webhook → `messages.status`; null for statuses we do not track (deleted, warning). */

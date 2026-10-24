@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import {
-  DailyReportDataSchema,
-  emptyReportData,
-  type DailyReportData,
-  type ManpowerEntry,
+  DailyReportDataV1Schema,
+  emptyReportDataV1,
+  type DailyReportDataV1,
+  type ManpowerEntryV1,
 } from '@sitelog/shared';
 import { DEMO_ORG_ID, DEMO_USERS } from '@sitelog/shared/demo/kestrel.ts';
 import { asService, asUser, bootDatabase } from './harness.ts';
@@ -50,7 +50,12 @@ function editReport(user: string, reportId: string, data: unknown, note = 'Crew 
 }
 
 /** A crew row as toReportData() builds it: "Add new…" rows carry companyId null. */
-function crew(companyId: string | null, name: string, workers = 4, trade?: string): ManpowerEntry {
+function crew(
+  companyId: string | null,
+  name: string,
+  workers = 4,
+  trade?: string,
+): ManpowerEntryV1 {
   return {
     companyId,
     companyNameHeard: name,
@@ -65,13 +70,13 @@ function crew(companyId: string | null, name: string, workers = 4, trade?: strin
   };
 }
 
-function body(date: string, manpower: ManpowerEntry[]): DailyReportData {
-  return DailyReportDataSchema.parse({ ...emptyReportData(date), summary: 'Typed.', manpower });
+function body(date: string, manpower: ManpowerEntryV1[]): DailyReportDataV1 {
+  return DailyReportDataV1Schema.parse({ ...emptyReportDataV1(date), summary: 'Typed.', manpower });
 }
 
 async function versionData(reportId: string, version: number) {
   return (
-    await svc<{ data: DailyReportData }>(
+    await svc<{ data: DailyReportDataV1 }>(
       `select data from report_versions where report_id = $1 and version = $2`,
       [reportId, version],
     )
@@ -129,7 +134,7 @@ describe('typed companies on create_office_report', () => {
     ]);
     // No office_edit provenance is added to a typed version 1 (it would print as EDITED).
     expect(v1.manpower.every((m) => m.source.length === 0)).toBe(true);
-    expect(DailyReportDataSchema.safeParse(v1).success).toBe(true);
+    expect(DailyReportDataV1Schema.safeParse(v1).success).toBe(true);
 
     const rows = await svc<{ company_id: string | null }>(
       `select company_id from manpower_entries where report_id = $1 and version = 1 order by id`,

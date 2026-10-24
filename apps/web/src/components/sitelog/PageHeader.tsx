@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
+import { useCopy } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
 
 export interface PageHeaderProps {
@@ -21,6 +22,7 @@ export function PageHeader({
   breadcrumb,
   className,
 }: PageHeaderProps) {
+  const { t } = useCopy();
   return (
     <header
       className={cn(
@@ -31,7 +33,7 @@ export function PageHeader({
       <div className="min-w-0">
         {breadcrumb?.length ? (
           <nav
-            aria-label="Breadcrumb"
+            aria-label={t('siteDetail.breadcrumbLabel')}
             className="mb-2 flex flex-wrap items-center gap-1 text-caption text-dust"
           >
             {breadcrumb.map((b, i) => (

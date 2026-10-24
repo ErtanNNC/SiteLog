@@ -9,6 +9,10 @@
     "workingHours": "07:00–15:30"
   },
   "reportDate": "2026-10-07",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "en-US",
+  "channel": "web",
   "defaultShiftHours": 8,
   "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
   "reporterFirstName": "Kevin",
@@ -34,36 +38,137 @@
     }
   ],
   "glossary": [
-    { "heard": "the deck", "official": "Elevated concrete slab", "kind": "term" },
-    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
+    {
+      "heard": "the deck",
+      "official": "Elevated concrete slab",
+      "kind": "term"
+    },
+    {
+      "heard": "stood down",
+      "official": "Work stoppage",
+      "kind": "term"
+    },
     {
       "heard": "topped out",
       "official": "Structural frame complete to roof level",
       "kind": "term"
     },
-    { "heard": "punch", "official": "Punch list items", "kind": "term" },
-    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" },
-    { "heard": "rough-in", "official": "MEP rough-in", "kind": "term" }
+    {
+      "heard": "punch",
+      "official": "Punch list items",
+      "kind": "term"
+    },
+    {
+      "heard": "yards",
+      "official": "Cubic yards (yd³)",
+      "kind": "unit"
+    },
+    {
+      "heard": "rough-in",
+      "official": "MEP rough-in",
+      "kind": "term"
+    }
   ],
-  "rejectedMappings": [{ "heard": "lift", "official": "Lift (concrete placement height)" }],
+  "rejectedMappings": [
+    {
+      "heard": "lift",
+      "official": "Lift (concrete placement height)"
+    }
+  ],
   "observedWeather": {
     "date": "2026-10-07",
     "provider": "Open-Meteo",
     "fetchedAt": "2026-10-07T21:30:00Z",
-    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
     "hours": [
-      { "time": "06:00", "precipIn": 0, "tempF": 51, "windMph": 8, "gustMph": 15 },
-      { "time": "07:00", "precipIn": 0, "tempF": 55, "windMph": 9, "gustMph": 13 },
-      { "time": "08:00", "precipIn": 0, "tempF": 59, "windMph": 10, "gustMph": 11 },
-      { "time": "09:00", "precipIn": 0, "tempF": 62, "windMph": 8, "gustMph": 14 },
-      { "time": "10:00", "precipIn": 0, "tempF": 65, "windMph": 9, "gustMph": 12 },
-      { "time": "11:00", "precipIn": 0, "tempF": 66, "windMph": 10, "gustMph": 15 },
-      { "time": "12:00", "precipIn": 0, "tempF": 66, "windMph": 8, "gustMph": 13 },
-      { "time": "13:00", "precipIn": 0, "tempF": 65, "windMph": 9, "gustMph": 11 },
-      { "time": "14:00", "precipIn": 0, "tempF": 62, "windMph": 10, "gustMph": 14 },
-      { "time": "15:00", "precipIn": 0, "tempF": 59, "windMph": 8, "gustMph": 12 },
-      { "time": "16:00", "precipIn": 0, "tempF": 55, "windMph": 9, "gustMph": 15 },
-      { "time": "17:00", "precipIn": 0, "tempF": 51, "windMph": 10, "gustMph": 13 }
+      {
+        "time": "06:00",
+        "precipIn": 0,
+        "tempF": 51,
+        "windMph": 8,
+        "gustMph": 15
+      },
+      {
+        "time": "07:00",
+        "precipIn": 0,
+        "tempF": 55,
+        "windMph": 9,
+        "gustMph": 13
+      },
+      {
+        "time": "08:00",
+        "precipIn": 0,
+        "tempF": 59,
+        "windMph": 10,
+        "gustMph": 11
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0,
+        "tempF": 62,
+        "windMph": 8,
+        "gustMph": 14
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0,
+        "tempF": 65,
+        "windMph": 9,
+        "gustMph": 12
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0,
+        "tempF": 66,
+        "windMph": 10,
+        "gustMph": 15
+      },
+      {
+        "time": "12:00",
+        "precipIn": 0,
+        "tempF": 66,
+        "windMph": 8,
+        "gustMph": 13
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 65,
+        "windMph": 9,
+        "gustMph": 11
+      },
+      {
+        "time": "14:00",
+        "precipIn": 0,
+        "tempF": 62,
+        "windMph": 10,
+        "gustMph": 14
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 59,
+        "windMph": 8,
+        "gustMph": 12
+      },
+      {
+        "time": "16:00",
+        "precipIn": 0,
+        "tempF": 55,
+        "windMph": 9,
+        "gustMph": 15
+      },
+      {
+        "time": "17:00",
+        "precipIn": 0,
+        "tempF": 51,
+        "windMph": 10,
+        "gustMph": 13
+      }
     ],
     "summary": {
       "precipIn": 0,
@@ -79,45 +184,47 @@
   "previousAnswers": [],
   "previousDraft": null,
   "photos": [
-    { "messageId": "e0000021-0000-4000-8000-000000002105", "takenAt": "2026-10-07T22:01:00Z" }
+    {
+      "uploadId": "e0000021-0000-4000-8000-000000002105",
+      "takenAt": "2026-10-07T22:01:00Z"
+    }
   ],
   "segments": [
     {
-      "messageId": "e0000021-0000-4000-8000-000000002101",
+      "uploadId": "e0000021-0000-4000-8000-000000002101",
       "start": 0,
       "end": 6.5,
       "text": "North gate parking, Wednesday. Dry all day."
     },
     {
-      "messageId": "e0000021-0000-4000-8000-000000002101",
+      "uploadId": "e0000021-0000-4000-8000-000000002101",
       "start": 6.5,
       "end": 14,
       "text": "Iron Clad had three guys tying the PT deck on level two, full day, about eighty percent of the deck is tied."
     },
     {
-      "messageId": "e0000021-0000-4000-8000-000000002101",
+      "uploadId": "e0000021-0000-4000-8000-000000002101",
       "start": 14,
       "end": 21.8,
       "text": "A pecks guys, two of them, full day, did the column pours on level two, eleven yards."
     },
     {
-      "messageId": "e0000021-0000-4000-8000-000000002101",
+      "uploadId": "e0000021-0000-4000-8000-000000002101",
       "start": 21.8,
       "end": 30,
       "text": "Our crew five, full day. The boom lift was down all morning so they did punch on level one instead of the level three shear wall forms."
     },
     {
-      "messageId": "e0000021-0000-4000-8000-000000002101",
+      "uploadId": "e0000021-0000-4000-8000-000000002101",
       "start": 30,
       "end": 36,
       "text": "The rental company says the lift gets fixed tomorrow at seven."
     },
     {
-      "messageId": "e0000021-0000-4000-8000-000000002101",
+      "uploadId": "e0000021-0000-4000-8000-000000002101",
       "start": 36,
       "end": 41,
       "text": "No incidents, toolbox talk on aerial lift inspections. Photo."
     }
-  ],
-  "texts": []
+  ]
 }

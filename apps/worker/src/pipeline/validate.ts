@@ -1,8 +1,9 @@
 import {
+  callRequiredFields,
   pickNextQuestion,
   validateReport,
+  type AnyReportData,
   type CompanyRow,
-  type DailyReportData,
   type OrgSettingsRow,
   type QuestionRow,
   type QuestionSpec,
@@ -26,12 +27,28 @@ export function requiredFieldsOf(
   return settings.required_fields.filter((f): f is RequiredFieldKey => allowed.has(f));
 }
 
+/**
+ * §10.5 step 2 against the org's required fields. `callReport` (W3-11): a report with a call
+ * source has its photo requirement deferred (`callRequiredFields`): never asked, on the call or on
+ * the web after a hang-up, never `missing:photo` at filing; the photos link is texted and the
+ * 23:59 check (`no_photo_check`) flags it when none arrive.
+ */
 export function validateDraft(
-  data: DailyReportData,
+  data: AnyReportData,
   settings: Pick<OrgSettingsRow, 'required_fields'>,
   photoCount: number,
+  opts: { callReport?: boolean } = {},
 ): ValidationResult {
-  return validateReport(data, { requiredFields: requiredFieldsOf(settings), photoCount });
+  const required = requiredFieldsOf(settings);
+  return validateReport(data, {
+    requiredFields: opts.callReport ? callRequiredFields(required) : required,
+    photoCount,
+  });
+}
+
+/** W3-11: whether a report has a call among its sources (a call report, §10.5, §19 Q176). */
+export function hasCallSource(sources: ReadonlyArray<{ kind: string }>): boolean {
+  return sources.some((s) => s.kind === 'call');
 }
 
 /** questions.target carries the gap path so re-asks and "asked" bookkeeping are exact. */
@@ -43,17 +60,20 @@ export function askedPathsOf(questions: QuestionRow[]): string[] {
 }
 
 export function selectNextQuestion(
-  data: DailyReportData,
+  data: AnyReportData,
   validation: ValidationResult,
   questions: QuestionRow[],
   settings: Pick<OrgSettingsRow, 'max_questions_per_report'>,
   companies: CompanyRow[],
+  /** The reporter's locale for the fallback questions (EN, ES, TR); English when omitted. */
+  language: string | null = null,
 ): QuestionSpec | null {
   return pickNextQuestion(data, validation, {
     askedPaths: askedPathsOf(questions),
     askedCount: questions.length,
     maxQuestions: settings.max_questions_per_report,
     companies: companies.map((c) => ({ id: c.id, name: c.name, aliases: c.aliases })),
+    language,
   });
 }
 

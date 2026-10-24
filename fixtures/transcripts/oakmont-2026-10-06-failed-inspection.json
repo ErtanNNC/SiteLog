@@ -9,6 +9,10 @@
     "workingHours": "07:00–15:30"
   },
   "reportDate": "2026-10-06",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "en-US",
+  "channel": "web",
   "defaultShiftHours": 8,
   "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
   "reporterFirstName": "Dana",
@@ -52,30 +56,122 @@
     }
   ],
   "glossary": [
-    { "heard": "punch", "official": "Punch list items", "kind": "term" },
-    { "heard": "rough-in", "official": "MEP rough-in", "kind": "term" },
-    { "heard": "the Delta guys", "official": "Delta Mechanical", "kind": "company" },
-    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+    {
+      "heard": "punch",
+      "official": "Punch list items",
+      "kind": "term"
+    },
+    {
+      "heard": "rough-in",
+      "official": "MEP rough-in",
+      "kind": "term"
+    },
+    {
+      "heard": "the Delta guys",
+      "official": "Delta Mechanical",
+      "kind": "company"
+    },
+    {
+      "heard": "yards",
+      "official": "Cubic yards (yd³)",
+      "kind": "unit"
+    }
   ],
   "rejectedMappings": [],
   "observedWeather": {
     "date": "2026-10-06",
     "provider": "Open-Meteo",
     "fetchedAt": "2026-10-06T21:30:00Z",
-    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
     "hours": [
-      { "time": "06:00", "precipIn": 0.03, "tempF": 53, "windMph": 7, "gustMph": 15 },
-      { "time": "07:00", "precipIn": 0, "tempF": 56, "windMph": 8, "gustMph": 13 },
-      { "time": "08:00", "precipIn": 0, "tempF": 59, "windMph": 9, "gustMph": 11 },
-      { "time": "09:00", "precipIn": 0, "tempF": 61, "windMph": 7, "gustMph": 14 },
-      { "time": "10:00", "precipIn": 0, "tempF": 63, "windMph": 8, "gustMph": 12 },
-      { "time": "11:00", "precipIn": 0, "tempF": 64, "windMph": 9, "gustMph": 15 },
-      { "time": "12:00", "precipIn": 0, "tempF": 64, "windMph": 7, "gustMph": 13 },
-      { "time": "13:00", "precipIn": 0, "tempF": 63, "windMph": 8, "gustMph": 11 },
-      { "time": "14:00", "precipIn": 0, "tempF": 61, "windMph": 9, "gustMph": 14 },
-      { "time": "15:00", "precipIn": 0, "tempF": 59, "windMph": 7, "gustMph": 12 },
-      { "time": "16:00", "precipIn": 0, "tempF": 56, "windMph": 8, "gustMph": 15 },
-      { "time": "17:00", "precipIn": 0, "tempF": 53, "windMph": 9, "gustMph": 13 }
+      {
+        "time": "06:00",
+        "precipIn": 0.03,
+        "tempF": 53,
+        "windMph": 7,
+        "gustMph": 15
+      },
+      {
+        "time": "07:00",
+        "precipIn": 0,
+        "tempF": 56,
+        "windMph": 8,
+        "gustMph": 13
+      },
+      {
+        "time": "08:00",
+        "precipIn": 0,
+        "tempF": 59,
+        "windMph": 9,
+        "gustMph": 11
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0,
+        "tempF": 61,
+        "windMph": 7,
+        "gustMph": 14
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0,
+        "tempF": 63,
+        "windMph": 8,
+        "gustMph": 12
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0,
+        "tempF": 64,
+        "windMph": 9,
+        "gustMph": 15
+      },
+      {
+        "time": "12:00",
+        "precipIn": 0,
+        "tempF": 64,
+        "windMph": 7,
+        "gustMph": 13
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 63,
+        "windMph": 8,
+        "gustMph": 11
+      },
+      {
+        "time": "14:00",
+        "precipIn": 0,
+        "tempF": 61,
+        "windMph": 9,
+        "gustMph": 14
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 59,
+        "windMph": 7,
+        "gustMph": 12
+      },
+      {
+        "time": "16:00",
+        "precipIn": 0,
+        "tempF": 56,
+        "windMph": 8,
+        "gustMph": 15
+      },
+      {
+        "time": "17:00",
+        "precipIn": 0,
+        "tempF": 53,
+        "windMph": 9,
+        "gustMph": 13
+      }
     ],
     "summary": {
       "precipIn": 0.03,
@@ -91,45 +187,47 @@
   "previousAnswers": [],
   "previousDraft": null,
   "photos": [
-    { "messageId": "e0000019-0000-4000-8000-000000001905", "takenAt": "2026-10-06T22:25:00Z" }
+    {
+      "uploadId": "e0000019-0000-4000-8000-000000001905",
+      "takenAt": "2026-10-06T22:25:00Z"
+    }
   ],
   "segments": [
     {
-      "messageId": "e0000019-0000-4000-8000-000000001901",
+      "uploadId": "e0000019-0000-4000-8000-000000001901",
       "start": 0,
       "end": 6.2,
       "text": "Oakmont, Tuesday. Light rain early but it stopped before we started, no impact."
     },
     {
-      "messageId": "e0000019-0000-4000-8000-000000001901",
+      "uploadId": "e0000019-0000-4000-8000-000000001901",
       "start": 6.2,
       "end": 13,
       "text": "The fire marshal did the above-ceiling inspection on level one and failed it, two missing firestop sleeves at the corridor wall."
     },
     {
-      "messageId": "e0000019-0000-4000-8000-000000001901",
+      "uploadId": "e0000019-0000-4000-8000-000000001901",
       "start": 13,
       "end": 19.8,
       "text": "Delta has to fix those. They had four guys today, full day, on the level one ductwork."
     },
     {
-      "messageId": "e0000019-0000-4000-8000-000000001901",
+      "uploadId": "e0000019-0000-4000-8000-000000001901",
       "start": 19.8,
       "end": 26.4,
       "text": "Summit four, full day, ceiling grid on two. Apex three, full day, prepping the topping slab on two."
     },
     {
-      "messageId": "e0000019-0000-4000-8000-000000001901",
+      "uploadId": "e0000019-0000-4000-8000-000000001901",
       "start": 26.4,
       "end": 34,
       "text": "Deliveries: the door frames and hardware came at nine, about sixty frames, and the drywall got stocked on level two at one."
     },
     {
-      "messageId": "e0000019-0000-4000-8000-000000001901",
+      "uploadId": "e0000019-0000-4000-8000-000000001901",
       "start": 34,
       "end": 40,
       "text": "Re-inspection is Thursday morning. No incidents today, toolbox talk on ladder use. One photo."
     }
-  ],
-  "texts": []
+  ]
 }

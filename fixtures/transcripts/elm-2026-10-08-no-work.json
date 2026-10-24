@@ -1,7 +1,10 @@
 {
   "id": "elm-2026-10-08-no-work",
   "description": "No-work day (street closed by the city, nobody on site): no crews, work or lost hours invented; weather not mentioned stays empty; next workday plans kept. Code asks for headcount first because manpower is required.",
-  "expectedQuestion": { "field": "manpower.workers", "path": "manpower" },
+  "expectedQuestion": {
+    "field": "manpower.workers",
+    "path": "manpower"
+  },
   "site": {
     "name": "Elm St. Townhomes",
     "projectCode": "ES-0377",
@@ -9,6 +12,10 @@
     "workingHours": "07:00–15:30"
   },
   "reportDate": "2026-10-08",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "en-US",
+  "channel": "web",
   "defaultShiftHours": 8,
   "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
   "reporterFirstName": "Priya",
@@ -22,29 +29,117 @@
     }
   ],
   "glossary": [
-    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
-    { "heard": "punch", "official": "Punch list items", "kind": "term" },
-    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+    {
+      "heard": "stood down",
+      "official": "Work stoppage",
+      "kind": "term"
+    },
+    {
+      "heard": "punch",
+      "official": "Punch list items",
+      "kind": "term"
+    },
+    {
+      "heard": "yards",
+      "official": "Cubic yards (yd³)",
+      "kind": "unit"
+    }
   ],
   "rejectedMappings": [],
   "observedWeather": {
     "date": "2026-10-08",
     "provider": "Open-Meteo",
     "fetchedAt": "2026-10-08T21:30:00Z",
-    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
     "hours": [
-      { "time": "06:00", "precipIn": 0, "tempF": 52, "windMph": 7, "gustMph": 15 },
-      { "time": "07:00", "precipIn": 0, "tempF": 55, "windMph": 8, "gustMph": 13 },
-      { "time": "08:00", "precipIn": 0, "tempF": 58, "windMph": 9, "gustMph": 11 },
-      { "time": "09:00", "precipIn": 0, "tempF": 60, "windMph": 7, "gustMph": 14 },
-      { "time": "10:00", "precipIn": 0, "tempF": 62, "windMph": 8, "gustMph": 12 },
-      { "time": "11:00", "precipIn": 0, "tempF": 63, "windMph": 9, "gustMph": 15 },
-      { "time": "12:00", "precipIn": 0, "tempF": 63, "windMph": 7, "gustMph": 13 },
-      { "time": "13:00", "precipIn": 0, "tempF": 62, "windMph": 8, "gustMph": 11 },
-      { "time": "14:00", "precipIn": 0, "tempF": 60, "windMph": 9, "gustMph": 14 },
-      { "time": "15:00", "precipIn": 0, "tempF": 58, "windMph": 7, "gustMph": 12 },
-      { "time": "16:00", "precipIn": 0, "tempF": 55, "windMph": 8, "gustMph": 15 },
-      { "time": "17:00", "precipIn": 0, "tempF": 52, "windMph": 9, "gustMph": 13 }
+      {
+        "time": "06:00",
+        "precipIn": 0,
+        "tempF": 52,
+        "windMph": 7,
+        "gustMph": 15
+      },
+      {
+        "time": "07:00",
+        "precipIn": 0,
+        "tempF": 55,
+        "windMph": 8,
+        "gustMph": 13
+      },
+      {
+        "time": "08:00",
+        "precipIn": 0,
+        "tempF": 58,
+        "windMph": 9,
+        "gustMph": 11
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0,
+        "tempF": 60,
+        "windMph": 7,
+        "gustMph": 14
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0,
+        "tempF": 62,
+        "windMph": 8,
+        "gustMph": 12
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0,
+        "tempF": 63,
+        "windMph": 9,
+        "gustMph": 15
+      },
+      {
+        "time": "12:00",
+        "precipIn": 0,
+        "tempF": 63,
+        "windMph": 7,
+        "gustMph": 13
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 62,
+        "windMph": 8,
+        "gustMph": 11
+      },
+      {
+        "time": "14:00",
+        "precipIn": 0,
+        "tempF": 60,
+        "windMph": 9,
+        "gustMph": 14
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 58,
+        "windMph": 7,
+        "gustMph": 12
+      },
+      {
+        "time": "16:00",
+        "precipIn": 0,
+        "tempF": 55,
+        "windMph": 8,
+        "gustMph": 15
+      },
+      {
+        "time": "17:00",
+        "precipIn": 0,
+        "tempF": 52,
+        "windMph": 9,
+        "gustMph": 13
+      }
     ],
     "summary": {
       "precipIn": 0,
@@ -62,23 +157,22 @@
   "photos": [],
   "segments": [
     {
-      "messageId": "e0000017-0000-4000-8000-000000001701",
+      "uploadId": "e0000017-0000-4000-8000-000000001701",
       "start": 0,
       "end": 7,
       "text": "Elm Street, Thursday. No work today, the city closed the street for the water main tie-in, so we had no access to the site."
     },
     {
-      "messageId": "e0000017-0000-4000-8000-000000001701",
+      "uploadId": "e0000017-0000-4000-8000-000000001701",
       "start": 7,
       "end": 13.5,
       "text": "Nobody on site. I told the crew last night to stay home."
     },
     {
-      "messageId": "e0000017-0000-4000-8000-000000001701",
+      "uploadId": "e0000017-0000-4000-8000-000000001701",
       "start": 13.5,
       "end": 19,
       "text": "Street opens again tomorrow, crew back at seven for the roof sheathing on units one to four."
     }
-  ],
-  "texts": []
+  ]
 }

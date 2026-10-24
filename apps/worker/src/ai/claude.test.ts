@@ -1,22 +1,16 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ExtractionOutputSchema } from '@sitelog/shared';
 import { z } from 'zod';
-import { buildParams, callTool, modelProfile, ToolCallError } from './claude';
-import { runExtraction, type ExtractionInput } from './extract';
+import { buildParams, callTool, coerceToSchema, modelProfile, ToolCallError } from './claude';
+import { runExtraction } from './extract';
 import { quickClassify, stripDayReference } from './classify';
 import { quickDayOff } from './dayoff';
 import { matchSiteByText } from './site-guess';
 import { scriptedClaude } from '../test/harness';
+import { legacyInput, legacyRecorded } from '../test/legacy-fixtures';
 
-const FIXTURES = join(__dirname, '..', '..', '..', '..', 'fixtures');
-const input = JSON.parse(
-  readFileSync(join(FIXTURES, 'transcripts', 'riverside-2026-10-09.json'), 'utf8'),
-) as ExtractionInput;
-const recorded = JSON.parse(
-  readFileSync(join(FIXTURES, 'tool-outputs', 'riverside-2026-10-09.json'), 'utf8'),
-) as Record<string, unknown>;
+const input = legacyInput('riverside-2026-10-09');
+const recorded = legacyRecorded('riverside-2026-10-09');
 
 describe('model profiles', () => {
   it('forces the tool and temperature 0 on models that accept them', () => {
@@ -139,6 +133,61 @@ describe('callTool validation retry', () => {
   });
 });
 
+describe('coerceToSchema (tool input as the schema describes it)', () => {
+  const schema = {
+    type: 'object',
+    properties: {
+      weather: {
+        type: 'object',
+        properties: { text: { type: 'string' }, note: { type: 'string' } },
+        required: ['text'],
+      },
+      items: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: { pct: { type: 'integer' }, workers: { type: ['integer', 'null'] } },
+          required: ['workers'],
+        },
+      },
+      count: { type: 'integer' },
+      value: {},
+    },
+    required: ['weather', 'items', 'count'],
+  };
+
+  it('parses a stringified object or array and drops null on optional fields', () => {
+    expect(
+      coerceToSchema(
+        {
+          weather: '{"text":"Rain","note":null}',
+          items: '[{"pct":null,"workers":null}]',
+          count: null,
+          value: null,
+        },
+        schema,
+      ),
+    ).toEqual({
+      weather: { text: 'Rain' },
+      items: [{ workers: null }],
+      count: null,
+      value: null,
+    });
+  });
+
+  it('leaves what it cannot read to Zod and never mutates the input', () => {
+    const input = { weather: 'sunny', items: [], count: 3 };
+    const copy = structuredClone(input);
+    expect(coerceToSchema(input, schema)).toEqual(input);
+    expect(input).toEqual(copy);
+    expect(coerceToSchema({ weather: '[1]', items: '{}', count: 1 }, schema)).toEqual({
+      weather: '[1]',
+      items: '{}',
+      count: 1,
+    });
+  });
+});
+
 describe('extraction post-processing with the recorded tool output', () => {
   it('recomputes totals, resolves companies and keeps the Delta gap', async () => {
     const client = scriptedClaude([{ input: recorded }]);
@@ -156,7 +205,7 @@ describe('extraction post-processing with the recorded tool output', () => {
     expect(res.data.missingRequired).toContain('manpower.workers:Delta Mechanical');
     expect(ExtractionOutputSchema.safeParse(res.raw).success).toBe(true);
     const sys = client.calls[0]!.system as Array<{ text: string }>;
-    expect(sys[0]!.text).toContain("You are SiteLog's report writer");
+    expect(sys[0]!.text).toContain("You are TalkOlog's report writer");
     expect(sys[1]!.text).toContain('GLOSSARY');
     expect(JSON.stringify(client.calls[0])).not.toContain('+1555');
   });

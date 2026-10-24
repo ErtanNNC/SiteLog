@@ -1,4 +1,5 @@
-import { waCopy, type ConversationRow, type MessageRow } from '@sitelog/shared';
+import { openAiTranscribeModel } from '../../config';
+import { noticeData, waCopy, type ConversationRow, type MessageRow } from '@sitelog/shared';
 import { guessSite } from '../../ai/site-guess';
 import { buildTranscriptionPrompt, transcribeAudio } from '../../ai/transcribe';
 import type { Ctx } from '../../context';
@@ -16,7 +17,7 @@ export async function handleUnknownSender(
   message: MessageRow,
 ): Promise<void> {
   const inbound = parseInbound(message);
-  const existing = await ctx.db.findPendingUnknownSender(convo.phone_e164);
+  const existing = await ctx.db.findPendingUnknownContact(convo.phone_e164);
   let snippet: string | null = null;
 
   if (inbound.kind === 'text') snippet = inbound.text;
@@ -37,7 +38,7 @@ export async function handleUnknownSender(
         {
           audio: buffer,
           ext: message.storage_path.split('.').pop() ?? 'ogg',
-          model: ctx.config.TRANSCRIBE_MODEL,
+          model: openAiTranscribeModel(ctx.config),
           prompt: buildTranscriptionPrompt({
             siteName: 'a construction site',
             companies: [],
@@ -87,7 +88,7 @@ export async function handleUnknownSender(
   }
 
   if (existing) {
-    await ctx.db.updateUnknownSender(existing.id, {
+    await ctx.db.updateUnknownContact(existing.id, {
       snippet: existing.snippet ?? snippet,
       org_id: existing.org_id ?? guessedOrgId,
       guessed_site_id: existing.guessed_site_id ?? guessedSiteId,
@@ -95,10 +96,12 @@ export async function handleUnknownSender(
     // Reply only once per pending sender (§F11 step 3).
     return;
   }
-  const row = await ctx.db.insertUnknownSender({
+  // A WhatsApp sender has no field_channel (D13): channel stays null until step 22 retires this.
+  const row = await ctx.db.insertUnknownContact({
     org_id: guessedOrgId,
     phone_e164: convo.phone_e164,
-    first_message_id: message.id,
+    channel: null,
+    message_id: message.id,
     snippet,
     guessed_site_id: guessedSiteId,
   });
@@ -106,16 +109,18 @@ export async function handleUnknownSender(
     await ctx.db.updateConversation(convo.id, { org_id: guessedOrgId });
     await ctx.db.notifyOrg(
       guessedOrgId,
-      'unknown_sender',
+      'unknown_contact',
       'Unknown number tried to report',
       snippet,
       '/team',
+      null,
+      noticeData('unknown_contact', {}),
     );
     await ctx.db.logAudit({
       org_id: guessedOrgId,
       actor_type: 'system',
-      action: 'unknown_sender.recorded',
-      entity: 'unknown_sender',
+      action: 'unknown_contact.recorded',
+      entity: 'unknown_contact',
       entity_id: row.id,
       diff: { guessed_site_id: guessedSiteId },
     });

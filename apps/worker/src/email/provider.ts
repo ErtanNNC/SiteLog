@@ -1,7 +1,13 @@
 import { Resend } from 'resend';
+import { raceJobSignal } from '../abort';
 import type { Logger } from '../log';
 
-/** Email provider abstraction (§13): Resend in production, console when no key is configured. */
+/**
+ * Email provider abstraction (§13): Resend in production, console when no key is configured. The
+ * console provider logs each email and, given a store, files it for the panel's Demo phone
+ * (`console_emails`, the Email tab, §11.1; W1-08): recipients, subject, the text body and the
+ * attachments' names and sizes, never the files.
+ */
 
 export interface EmailAttachment {
   filename: string;
@@ -17,11 +23,42 @@ export interface EmailMessage {
   attachments?: EmailAttachment[];
   replyTo?: string;
   tags?: Record<string, string>;
+  /** The org the email is about; the console provider files it there (no org: logged only). */
+  orgId?: string | null;
+  /**
+   * One email per key, however often the job sending it is retried (W1-15): Resend's
+   * `Idempotency-Key` (24 h), the console provider's `console_emails.dedupe_key`, the memory
+   * provider's list. `send_email` passes its job's dedupe key.
+   */
+  idempotencyKey?: string;
+}
+
+/**
+ * `alreadySent`: the provider had already accepted an email under this idempotency key, so this
+ * call sent nothing (a retry after the first attempt got through).
+ */
+export interface EmailSendResult {
+  id: string | null;
+  alreadySent?: boolean;
+}
+
+/** Where the console provider files what it would have sent (`console_emails`). */
+export interface ConsoleEmailStore {
+  /** The row's id; a row with the same `dedupe_key` already filed returns that row's id. */
+  insertConsoleEmail(row: {
+    org_id: string;
+    kind: string;
+    recipients: string[];
+    subject: string;
+    body_text: string;
+    attachments: Array<{ filename: string; bytes: number }>;
+    dedupe_key?: string | null;
+  }): Promise<string>;
 }
 
 export interface EmailProvider {
   readonly name: 'resend' | 'console' | 'memory';
-  send(msg: EmailMessage): Promise<{ id: string | null }>;
+  send(msg: EmailMessage): Promise<EmailSendResult>;
 }
 
 export function createResendProvider(apiKey: string, from: string): EmailProvider {
@@ -29,40 +66,70 @@ export function createResendProvider(apiKey: string, from: string): EmailProvide
   return {
     name: 'resend',
     async send(msg) {
-      const { data, error } = await resend.emails.send({
-        from,
-        to: msg.to,
-        subject: msg.subject,
-        html: msg.html,
-        text: msg.text,
-        replyTo: msg.replyTo,
-        attachments: msg.attachments?.map((a) => ({
-          filename: a.filename,
-          content: a.content,
-          contentType: a.contentType,
-        })),
-        tags: msg.tags
-          ? Object.entries(msg.tags).map(([name, value]) => ({ name, value }))
-          : undefined,
-      });
+      // Resend takes no fetch or signal: a timed-out job stops waiting for it (W1-10).
+      const { data, error } = await raceJobSignal(
+        resend.emails.send(
+          {
+            from,
+            to: msg.to,
+            subject: msg.subject,
+            html: msg.html,
+            text: msg.text,
+            replyTo: msg.replyTo,
+            attachments: msg.attachments?.map((a) => ({
+              filename: a.filename,
+              content: a.content,
+              contentType: a.contentType,
+            })),
+            tags: msg.tags
+              ? Object.entries(msg.tags).map(([name, value]) => ({ name, value }))
+              : undefined,
+          },
+          msg.idempotencyKey ? { idempotencyKey: msg.idempotencyKey } : undefined,
+        ),
+      );
+      // 409 `invalid_idempotent_request`: this key was already used with a different body within
+      // Resend's 24 h window, i.e. an earlier attempt of this job was accepted and the retry's
+      // content changed meanwhile (the PDF re-rendered after a sign-off). That email went out, so
+      // the retry succeeds without sending; a new key would send it twice. A 409
+      // `concurrent_idempotent_requests` (the first attempt still in flight) stays an error and
+      // is retried.
+      if (error && msg.idempotencyKey && error.name === 'invalid_idempotent_request')
+        return { id: null, alreadySent: true };
       if (error) throw new Error(`Resend: ${error.name ?? 'error'} ${error.message}`);
       return { id: data?.id ?? null };
     },
   };
 }
 
-export function createConsoleProvider(log: Logger, from: string): EmailProvider {
+export function createConsoleProvider(
+  log: Logger,
+  from: string,
+  store?: ConsoleEmailStore,
+): EmailProvider {
   return {
     name: 'console',
     async send(msg) {
+      const attachments =
+        msg.attachments?.map((a) => ({ filename: a.filename, bytes: a.content.length })) ?? [];
       log.info('email (console provider)', {
         from,
         to: msg.to,
         subject: msg.subject,
         text_preview: msg.text.slice(0, 400),
-        attachments: msg.attachments?.map((a) => `${a.filename} (${a.content.length} bytes)`) ?? [],
+        attachments: attachments.map((a) => `${a.filename} (${a.bytes} bytes)`),
       });
-      return { id: null };
+      if (!store || !msg.orgId) return { id: null };
+      const id = await store.insertConsoleEmail({
+        org_id: msg.orgId,
+        kind: msg.tags?.kind ?? 'email',
+        recipients: msg.to,
+        subject: msg.subject,
+        body_text: msg.text,
+        attachments,
+        dedupe_key: msg.idempotencyKey ?? null,
+      });
+      return { id: `console:${id}` };
     },
   };
 }
@@ -73,16 +140,36 @@ export function createMemoryProvider(): EmailProvider & { sent: EmailMessage[] }
     name: 'memory',
     sent,
     async send(msg) {
+      const i = msg.idempotencyKey
+        ? sent.findIndex((m) => m.idempotencyKey === msg.idempotencyKey)
+        : -1;
+      if (i >= 0) return { id: `mem-${i + 1}` };
       sent.push(msg);
       return { id: `mem-${sent.length}` };
     },
   };
 }
 
+/**
+ * Resend for real orgs only: an email about a demo org (`orgs.is_demo`, the §18 orgs with their
+ * `.example` addresses) goes to the console provider, the Demo phone's Email tab, as its texts go
+ * to the Demo phone. Without `isDemoOrg` (tests) every email takes Resend.
+ */
 export function createEmailProvider(
   cfg: { provider: 'resend' | 'console'; apiKey: string; from: string },
   log: Logger,
+  store?: ConsoleEmailStore,
+  isDemoOrg?: (orgId: string) => Promise<boolean>,
 ): EmailProvider {
-  if (cfg.provider === 'resend' && cfg.apiKey) return createResendProvider(cfg.apiKey, cfg.from);
-  return createConsoleProvider(log, cfg.from);
+  const consoleProvider = createConsoleProvider(log, cfg.from, store);
+  if (cfg.provider !== 'resend' || !cfg.apiKey) return consoleProvider;
+  const resend = createResendProvider(cfg.apiKey, cfg.from);
+  if (!isDemoOrg) return resend;
+  return {
+    name: resend.name,
+    async send(msg) {
+      if (msg.orgId && (await isDemoOrg(msg.orgId))) return consoleProvider.send(msg);
+      return resend.send(msg);
+    },
+  };
 }

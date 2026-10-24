@@ -14,6 +14,7 @@ import {
   type FfmpegRunner,
 } from '../media/ffmpeg';
 import { estimateTranscriptionCostUsd } from './cost';
+import { abortableFetch } from '../abort';
 
 /** §10.2 — OGG/Opus → mono 16 kHz MP3 → OpenAI transcription with segment timestamps. */
 
@@ -240,5 +241,5 @@ export function firstWords(text: string, n = 12): string {
 
 export function createOpenAiClient(apiKey: string): OpenAI | null {
   if (!apiKey) return null;
-  return new OpenAI({ apiKey, maxRetries: 2, timeout: 180_000 });
+  return new OpenAI({ apiKey, maxRetries: 2, timeout: 180_000, fetch: abortableFetch() });
 }

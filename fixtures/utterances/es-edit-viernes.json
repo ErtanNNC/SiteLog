@@ -1,0 +1,21 @@
+{
+  "id": "es-edit-viernes",
+  "description": "Spanish SMS EDIT: the day is viernes (Friday).",
+  "channel": "sms",
+  "language": "es",
+  "text": "EDITAR viernes Apex eran 7, no 6",
+  "recorded": {
+    "intent": "edit_request",
+    "confidence": 0.93,
+    "entities": {
+      "dayReference": "viernes",
+      "numbers": [7, 6]
+    },
+    "correctionText": "Apex eran 7, no 6"
+  },
+  "expected": {
+    "intent": "edit_request",
+    "dayReference": "viernes",
+    "correctionText": "Apex eran 7, no 6"
+  }
+}

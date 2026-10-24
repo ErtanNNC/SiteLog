@@ -1,86 +1,134 @@
 import { formatAudioTimestamp, formatTimeInTz } from '@sitelog/shared/format.ts';
 import type { Source } from '@sitelog/shared/schemas/report.ts';
-import { copy } from '@/copy/en';
+import { useCopy } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
-import { useVoicePlayer } from './VoicePlayer';
+import { useMediaPlayer } from './MediaPlayer';
 
 export interface SourceLinkProps {
+  /** A §10.3 v2 source (stored v1 data is upgraded on read). */
   source: Source | undefined;
-  /** For reply/text sources: the message time, shown as "reply 17:41". */
-  messageAt?: string | null;
+  /**
+   * The clips the page plays (upload ids of voice notes, ids of calls). A source citing one of
+   * them seeks it; a source of a clip the page does not hold shows its second only.
+   */
+  clipIds?: ReadonlySet<string>;
+  /** For an answer: when it came in, shown as "answer 17:41". */
+  answerAt?: string | null;
+  /** An answer given in a WhatsApp reply (an upgraded v1 source): worded "reply 17:41". */
+  isReply?: boolean;
+  /** An answer said on the recorder (§19 Q93): its link also plays the clip. */
+  spokenAnswer?: boolean;
   timezone: string;
   editorName?: string | null;
-  onOpenMessage?: (messageId: string) => void;
+  /** Reveals the answer (its question id, or a v1 reply's message id) in the Activity timeline. */
+  onShowAnswer?: (anchor: string) => void;
   onOpenHistory?: () => void;
   className?: string;
 }
 
-/** Mono "audio 0:41" → seeks the player + highlights the transcript segment; "reply 17:41"; "edited by Lena". */
+/**
+ * §11.3 SourceLink: mono "audio 0:41" / "call 2:15" seek the clip they cite and play it (and
+ * highlight the excerpt); "answer 17:41" reveals the answer in Activity; "edited by Lena" opens
+ * the version history; "weather data" is plain text.
+ */
 export function SourceLink({
   source,
-  messageAt,
+  clipIds,
+  answerAt,
+  isReply,
+  spokenAnswer,
   timezone,
   editorName,
-  onOpenMessage,
+  onShowAnswer,
   onOpenHistory,
   className,
 }: SourceLinkProps) {
-  const player = useVoicePlayer();
+  const { t } = useCopy();
+  const player = useMediaPlayer();
   const base = cn(
     'inline-flex h-6 items-center rounded-chip px-1.5 font-mono text-[12px] font-medium text-level underline-offset-2 hover:bg-chip-review-bg hover:underline',
     className,
   );
+  const plain = cn(base, 'text-dust hover:bg-transparent hover:no-underline');
+  // §19 Q146's recommended default (open): the 24 px chip keeps its look, its hit area is 44 px.
+  const hit = cn(
+    base,
+    'relative before:absolute before:inset-x-0 before:top-1/2 before:h-target before:-translate-y-1/2',
+  );
   if (!source) return null;
   switch (source.type) {
-    case 'audio': {
+    case 'voice_note':
+    case 'call': {
       const ts = formatAudioTimestamp(source.start);
+      const isCall = source.type === 'call';
+      const clipId = isCall ? source.callId : source.uploadId;
+      const label = t(isCall ? 'source.links.call' : 'source.links.audio', { ts });
+      if (!player || (clipIds && !clipIds.has(clipId)))
+        return (
+          <span className={plain} data-source={source.type}>
+            {label}
+          </span>
+        );
       return (
         <button
           type="button"
-          className={base}
-          onClick={() => player?.seek(source.start)}
-          aria-label={copy.source.seekTo(ts)}
-          data-source="audio"
-        >
-          {copy.source.audio(ts)}
-        </button>
-      );
-    }
-    case 'reply':
-    case 'text': {
-      const t = messageAt ? formatTimeInTz(messageAt, timezone) : '';
-      const label = source.type === 'reply' ? copy.source.reply(t) : copy.source.text(t);
-      return (
-        <button
-          type="button"
-          className={base}
-          onClick={() => onOpenMessage?.(source.messageId)}
-          aria-label={copy.source.openMessage}
+          className={hit}
+          onClick={() => player.seek(source.start, clipId)}
+          aria-label={`${label} · ${t(isCall ? 'source.links.playCall' : 'source.links.playVoiceNote', { ts })}`}
           data-source={source.type}
         >
-          {label.trim()}
+          {label}
         </button>
       );
     }
-    case 'office_edit':
+    case 'answer': {
+      const time = answerAt ? formatTimeInTz(answerAt, timezone) : '';
+      const label = t(isReply ? 'source.links.reply' : 'source.links.answer', { time }).trim();
+      if (!onShowAnswer)
+        return (
+          <span className={plain} data-source="answer">
+            {label}
+          </span>
+        );
       return (
         <button
           type="button"
-          className={base}
+          className={hit}
+          onClick={() => onShowAnswer(source.questionId)}
+          aria-label={`${label} · ${t(spokenAnswer ? 'source.links.playAnswer' : 'source.links.showAnswer')}`}
+          data-source="answer"
+        >
+          {label}
+        </button>
+      );
+    }
+    case 'office_edit': {
+      const label = editorName
+        ? t('source.links.editedBy', { name: editorName })
+        : t('source.links.editedByOffice');
+      return (
+        <button
+          type="button"
+          className={hit}
           onClick={onOpenHistory}
-          aria-label={copy.source.openHistory}
+          aria-label={`${label} · ${t('source.links.openHistory')}`}
           data-source="office_edit"
         >
-          {copy.source.editedBy(editorName ?? 'office')}
+          {label}
         </button>
+      );
+    }
+    case 'reporter_edit':
+      // Spec §19 Q80 (W2-10): a stepper or typed fix on the reporter's phone.
+      return (
+        <span className={plain} data-source="reporter_edit">
+          {t('source.links.reporterEdit', { time: formatTimeInTz(source.at, timezone) })}
+        </span>
       );
     case 'weather_api':
       return (
-        <span
-          className={cn(base, 'text-dust hover:bg-transparent hover:no-underline')}
-          data-source="weather_api"
-        >
-          {copy.source.weatherApi}
+        <span className={plain} data-source="weather_api">
+          {t('source.links.weather')}
         </span>
       );
     default:

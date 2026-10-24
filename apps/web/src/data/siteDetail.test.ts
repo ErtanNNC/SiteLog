@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { DemoSource } from './demo/DemoSource';
 import { DemoStore, demoUserFor } from './demo/store';
 
@@ -21,7 +21,7 @@ async function newSiteWithReports(dates: string[]) {
     await source.createOfficeReport({
       siteId,
       date,
-      data: { ...emptyReportData(date), summary: `Work on ${date}.` },
+      data: { ...emptyReportDataV1(date), summary: `Work on ${date}.` },
     });
   return { source, siteId };
 }
@@ -62,5 +62,19 @@ describe('site detail workdays so far', () => {
     const { monthStats, latest } = await source.getSiteDetail(siteId, '2026-10');
     expect(monthStats).toMatchObject({ reports: 0, workdaysSoFar: 1 });
     expect(latest).toBeNull();
+  });
+});
+
+/** W4-04: Site detail shows today's outbound call to the primary reporter (§18.1 Hillcrest). */
+describe('site detail call today', () => {
+  it('reads Aisha’s unanswered R1 call at Hillcrest from calls', async () => {
+    const store = new DemoStore();
+    const u = demoUserFor('admin');
+    const source = new DemoSource(store, { id: u.id, email: u.email, name: u.name, role: u.role });
+    const hillcrest = store.data.sites.find((s) => s.name === 'Hillcrest School Extension')!;
+    const detail = await source.getSiteDetail(hillcrest.id, '2026-10');
+    expect(detail.callToday).toMatchObject({ progress: 'not_reached', byOffice: false });
+    const riverside = store.data.sites.find((s) => s.name.startsWith('Riverside'))!;
+    expect((await source.getSiteDetail(riverside.id, '2026-10')).callToday).toBeNull();
   });
 });

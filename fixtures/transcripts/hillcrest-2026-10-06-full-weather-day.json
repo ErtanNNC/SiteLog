@@ -1,7 +1,10 @@
 {
   "id": "hillcrest-2026-10-06-full-weather-day",
   "description": "Full weather day (§18 Hillcrest Oct 6, 8.0 h): site closed at 06:15, nobody worked → fullDay true, no crews or work invented, no \"no incidents\" invented; code asks for the morning headcount (manpower is required).",
-  "expectedQuestion": { "field": "manpower.workers", "path": "manpower" },
+  "expectedQuestion": {
+    "field": "manpower.workers",
+    "path": "manpower"
+  },
   "site": {
     "name": "Hillcrest School Extension",
     "projectCode": "HS-0418",
@@ -9,6 +12,10 @@
     "workingHours": "07:00–15:30"
   },
   "reportDate": "2026-10-06",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "en-US",
+  "channel": "web",
   "defaultShiftHours": 8,
   "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
   "reporterFirstName": "Aisha",
@@ -34,29 +41,117 @@
     }
   ],
   "glossary": [
-    { "heard": "block", "official": "Concrete masonry units (CMU)", "kind": "term" },
-    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
-    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+    {
+      "heard": "block",
+      "official": "Concrete masonry units (CMU)",
+      "kind": "term"
+    },
+    {
+      "heard": "stood down",
+      "official": "Work stoppage",
+      "kind": "term"
+    },
+    {
+      "heard": "yards",
+      "official": "Cubic yards (yd³)",
+      "kind": "unit"
+    }
   ],
   "rejectedMappings": [],
   "observedWeather": {
     "date": "2026-10-06",
     "provider": "Open-Meteo",
     "fetchedAt": "2026-10-06T21:30:00Z",
-    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
     "hours": [
-      { "time": "06:00", "precipIn": 0.18, "tempF": 52, "windMph": 13, "gustMph": 26 },
-      { "time": "07:00", "precipIn": 0.22, "tempF": 53, "windMph": 14, "gustMph": 24 },
-      { "time": "08:00", "precipIn": 0.25, "tempF": 54, "windMph": 15, "gustMph": 22 },
-      { "time": "09:00", "precipIn": 0.19, "tempF": 55, "windMph": 13, "gustMph": 25 },
-      { "time": "10:00", "precipIn": 0.16, "tempF": 56, "windMph": 14, "gustMph": 23 },
-      { "time": "11:00", "precipIn": 0.14, "tempF": 56, "windMph": 15, "gustMph": 26 },
-      { "time": "12:00", "precipIn": 0.12, "tempF": 56, "windMph": 13, "gustMph": 24 },
-      { "time": "13:00", "precipIn": 0.15, "tempF": 56, "windMph": 14, "gustMph": 22 },
-      { "time": "14:00", "precipIn": 0.11, "tempF": 55, "windMph": 15, "gustMph": 25 },
-      { "time": "15:00", "precipIn": 0.09, "tempF": 54, "windMph": 13, "gustMph": 23 },
-      { "time": "16:00", "precipIn": 0.05, "tempF": 53, "windMph": 14, "gustMph": 26 },
-      { "time": "17:00", "precipIn": 0, "tempF": 52, "windMph": 15, "gustMph": 24 }
+      {
+        "time": "06:00",
+        "precipIn": 0.18,
+        "tempF": 52,
+        "windMph": 13,
+        "gustMph": 26
+      },
+      {
+        "time": "07:00",
+        "precipIn": 0.22,
+        "tempF": 53,
+        "windMph": 14,
+        "gustMph": 24
+      },
+      {
+        "time": "08:00",
+        "precipIn": 0.25,
+        "tempF": 54,
+        "windMph": 15,
+        "gustMph": 22
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0.19,
+        "tempF": 55,
+        "windMph": 13,
+        "gustMph": 25
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0.16,
+        "tempF": 56,
+        "windMph": 14,
+        "gustMph": 23
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0.14,
+        "tempF": 56,
+        "windMph": 15,
+        "gustMph": 26
+      },
+      {
+        "time": "12:00",
+        "precipIn": 0.12,
+        "tempF": 56,
+        "windMph": 13,
+        "gustMph": 24
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0.15,
+        "tempF": 56,
+        "windMph": 14,
+        "gustMph": 22
+      },
+      {
+        "time": "14:00",
+        "precipIn": 0.11,
+        "tempF": 55,
+        "windMph": 15,
+        "gustMph": 25
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0.09,
+        "tempF": 54,
+        "windMph": 13,
+        "gustMph": 23
+      },
+      {
+        "time": "16:00",
+        "precipIn": 0.05,
+        "tempF": 53,
+        "windMph": 14,
+        "gustMph": 26
+      },
+      {
+        "time": "17:00",
+        "precipIn": 0,
+        "tempF": 52,
+        "windMph": 15,
+        "gustMph": 24
+      }
     ],
     "summary": {
       "precipIn": 1.66,
@@ -73,36 +168,35 @@
   "previousDraft": null,
   "photos": [
     {
-      "messageId": "e0000013-0000-4000-8000-000000001305",
+      "uploadId": "e0000013-0000-4000-8000-000000001305",
       "caption": "Classroom wing excavations",
       "takenAt": "2026-10-06T13:40:00Z"
     }
   ],
   "segments": [
     {
-      "messageId": "e0000013-0000-4000-8000-000000001301",
+      "uploadId": "e0000013-0000-4000-8000-000000001301",
       "start": 0,
       "end": 7.5,
       "text": "Hillcrest, Tuesday. Heavy rain since before six and the forecast was rain all day, so I called it at six fifteen and told everyone to stay home."
     },
     {
-      "messageId": "e0000013-0000-4000-8000-000000001301",
+      "uploadId": "e0000013-0000-4000-8000-000000001301",
       "start": 7.5,
       "end": 13.2,
       "text": "Nobody worked today. The whole site is mud and the footing excavations on the classroom wing are full of water."
     },
     {
-      "messageId": "e0000013-0000-4000-8000-000000001301",
+      "uploadId": "e0000013-0000-4000-8000-000000001301",
       "start": 13.2,
       "end": 19,
       "text": "Full weather day, eight hours lost. I'll send a photo of the excavations."
     },
     {
-      "messageId": "e0000013-0000-4000-8000-000000001301",
+      "uploadId": "e0000013-0000-4000-8000-000000001301",
       "start": 19,
       "end": 24.5,
       "text": "Tomorrow first thing we pump out the footings before Apex can pour."
     }
-  ],
-  "texts": []
+  ]
 }

@@ -44,7 +44,8 @@ describe('format', () => {
   });
   it('formats phones and money', () => {
     expect(formatPhone('+15550143378')).toBe('+1 555 014 3378');
-    expect(formatPhone('+447700900123')).toBe('+447 700 900 123');
+    // Was '+447 700 900 123': non-US numbers were grouped in threes (the bug W1-02 fixes).
+    expect(formatPhone('+447700900123')).toBe('+44 7700 900123');
     expect(normalizeE164('(555) 014-3378')).toBe('+15550143378');
     expect(normalizeE164('+1 555 014 3378')).toBe('+15550143378');
     expect(normalizeE164('abc')).toBeNull();

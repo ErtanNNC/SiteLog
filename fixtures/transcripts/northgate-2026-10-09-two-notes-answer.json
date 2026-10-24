@@ -9,6 +9,10 @@
     "workingHours": "07:00–15:30"
   },
   "reportDate": "2026-10-09",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "en-US",
+  "channel": "web",
   "defaultShiftHours": 8,
   "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
   "reporterFirstName": "Kevin",
@@ -34,35 +38,132 @@
     }
   ],
   "glossary": [
-    { "heard": "the deck", "official": "Elevated concrete slab", "kind": "term" },
-    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
+    {
+      "heard": "the deck",
+      "official": "Elevated concrete slab",
+      "kind": "term"
+    },
+    {
+      "heard": "stood down",
+      "official": "Work stoppage",
+      "kind": "term"
+    },
     {
       "heard": "topped out",
       "official": "Structural frame complete to roof level",
       "kind": "term"
     },
-    { "heard": "punch", "official": "Punch list items", "kind": "term" },
-    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+    {
+      "heard": "punch",
+      "official": "Punch list items",
+      "kind": "term"
+    },
+    {
+      "heard": "yards",
+      "official": "Cubic yards (yd³)",
+      "kind": "unit"
+    }
   ],
-  "rejectedMappings": [{ "heard": "lift", "official": "Lift (concrete placement height)" }],
+  "rejectedMappings": [
+    {
+      "heard": "lift",
+      "official": "Lift (concrete placement height)"
+    }
+  ],
   "observedWeather": {
     "date": "2026-10-09",
     "provider": "Open-Meteo",
     "fetchedAt": "2026-10-09T21:30:00Z",
-    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
     "hours": [
-      { "time": "06:00", "precipIn": 0, "tempF": 44, "windMph": 7, "gustMph": 14 },
-      { "time": "07:00", "precipIn": 0, "tempF": 49, "windMph": 8, "gustMph": 12 },
-      { "time": "08:00", "precipIn": 0, "tempF": 53, "windMph": 9, "gustMph": 10 },
-      { "time": "09:00", "precipIn": 0, "tempF": 56, "windMph": 7, "gustMph": 13 },
-      { "time": "10:00", "precipIn": 0, "tempF": 59, "windMph": 8, "gustMph": 11 },
-      { "time": "11:00", "precipIn": 0, "tempF": 60, "windMph": 9, "gustMph": 14 },
-      { "time": "12:00", "precipIn": 0, "tempF": 60, "windMph": 7, "gustMph": 12 },
-      { "time": "13:00", "precipIn": 0, "tempF": 59, "windMph": 8, "gustMph": 10 },
-      { "time": "14:00", "precipIn": 0, "tempF": 56, "windMph": 9, "gustMph": 13 },
-      { "time": "15:00", "precipIn": 0, "tempF": 53, "windMph": 7, "gustMph": 11 },
-      { "time": "16:00", "precipIn": 0, "tempF": 49, "windMph": 8, "gustMph": 14 },
-      { "time": "17:00", "precipIn": 0, "tempF": 44, "windMph": 9, "gustMph": 12 }
+      {
+        "time": "06:00",
+        "precipIn": 0,
+        "tempF": 44,
+        "windMph": 7,
+        "gustMph": 14
+      },
+      {
+        "time": "07:00",
+        "precipIn": 0,
+        "tempF": 49,
+        "windMph": 8,
+        "gustMph": 12
+      },
+      {
+        "time": "08:00",
+        "precipIn": 0,
+        "tempF": 53,
+        "windMph": 9,
+        "gustMph": 10
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0,
+        "tempF": 56,
+        "windMph": 7,
+        "gustMph": 13
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0,
+        "tempF": 59,
+        "windMph": 8,
+        "gustMph": 11
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0,
+        "tempF": 60,
+        "windMph": 9,
+        "gustMph": 14
+      },
+      {
+        "time": "12:00",
+        "precipIn": 0,
+        "tempF": 60,
+        "windMph": 7,
+        "gustMph": 12
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 59,
+        "windMph": 8,
+        "gustMph": 10
+      },
+      {
+        "time": "14:00",
+        "precipIn": 0,
+        "tempF": 56,
+        "windMph": 9,
+        "gustMph": 13
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 53,
+        "windMph": 7,
+        "gustMph": 11
+      },
+      {
+        "time": "16:00",
+        "precipIn": 0,
+        "tempF": 49,
+        "windMph": 8,
+        "gustMph": 14
+      },
+      {
+        "time": "17:00",
+        "precipIn": 0,
+        "tempF": 44,
+        "windMph": 9,
+        "gustMph": 12
+      }
     ],
     "summary": {
       "precipIn": 0,
@@ -80,60 +181,59 @@
       "field": "manpower.workers",
       "question": "Quick check: you said \"Apex\" on Ramp B. How many, and for how long?",
       "answer": "3 · full day",
-      "messageId": "e0000026-0000-4000-8000-000000002603"
+      "questionId": "e0000026-0000-4000-8000-000000002603"
     }
   ],
   "previousDraft": null,
   "photos": [
     {
-      "messageId": "e0000026-0000-4000-8000-000000002605",
+      "uploadId": "e0000026-0000-4000-8000-000000002605",
       "caption": "L3 shear walls",
       "takenAt": "2026-10-09T22:08:00Z"
     }
   ],
   "segments": [
     {
-      "messageId": "e0000026-0000-4000-8000-000000002601",
+      "uploadId": "e0000026-0000-4000-8000-000000002601",
       "start": 0,
       "end": 6,
       "text": "Northgate, Friday. Dry, a bit cold in the morning, no problems."
     },
     {
-      "messageId": "e0000026-0000-4000-8000-000000002601",
+      "uploadId": "e0000026-0000-4000-8000-000000002601",
       "start": 6,
       "end": 13.5,
       "text": "Apex was on ramp B stripping the edge forms and patching, full day."
     },
     {
-      "messageId": "e0000026-0000-4000-8000-000000002601",
+      "uploadId": "e0000026-0000-4000-8000-000000002601",
       "start": 13.5,
       "end": 20,
       "text": "Ironclad three, full day, rebar for the shear walls on level three."
     },
     {
-      "messageId": "e0000026-0000-4000-8000-000000002601",
+      "uploadId": "e0000026-0000-4000-8000-000000002601",
       "start": 20,
       "end": 27,
       "text": "Our crew five, full day, shear wall forms on level three."
     },
     {
-      "messageId": "e0000026-0000-4000-8000-000000002601",
+      "uploadId": "e0000026-0000-4000-8000-000000002601",
       "start": 27,
       "end": 32,
       "text": "No incidents. Toolbox talk on cold stress."
     },
     {
-      "messageId": "e0000026-0000-4000-8000-000000002602",
+      "uploadId": "e0000026-0000-4000-8000-000000002602",
       "start": 0,
       "end": 6.5,
       "text": "Forgot to say, the inspector came at ten for the level two PT deck and it passed, so we can pour Tuesday."
     },
     {
-      "messageId": "e0000026-0000-4000-8000-000000002602",
+      "uploadId": "e0000026-0000-4000-8000-000000002602",
       "start": 6.5,
       "end": 12,
       "text": "And the shoring for level three came at one, one truck."
     }
-  ],
-  "texts": []
+  ]
 }

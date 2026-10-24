@@ -1,0 +1,39 @@
+{
+  "id": "tr-usta-bes",
+  "description": "Turkish, spoken: “Usta Beton dört değil, beş kişiydi.” on the Kartal draft → Usta Beton 5 × 8 saat = 40 saat (the change note in Turkish, the report's language).",
+  "voice": "correction-tr-usta-bes",
+  "language": "tr",
+  "draft": "kartal-2026-10-09-tr",
+  "recorded": {
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/manpower/0/workers",
+        "value": 5,
+        "reason": "dört değil, beş kişiydi"
+      }
+    ],
+    "changeNote": "Usta Beton 4 → 5 kişi",
+    "needsClarification": null
+  },
+  "expected": {
+    "applies": true,
+    "crew": {
+      "company": "Usta Beton",
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40
+    },
+    "changes": [
+      {
+        "kind": "crew",
+        "company": "Usta Beton",
+        "change": "changed",
+        "workers": [4, 5],
+        "hoursPerWorker": [8, 8],
+        "totalHours": [32, 40]
+      }
+    ],
+    "droppedTotals": 0
+  }
+}

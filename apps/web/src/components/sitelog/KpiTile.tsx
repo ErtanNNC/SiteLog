@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
-import { copy } from '@/copy/en';
+import { useCopy } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
 
 export interface KpiSegment {
@@ -39,6 +39,7 @@ export function KpiTile({
   link,
   className,
 }: KpiTileProps) {
+  const { t } = useCopy();
   const total = segments?.reduce((a, s) => a + s.value, 0) ?? 0;
   const visible = segments?.filter((s) => s.value > 0) ?? [];
   return (
@@ -63,7 +64,9 @@ export function KpiTile({
           <div
             className="flex h-2 w-full gap-0.5 overflow-hidden rounded-chip"
             role="img"
-            aria-label={copy.a11y.kpiBar(segments.map((s) => `${s.label} ${s.value}`).join(', '))}
+            aria-label={t('a11y.kpiBreakdown', {
+              parts: segments.map((s) => `${s.label} ${s.value}`).join(', '),
+            })}
           >
             {visible.map((s) => (
               <span

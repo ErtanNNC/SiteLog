@@ -1,4 +1,4 @@
-import { copy } from '@/copy/en';
+import { useCopy } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '../ui/Skeleton';
 
@@ -10,11 +10,12 @@ export function PageSkeleton({
   fullscreen?: boolean;
   className?: string;
 }) {
+  const { t } = useCopy();
   return (
     <div
       className={cn(fullscreen && 'min-h-screen bg-concrete p-8', className)}
       role="status"
-      aria-label={copy.a11y.loadingPage}
+      aria-label={t('a11y.loadingPage')}
       aria-busy="true"
     >
       <div className="mb-6 space-y-2">
@@ -33,12 +34,13 @@ export function PageSkeleton({
 }
 
 export function TableSkeleton({ rows = 6, className }: { rows?: number; className?: string }) {
+  const { t } = useCopy();
   return (
     <div
       className={cn('space-y-2 p-5', className)}
       role="status"
       aria-busy="true"
-      aria-label={copy.common.loading}
+      aria-label={t('common.loading')}
     >
       <Skeleton className="h-4 w-full" />
       {Array.from({ length: rows }, (_, i) => (
@@ -49,6 +51,7 @@ export function TableSkeleton({ rows = 6, className }: { rows?: number; classNam
 }
 
 export function CardsSkeleton({ count = 6, className }: { count?: number; className?: string }) {
+  const { t } = useCopy();
   return (
     <div
       className={cn(
@@ -57,7 +60,7 @@ export function CardsSkeleton({ count = 6, className }: { count?: number; classN
       )}
       role="status"
       aria-busy="true"
-      aria-label={copy.common.loading}
+      aria-label={t('common.loading')}
     >
       {Array.from({ length: count }, (_, i) => (
         <Skeleton key={i} className="h-56 rounded-card" />

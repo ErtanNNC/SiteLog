@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Sql } from 'postgres';
+import { pgArray } from '../db';
 import {
   JobPayloadSchemas,
   metaSignature,
@@ -191,7 +192,7 @@ async function applyStatus(sql: Sql, s: InboundStatus): Promise<void> {
       ? sql`status = ${update.patch.status}, error = ${update.patch.error}`
       : sql`status = ${update.patch.status}`;
   const only = update.onlyIfIn
-    ? sql`and status = any(${sql.array(update.onlyIfIn)}::msg_status[])`
+    ? sql`and status = any(${pgArray(update.onlyIfIn)}::msg_status[])`
     : sql``;
   await sql`update messages set ${set} where wa_message_id = ${update.waMessageId} ${only}`;
 }

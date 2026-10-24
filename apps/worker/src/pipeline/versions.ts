@@ -1,4 +1,5 @@
-import type { DailyReportData, ReportRow, ReportVersionRow } from '@sitelog/shared';
+import { noticeData } from '@sitelog/shared';
+import type { DailyReportDataV1, ReportRow, ReportVersionRow } from '@sitelog/shared';
 import type { Ctx } from '../context';
 
 /**
@@ -8,7 +9,7 @@ import type { Ctx } from '../context';
 
 export interface NewVersionOptions {
   changeNote: string;
-  author: 'reporter_reply' | 'agent';
+  author: 'reporter' | 'agent';
   authorMessageId?: string | null;
   emailRecipients?: boolean;
   sendToWhatsApp?: boolean;
@@ -23,7 +24,7 @@ export interface NewVersionResult {
 export async function createReportVersion(
   ctx: Ctx,
   report: ReportRow,
-  data: DailyReportData,
+  data: DailyReportDataV1,
   opts: NewVersionOptions,
 ): Promise<NewVersionResult> {
   if (report.status !== 'filed' && report.status !== 'signed_off') {
@@ -50,8 +51,8 @@ export async function createReportVersion(
   });
   await ctx.db.logAudit({
     org_id: report.org_id,
-    actor_type: opts.author === 'reporter_reply' ? 'reporter' : 'agent',
-    actor_id: opts.author === 'reporter_reply' ? (report.reporter_id ?? null) : null,
+    actor_type: opts.author === 'reporter' ? 'reporter' : 'agent',
+    actor_id: opts.author === 'reporter' ? (report.reporter_id ?? null) : null,
     action: 'report.version_created',
     entity: 'report',
     entity_id: report.id,
@@ -73,6 +74,7 @@ export async function createReportVersion(
       opts.changeNote,
       `/reports/${report.id}`,
       signer,
+      noticeData('report_edited', { reportNo: report.report_no }),
     );
     if (signer) {
       await ctx.db.enqueueJob(
@@ -82,6 +84,8 @@ export async function createReportVersion(
           reportId: report.id,
           version: next,
           changeNote: opts.changeNote,
+          // W4-09: the email goes to the signer, in their panel language.
+          signerId: signer,
         },
         { dedupeKey: `email:edited_after_signoff:${report.id}:${next}` },
       );

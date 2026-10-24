@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { toFormValues } from '../report/reportForm';
 import { newReportDraftKey, readNewReportDraft, writeNewReportDraft } from './draft';
 
-const blank = toFormValues(emptyReportData('2026-10-09'));
+const blank = toFormValues(emptyReportDataV1('2026-10-09'));
 const key = newReportDraftKey('org-1', 'user-1');
 
 afterEach(() => vi.restoreAllMocks());

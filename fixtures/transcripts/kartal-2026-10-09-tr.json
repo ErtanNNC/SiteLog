@@ -1,0 +1,202 @@
+{
+  "id": "kartal-2026-10-09-tr",
+  "description": "Turkish (W1-12): Kartal Konutları — B Blok (Demir Yapı, §18.2), Emre Yıldız (tr-TR); the script of fixtures/voice/tr-kartal-2026-10-09. Report language tr, metric units (OBSERVED_WEATHER in mm, °C, km/h). The §18.2 glossary phrases; \"demirci ekibi\" is no company of the org and its headcount is not said (asked first); the own crew's hours are not said either.",
+  "expectedQuestion": {
+    "field": "manpower.workers",
+    "path": "manpower.workers:Donatı ekibi"
+  },
+  "site": {
+    "name": "Kartal Konutları — B Blok",
+    "projectCode": "KK-1203",
+    "timezone": "Europe/Istanbul",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-09",
+  "reportLanguage": "tr",
+  "units": "metric",
+  "reporterLocale": "tr-TR",
+  "channel": "web",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Emre",
+  "companies": [
+    {
+      "id": "d1000000-0000-4000-8000-00000000c001",
+      "name": "Usta Beton",
+      "trade": "Beton",
+      "aliases": []
+    },
+    {
+      "id": "d1000000-0000-4000-8000-00000000c002",
+      "name": "Volt Elektrik",
+      "trade": "Elektrik",
+      "aliases": []
+    },
+    {
+      "id": "d1000000-0000-4000-8000-00000000c003",
+      "name": "Akış Mekanik",
+      "trade": "Mekanik",
+      "aliases": []
+    },
+    {
+      "id": "d1000000-0000-4000-8000-00000000c004",
+      "name": "Demir Yapı öz ekip",
+      "trade": "Genel işçilik",
+      "aliases": [],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    {
+      "heard": "döküm",
+      "official": "Beton dökümü",
+      "kind": "term"
+    },
+    {
+      "heard": "kalıp söktük",
+      "official": "Kalıp sökümü yapıldı",
+      "kind": "term"
+    },
+    {
+      "heard": "demirci ekibi",
+      "official": "Donatı ekibi",
+      "kind": "company"
+    },
+    {
+      "heard": "TBM",
+      "official": "İş güvenliği bilgilendirmesi",
+      "kind": "term"
+    },
+    {
+      "heard": "tool box",
+      "official": "İş güvenliği bilgilendirmesi",
+      "kind": "term"
+    }
+  ],
+  "rejectedMappings": [],
+  "observedWeather": {
+    "date": "2026-10-09",
+    "provider": "Open-Meteo",
+    "fetchedAt": "2026-10-09T20:30:00Z",
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
+    "hours": [
+      {
+        "time": "07:00",
+        "precipIn": 0,
+        "tempF": 59,
+        "windMph": 6,
+        "gustMph": 10
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0,
+        "tempF": 63,
+        "windMph": 7,
+        "gustMph": 12
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0,
+        "tempF": 68,
+        "windMph": 8,
+        "gustMph": 13
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 72,
+        "windMph": 9,
+        "gustMph": 15
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 70,
+        "windMph": 8,
+        "gustMph": 14
+      },
+      {
+        "time": "17:00",
+        "precipIn": 0,
+        "tempF": 66,
+        "windMph": 6,
+        "gustMph": 11
+      }
+    ],
+    "summary": {
+      "precipIn": 0,
+      "tempMinF": 59,
+      "tempMaxF": 72,
+      "windMph": 7,
+      "gustMph": 15,
+      "provider": "Open-Meteo",
+      "precipWorkingHoursIn": 0,
+      "maxGustWorkingHoursMph": 15
+    }
+  },
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000b1",
+      "caption": "3. kat döküm",
+      "takenAt": "2026-10-09T14:40:00Z"
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000b2",
+      "takenAt": "2026-10-09T14:40:20Z"
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000b3",
+      "takenAt": "2026-10-09T14:40:41Z"
+    }
+  ],
+  "segments": [
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+      "start": 0.0,
+      "end": 6.5,
+      "text": "Kartal Konutları B Blok, günlük rapor. Bugün hava açıktı, yağmur yok."
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+      "start": 6.5,
+      "end": 14.0,
+      "text": "Usta Beton dört kişiyle bütün gün çalıştı, üçüncü kat döşemesinin dökümünü saat ikide bitirdik, yaklaşık kırk beş metreküp."
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+      "start": 14.0,
+      "end": 20.5,
+      "text": "Volt Elektrik üç kişi, ikinci katta tesisat çekti, tam gün."
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+      "start": 20.5,
+      "end": 27.0,
+      "text": "Akış Mekanik iki kişi öğleden sonra geldi, saat birden beşe kadar havalandırma kanalı taktılar."
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+      "start": 27.0,
+      "end": 33.5,
+      "text": "Bizim öz ekip beş kişi, birinci katta kalıp söktük, demirci ekibi de dördüncü katın donatısına başladı."
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+      "start": 33.5,
+      "end": 40.0,
+      "text": "Sabah TBM yaptık, iskele güvenliğini konuştuk. Kaza yok, yaralanan yok."
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+      "start": 40.0,
+      "end": 45.5,
+      "text": "Yarın sabah yedide beton pompası lazım. Üç fotoğraf gönderiyorum."
+    }
+  ]
+}

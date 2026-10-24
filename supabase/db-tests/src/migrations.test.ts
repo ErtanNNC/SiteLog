@@ -30,6 +30,13 @@ describe('migrations', () => {
         name,
       ).toEqual([...values]);
     }
+    // And the other way: every Postgres enum in public is in PG_ENUMS (a new type cannot be
+    // forgotten in enums.ts; db-types-drift checks db/types.ts `Enums` against the real schema).
+    const types = await db.query<{ typname: string }>(
+      `select t.typname from pg_type t join pg_namespace n on n.oid = t.typnamespace
+       where n.nspname = 'public' and t.typtype = 'e' order by 1`,
+    );
+    expect(types.rows.map((r) => r.typname)).toEqual(Object.keys(PG_ENUMS).sort());
   });
 
   it('enables RLS on every public table', async () => {
@@ -142,14 +149,34 @@ describe('job queue', () => {
     );
     expect(after.rows[0]).toMatchObject({ status: 'queued', last_error: 'boom' });
     expect(new Date(after.rows[0]!.run_after).getTime()).toBeGreaterThan(Date.now() + 20_000);
+    // D17: the fifth failure still waits 2 h; the sixth is dead.
     await asService(db, (q) =>
       q(`update jobs set attempts = 5 where id = $1`, [claimed.rows[0]!.id]),
+    );
+    await asService(db, (q) => q(`select fail_job($1, 'boom 5')`, [claimed.rows[0]!.id]));
+    const fifth = await asService(db, (q) =>
+      q<{ status: string; wait: number }>(
+        `select status, extract(epoch from run_after - now())::float8 as wait from jobs where id = $1`,
+        [claimed.rows[0]!.id],
+      ),
+    );
+    expect(fifth.rows[0]!.status).toBe('queued');
+    expect(fifth.rows[0]!.wait).toBeGreaterThan(7200 - 10);
+    await asService(db, (q) =>
+      q(`update jobs set attempts = 6 where id = $1`, [claimed.rows[0]!.id]),
     );
     await asService(db, (q) => q(`select fail_job($1, 'boom again')`, [claimed.rows[0]!.id]));
     const dead = await asService(db, (q) =>
       q<{ status: string }>(`select status from jobs where id = $1`, [claimed.rows[0]!.id]),
     );
     expect(dead.rows[0]!.status).toBe('dead');
+    // D16: the key stays the dead job's; enqueueing it again returns that job.
+    const id3 = await asService(db, (q) =>
+      q<{ id: string }>(
+        `select enqueue_job('inbound_message', '{"messageId":"m1"}', null, 'inbound:m1') as id`,
+      ),
+    );
+    expect(id3.rows[0]!.id).toBe(id1.rows[0]!.id);
     await expect(asUser(db, LENA, (q) => q(`select * from jobs`))).resolves.toMatchObject({
       rows: [],
     });
@@ -233,7 +260,7 @@ describe('report lifecycle RPCs', () => {
     };
     reportId = await asService(db, async (q) => {
       const r = await q<{ id: string }>(
-        `insert into reports (org_id, site_id, site_day_id, report_no, status, filed_at, needs_review, review_reasons) values ($1, $2, $3, 'RL-2041-0187', 'filed', now(), true, '{unknown_company:Ridgeway}') returning id`,
+        `insert into reports (org_id, site_id, site_day_id, report_no, status, filed_at, needs_review, review_reasons, language) values ($1, $2, $3, 'RL-2041-0187', 'filed', now(), true, '{unknown_company:Ridgeway}', 'en') returning id`,
         [orgId, siteId, siteDayId],
       );
       await q(
@@ -313,6 +340,20 @@ describe('report lifecycle RPCs', () => {
       ),
     );
     expect(rep.rows[0]).toEqual({ status: 'filed', current_version: 2, signed_off_by: null });
+    // The signer's notice carries its data for the panel (20261015000080); the note stays as body.
+    const edited = await asService(db, (q) =>
+      q<{ title: string; body: string; data: unknown; report_no: string }>(
+        `select n.title, n.body, n.data, r.report_no from notifications n
+           join reports r on n.target_path = '/reports/' || r.id
+          where n.kind = 'report_edited' and r.id = $1`,
+        [reportId],
+      ),
+    );
+    expect(edited.rows).toHaveLength(1);
+    const notice = edited.rows[0]!;
+    expect(notice.title).toBe(`${notice.report_no} was edited after sign-off`);
+    expect(notice.body).toBe('Apex Concrete 6 → 7 workers');
+    expect(notice.data).toEqual({ key: 'report_edited', params: { reportNo: notice.report_no } });
     const jobs = await asService(db, (q) =>
       q<{ type: string; payload: { version: number } }>(
         `select type, payload from jobs where type = 'render_pdf'`,

@@ -1,0 +1,264 @@
+{
+  "$comment": "W3-15 scripted call (W3-02's format; W3-09 … W3-14's keys): start, routes (field-api's answers per route, in order; the last repeats), reporterTurns (one session run each), agentTurns (the dialog model's recorded turns). W3-15: `simulate` is this call as `pnpm simulate:call` runs it on a local stack (scripts/src/call-sim): the org it arranges, the requests the agent sends in order (`$…` values from the call so far; `recorded` = the route's next recorded answer above, pending ones skipped, ids aside) and what the call leaves behind. Kevin covers two sites, so the call starts without one: the opening asks which, and pick_site fixes it (F14).",
+  "id": "two-sites-en",
+  "locale": "en-US",
+  "extraction": "call-northgate-2026-10-09-en",
+  "start": {
+    "request": {
+      "room": "call-c0150000-0000-4000-8000-000000000001",
+      "transport": "pstn",
+      "from": "+15550142087",
+      "to": "+15550142290"
+    },
+    "response": {
+      "callId": "c0150000-0000-4000-8000-000000000001",
+      "callToken": "derived-by-the-fake-AAAAAAAAAAAAAAAAAAAAAAAA",
+      "reporter": {
+        "firstName": "Kevin",
+        "locale": "en-US"
+      }
+    }
+  },
+  "routes": {
+    "disclosure": [
+      {
+        "ok": true
+      }
+    ],
+    "get_context": [
+      {
+        "call": {
+          "direction": "inbound",
+          "transport": "pstn",
+          "purpose": "daily_report"
+        },
+        "reporter": {
+          "firstName": "Kevin",
+          "locale": "en-US"
+        },
+        "company": "Kestrel Build Group",
+        "reportLanguage": "en",
+        "sites": [
+          {
+            "id": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5b",
+            "name": "Northgate Parking Structure",
+            "status": null,
+            "deadline": "17:30"
+          },
+          {
+            "id": "22222222-0000-4000-8000-0000000000a5",
+            "name": "Hillcrest School Extension",
+            "status": null,
+            "deadline": "17:30"
+          }
+        ],
+        "siteId": null,
+        "companies": [
+          {
+            "name": "Apex Concrete",
+            "aliases": ["Apex", "the Apex guys"]
+          },
+          {
+            "name": "BrightLine Electric",
+            "aliases": ["BrightLine"]
+          },
+          {
+            "name": "Delta Mechanical",
+            "aliases": ["Delta", "los de Delta"]
+          },
+          {
+            "name": "Ironclad Steel",
+            "aliases": ["Ironclad"]
+          },
+          {
+            "name": "Kestrel self-perform",
+            "aliases": ["our guys", "our crew"]
+          }
+        ],
+        "keyterms": ["Apex Concrete", "BrightLine Electric", "Delta Mechanical", "Ironclad Steel"],
+        "consents": {
+          "recording": true,
+          "dataProcessing": true,
+          "sms": true,
+          "autoCall": false
+        },
+        "recordingNoticeVersion": "voice.recording_notice.v1",
+        "consentTextVersion": "voice.consent.v2",
+        "maxQuestions": 3
+      }
+    ],
+    "pick_site": [
+      {
+        "siteId": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5b",
+        "name": "Northgate Parking Structure"
+      }
+    ],
+    "update_draft": [
+      {
+        "reportId": "a0a90000-0000-4000-8000-000000000001",
+        "draftRev": 1,
+        "missing": [],
+        "question": null,
+        "readBack": "Here's what I've got: fourteen on site from two companies, one hundred hours. Done: Level three precast erection, last double tees set complete, Ramp B topping slab finishing, Ramp B form stripping. Toolbox talk. No incidents. Shall I file it?"
+      }
+    ],
+    "file_report": [
+      {
+        "status": "filed",
+        "reportNo": "NG-0001",
+        "pdf": "pending"
+      }
+    ],
+    "end_call": [
+      {
+        "ok": true
+      }
+    ]
+  },
+  "reporterTurns": [
+    "Northgate.",
+    "Northgate, Friday. Dry all day, no weather problems. Apex had three guys on ramp B all day, finishing the topping slab. Eight of our crew full day on level three, precast erection, we set the last six double tees. And three of ours did a half day on ramp B, four hours, stripping forms. Toolbox talk on crane signals this morning, no incidents. That's it.",
+    "Yes."
+  ],
+  "answers": [],
+  "agentTurns": [
+    {
+      "toolCalls": [
+        {
+          "name": "get_context",
+          "args": {}
+        },
+        {
+          "name": "pick_site",
+          "args": {
+            "site_id": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5b"
+          }
+        }
+      ]
+    },
+    {
+      "text": "Northgate Parking Structure. Go ahead, I'm listening."
+    },
+    {
+      "text": "Got it, one moment.",
+      "toolCalls": [
+        {
+          "name": "update_draft",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Here's what I've got: fourteen on site from two companies, one hundred hours. Done: Level three precast erection, last double tees set complete, Ramp B topping slab finishing, Ramp B form stripping. Toolbox talk. No incidents. Shall I file it?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "file_report",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Filed. I've sent you the PDF and a link to add photos. Have a good evening.",
+      "toolCalls": [
+        {
+          "name": "end_call",
+          "args": {
+            "outcome": "filed"
+          }
+        }
+      ]
+    },
+    {}
+  ],
+  "simulate": {
+    "title": "Two-site reporter by phone: picks Northgate, files",
+    "milestone": "m7",
+    "flow": "F14",
+    "arrange": {
+      "reporter": {
+        "name": "Kevin O'Brien",
+        "locale": "en-US",
+        "contactPref": "call"
+      },
+      "sites": [
+        {
+          "key": "northgate",
+          "name": "Northgate Parking Structure",
+          "projectCode": "NG"
+        },
+        {
+          "key": "hillcrest",
+          "name": "Hillcrest School Extension",
+          "projectCode": "HS"
+        }
+      ]
+    },
+    "steps": [
+      {
+        "route": "get_context",
+        "expect": {
+          "call": {
+            "direction": "inbound",
+            "transport": "pstn",
+            "purpose": "daily_report"
+          },
+          "reporter": {
+            "firstName": "Kevin",
+            "locale": "en-US"
+          },
+          "company": "Kestrel Build Group",
+          "reportLanguage": "en",
+          "consents": {
+            "recording": true,
+            "dataProcessing": true,
+            "sms": true,
+            "autoCall": false
+          },
+          "maxQuestions": 3,
+          "siteId": null
+        }
+      },
+      {
+        "route": "pick_site",
+        "body": {
+          "siteId": "$site.northgate"
+        }
+      },
+      {
+        "route": "update_draft",
+        "body": {
+          "segments": "$segments"
+        }
+      },
+      {
+        "route": "file_report",
+        "body": {
+          "reportId": "$draft.reportId",
+          "draftRev": "$draft.draftRev",
+          "utterance": "Yes."
+        }
+      },
+      {
+        "route": "end_call",
+        "body": {
+          "outcome": "filed"
+        }
+      }
+    ],
+    "expect": {
+      "call": {
+        "outcome": "filed"
+      },
+      "report": {
+        "site": "northgate",
+        "status": "filed",
+        "channel": "voice",
+        "confirmedVia": "voice",
+        "crewOnSite": 14,
+        "totalHours": 100
+      }
+    }
+  }
+}

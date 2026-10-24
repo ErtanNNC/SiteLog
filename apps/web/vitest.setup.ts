@@ -1,8 +1,14 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { afterEach } from 'vitest';
+import { i18n } from './src/i18n/i18n';
 
-afterEach(() => {
+// The panel's suite runs 60+ jsdom files in parallel; on a loaded CI runner a page that saves
+// through the demo store and re-renders can take longer than Testing Library's 1 s default to
+// show its next screen (the setup wizard's step 3 failed that way). Waits stay bounded.
+configure({ asyncUtilTimeout: 5000 });
+
+afterEach(async () => {
   cleanup();
   try {
     window.localStorage.clear();
@@ -10,6 +16,8 @@ afterEach(() => {
   } catch {
     /* ignore */
   }
+  // The panel's language is global (i18next): a test that switches to Turkish must not leak it.
+  if (i18n.language !== 'en') await i18n.changeLanguage('en');
 });
 
 // jsdom lacks a few browser APIs that Radix primitives and the shell rely on.

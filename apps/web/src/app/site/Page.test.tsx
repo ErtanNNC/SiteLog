@@ -1,7 +1,9 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { toast } from 'sonner';
+import { describe, expect, it, vi } from 'vitest';
 import { DemoStore, type DemoLoginKey } from '@/data/demo/store';
+import { i18n } from '@/i18n/i18n';
 import { renderWithProviders } from '@/test/render';
 import SiteDetailPage from './Page';
 
@@ -23,16 +25,26 @@ describe('SiteDetailPage (Riverside Lofts — Block B, Fri Oct 9 2026)', () => {
       await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' }),
     ).toBeInTheDocument();
     expect(screen.getByText('RL-2041')).toBeInTheDocument();
-    expect(screen.getByText('Deadline 17:30 · America/Chicago')).toBeInTheDocument();
+    expect(screen.getByText('Report deadline 17:30 CT')).toBeInTheDocument();
     expect(screen.getByText('Marco Ruiz')).toBeInTheDocument();
-    expect(screen.getByText('Speaks ES · EN')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Message Marco' })).toHaveAttribute(
+    expect(screen.getByText('Prefers text link · speaks ES & EN')).toBeInTheDocument();
+    // P5: Call {first} dials from the office user's phone; no WhatsApp link any more.
+    expect(screen.getByRole('link', { name: 'Call Marco' })).toHaveAttribute(
       'href',
-      'https://wa.me/15550143378',
+      'tel:+15550143378',
+    );
+    expect(screen.queryByRole('link', { name: /Message Marco/ })).toBeNull();
+    expect(document.querySelector('a[href*="wa.me"]')).toBeNull();
+    // D30: typed reports stay.
+    expect(screen.getByRole('link', { name: 'New report' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/reports/new?site='),
     );
 
     expect(screen.getByRole('grid', { name: 'October 2026' })).toBeInTheDocument();
-    expect(screen.getByRole('gridcell', { name: 'Open report for Oct 9' })).toBeInTheDocument();
+    const oct9 = screen.getByRole('gridcell', { name: /^Open report for Oct 9 · / });
+    // The hero report came in through the text link (channel 'web').
+    expect(oct9.querySelector('[data-channel="link"]')).not.toBeNull();
 
     const latest = screen.getByTestId('latest-card');
     expect(within(latest).getByText('Latest · Oct 9')).toBeInTheDocument();
@@ -44,7 +56,7 @@ describe('SiteDetailPage (Riverside Lofts — Block B, Fri Oct 9 2026)', () => {
     const crew = screen.getByRole('table', { name: 'Crew today, by company' });
     expect(within(crew).getByText('Apex Concrete')).toBeInTheDocument();
     expect(within(crew).getByText('Edited v2')).toBeInTheDocument();
-    expect(within(crew).getByText('Confirmed by reply')).toBeInTheDocument();
+    expect(within(crew).getByText('Confirmed by answer')).toBeInTheDocument();
     expect(within(crew).getByText('Total').closest('tr')).toHaveTextContent('24');
   });
 
@@ -88,6 +100,51 @@ describe('SiteDetailPage (Riverside Lofts — Block B, Fri Oct 9 2026)', () => {
     ]);
   });
 
+  it('texts Marco today’s link from the header (P5, W1-16’s action)', async () => {
+    const success = vi.spyOn(toast, 'success');
+    const { store } = renderRiverside(new DemoStore(), 'ops');
+    await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' });
+    const marco = store.data.reporters.find((r) => r.name === 'Marco Ruiz')!;
+    const before = store.data.messages.length;
+    await userEvent.click(screen.getByRole('button', { name: 'Text today’s link' }));
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Today’s link texted to Marco.'));
+    expect(store.data.messages.length).toBe(before + 1);
+    expect(store.data.messages.at(-1)).toMatchObject({
+      reporter_id: marco.id,
+      copy_key: 'daily_link',
+    });
+    expect(store.data.audit.at(-1)).toMatchObject({ action: 'daily_link.texted' });
+  });
+
+  it('says in the panel’s language why nobody can be texted (409 no_active_reporter)', async () => {
+    const error = vi.spyOn(toast, 'error');
+    const store = new DemoStore();
+    const site = store.data.sites.find((s) => s.project_code === 'RL-2041')!;
+    const linked = store.data.siteReporters.filter((sr) => sr.site_id === site.id);
+    for (const sr of linked)
+      store.data.reporters.find((r) => r.id === sr.reporter_id)!.status = 'invited';
+    renderRiverside(store, 'ops');
+    await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' });
+    await userEvent.click(screen.getByRole('button', { name: 'Text today’s link' }));
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith(
+        'No active site manager on this site: the linked ones are disabled, opted out or have not accepted their invite yet.',
+      ),
+    );
+    error.mockClear();
+    await act(() => i18n.changeLanguage('tr'));
+    try {
+      await userEvent.click(screen.getByRole('button', { name: 'Günün linkini gönder' }));
+      await waitFor(() =>
+        expect(error).toHaveBeenCalledWith(
+          'Bu şantiyede aktif şantiye şefi yok: bağlı olanlar devre dışı, mesajlardan çıkmış ya da davetini henüz kabul etmemiş.',
+        ),
+      );
+    } finally {
+      await act(() => i18n.changeLanguage('en'));
+    }
+  });
+
   it('offers Pause site to admins only (RLS lets only admins update a site)', async () => {
     renderRiverside();
     await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' });
@@ -97,12 +154,37 @@ describe('SiteDetailPage (Riverside Lofts — Block B, Fri Oct 9 2026)', () => {
     ).toBeInTheDocument();
   });
 
-  it('hides Pause site from a project manager', async () => {
-    renderRiverside(new DemoStore(), 'pm');
-    await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' });
-    await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
-    const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
-    expect(within(dialog).queryByRole('button', { name: 'Pause site' })).toBeNull();
+  it('offers no Site settings (edit, recipients, Pause) to a pm or an ops user (W4-10)', async () => {
+    for (const role of ['pm', 'ops'] as const) {
+      renderRiverside(new DemoStore(), role);
+      await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' });
+      expect(screen.queryByRole('button', { name: 'Site settings' }), role).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Pause site' }), role).toBeNull();
+      cleanup();
+    }
+  });
+
+  it('speaks Turkish when the panel does (W1-18)', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    try {
+      renderRiverside();
+      expect(
+        await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Ara: Marco' })).toHaveAttribute(
+        'href',
+        'tel:+15550143378',
+      );
+      expect(screen.getByRole('button', { name: 'Şantiye ayarları' })).toBeInTheDocument();
+      expect(screen.getByText(/^Tercih: mesajla link · ES ve EN konuşur$/)).toBeInTheDocument();
+      expect(screen.getByRole('grid', { name: 'Ekim 2026' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Günlük raporlar' })).toBeInTheDocument();
+      const crew = screen.getByRole('table', { name: 'Bugünkü ekip, firmaya göre' });
+      expect(within(crew).getByText('Yanıtla onaylandı')).toBeInTheDocument();
+      expect(within(crew).getByText('Düzenlendi v2')).toBeInTheDocument();
+      expect(screen.getByText('Bu ay şimdiye kadar')).toBeInTheDocument();
+    } finally {
+      await act(() => i18n.changeLanguage('en'));
+    }
   });
 });

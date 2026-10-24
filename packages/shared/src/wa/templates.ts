@@ -23,7 +23,7 @@ export const TEMPLATES: Record<TemplateName, TemplateSpec> = {
   sitelog_welcome: {
     name: 'sitelog_welcome',
     body:
-      "Hi {{1}} — I'm SiteLog, the reporting assistant for {{2}}. You're set up as site manager for {{3}}. " +
+      "Hi {{1}} — I'm TalkOlog, the reporting assistant for {{2}}. You're set up as site manager for {{3}}. " +
       'Each workday before {{4}}, send me one voice note: work done, who was on site, weather, deliveries, delays. ' +
       "Add 1–2 photos. I'll do the paperwork.",
     buttons: ['Got it', 'Wrong site'],
@@ -50,7 +50,7 @@ export const TEMPLATES: Record<TemplateName, TemplateSpec> = {
   },
   sitelog_reinvite: {
     name: 'sitelog_reinvite',
-    body: 'Hi {{1}}, {{2}} uses SiteLog for daily site reports. Reply to this message to get started.',
+    body: 'Hi {{1}}, {{2}} uses TalkOlog for daily site reports. Reply to this message to get started.',
     buttons: ['Get started'],
   },
 };

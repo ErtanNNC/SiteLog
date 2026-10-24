@@ -1,7 +1,9 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildDemirDemo, DEMIR_ORG_NAME } from '@sitelog/shared/demo/demir.ts';
 import { kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
+import { i18n } from '@/i18n/i18n';
 import { demoPayrollCsv } from '@/data/demo/DemoSource';
 import { DemoStore } from '@/data/demo/store';
 import { makeSource, renderWithProviders } from '@/test/render';
@@ -70,6 +72,34 @@ describe('SettingsPage (demo data)', () => {
       expect(screen.queryByRole('heading', { name: /^Settings$/ })).not.toBeInTheDocument(),
     );
     expect(store.data.settings.signoff_required).toBe(true);
+  });
+
+  it('keeps asking about unsaved changes on the Field channels tab', async () => {
+    const store = new DemoStore();
+    renderWithProviders(
+      <>
+        <a href="/sites">Sites</a>
+        <SettingsPage />
+      </>,
+      opts(store),
+    );
+    await screen.findByRole('heading', { name: /^Settings$/ });
+    await userEvent.click(
+      within(screen.getByTestId('working-days')).getByRole('button', { name: 'Sat' }),
+    );
+    expect(screen.getByTestId('save-settings')).toBeEnabled();
+    // Tabs inside /settings never prompt; the draft survives the switch.
+    await userEvent.click(screen.getAllByRole('tab', { name: 'Field channels' })[0]!);
+    expect(await screen.findByTestId('pack-card')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('link', { name: 'Sites' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('Unsaved changes');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Leave' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: /^Settings$/ })).not.toBeInTheDocument(),
+    );
   });
 
   it('edits recipients per site and applies one list to all sites', async () => {
@@ -221,5 +251,312 @@ describe('SettingsPage (demo data)', () => {
       'href',
       '/setup/site',
     );
+  });
+});
+
+/** Demir Yapı (§18.2) as the demo store's org: the TR pack, one-way SMS. */
+function demirStore(): DemoStore {
+  const kestrel = kestrelDemo();
+  return new DemoStore({ ...buildDemirDemo(), now: kestrel.now, billing: kestrel.billing });
+}
+
+const demirAuth = (store: DemoStore) => ({
+  currentOrg: {
+    id: store.data.org.id,
+    name: DEMIR_ORG_NAME,
+    timezone: 'Europe/Istanbul',
+    activeSites: 2,
+    role: 'admin' as const,
+    locale: 'tr-TR' as const,
+    country: 'TR',
+  },
+});
+
+const row = (label: string) =>
+  within(screen.getByTestId('pack-details')).getByText(label).closest('div')!;
+
+describe('Settings → Field channels (W4-05, P12, §19 Q231, Q232)', () => {
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await act(() => i18n.changeLanguage('en'));
+  });
+
+  it('shows Kestrel’s US pack read-only and saves the daily link, calls and new-reporter default', async () => {
+    const store = new DemoStore();
+    renderWithProviders(<SettingsPage />, opts(store, 'channels'));
+    const pack = await screen.findByTestId('pack-card');
+    expect(pack).toHaveTextContent('Set by TalkOlog per country');
+    expect(row('Country')).toHaveTextContent(/United States\s*US/);
+    expect(row('Text sender')).toHaveTextContent(
+      'Toll-free number · Not set up in this environment',
+    );
+    expect(row('Number to call TalkOlog')).toHaveTextContent('Talk now only');
+    expect(screen.getByTestId('channel-order')).toHaveTextContent('Notifications → WhatsApp');
+    expect(row('Replies to texts')).toHaveTextContent('Two-way');
+    expect(row('Links in texts')).toHaveTextContent('Allowed');
+    // Nothing in the pack card can be edited.
+    expect(within(pack).queryAllByRole('textbox')).toHaveLength(0);
+    expect(within(pack).queryAllByRole('switch')).toHaveLength(0);
+
+    // The recording notice per field language with its version (voice.recording_notice.v1).
+    const notice = screen.getByTestId('recording-notice');
+    expect(
+      within(notice)
+        .getAllByRole('listitem')
+        .map((li) => li.dataset.language),
+    ).toEqual(['en', 'es']);
+    expect(notice).toHaveTextContent('This call is recorded to write your daily report.');
+    expect(within(notice).getAllByText('Version voice.recording_notice.v1')).toHaveLength(2);
+
+    // A demo org places calls (console): both switches show.
+    const save = screen.getByTestId('save-settings');
+    expect(save).toBeDisabled();
+    await userEvent.click(screen.getByRole('switch', { name: 'Second call at reminder 2' }));
+    const time = screen.getByLabelText('Daily link time');
+    expect(time).toHaveValue('17:00');
+    fireEvent.change(time, { target: { value: '16:30' } });
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '19:00' } });
+    await userEvent.type(screen.getByLabelText('Daily link expiry (hours)'), '24');
+    await userEvent.click(screen.getByRole('radio', { name: 'Call' }));
+    await userEvent.click(save);
+    await waitFor(() => expect(save).toBeDisabled());
+    expect(store.data.settings).toMatchObject({
+      second_call_enabled: false,
+      daily_link_time: '16:30:00',
+      call_window_end: '19:00:00',
+      daily_link_ttl_hours: 24,
+      default_contact_pref: 'call',
+    });
+    expect(store.data.audit.at(-1)!.action).toBe('settings.updated');
+  });
+
+  it('holds Save while the expiry is not whole hours from 1 to 168; empty is TalkOlog’s default', async () => {
+    const store = new DemoStore();
+    renderWithProviders(<SettingsPage />, opts(store, 'channels'));
+    const ttl = await screen.findByLabelText('Daily link expiry (hours)');
+    const save = screen.getByTestId('save-settings');
+    await userEvent.type(ttl, '200');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Enter whole hours from 1 to 168, or leave it empty.',
+    );
+    expect(ttl).toHaveAttribute('aria-invalid', 'true');
+    expect(save).toBeDisabled();
+    await userEvent.clear(ttl);
+    await userEvent.type(ttl, '48');
+    expect(save).toBeEnabled();
+    await userEvent.click(save);
+    await waitFor(() => expect(store.data.settings.daily_link_ttl_hours).toBe(48));
+    await userEvent.clear(ttl);
+    await userEvent.click(save);
+    await waitFor(() => expect(store.data.settings.daily_link_ttl_hours).toBeNull());
+  });
+
+  it('Demir Yapı in Turkish: the TR pack, one-way texts, Talk now only', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    const store = demirStore();
+    renderWithProviders(<SettingsPage />, {
+      ...opts(store, 'channels'),
+      auth: demirAuth(store),
+    });
+    expect(await screen.findByRole('heading', { name: 'Ayarlar' })).toBeInTheDocument();
+    expect(
+      screen.getAllByRole('tab', { name: 'Saha kanalları', selected: true }).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByTestId('pack-card')).toHaveTextContent(
+      'TalkOlog tarafından ülkeye göre ayarlanır',
+    );
+    expect(row('Ülke')).toHaveTextContent('TR');
+    expect(row('Mesaj göndericisi')).toHaveTextContent('Uzun numara · Bu ortamda ayarlanmadı');
+    expect(row('TalkOlog’u arama numarası')).toHaveTextContent('Yalnızca Şimdi konuş');
+    expect(row('Mesajlara yanıt')).toHaveTextContent('Tek yönlü');
+    const notice = screen.getByTestId('recording-notice');
+    expect(
+      within(notice)
+        .getAllByRole('listitem')
+        .map((li) => li.dataset.language),
+    ).toEqual(['tr', 'en']);
+    expect(screen.getByLabelText('Günlük bağlantı saati')).toHaveValue('17:00');
+  });
+
+  it('sends a test message (a demo org: console, audited with the number masked), five an hour', async () => {
+    const store = new DemoStore();
+    renderWithProviders(<SettingsPage />, opts(store, 'channels'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Send me a test message' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Send me a test message' });
+    const send = within(dialog).getByRole('button', { name: 'Send test message' });
+    await userEvent.type(within(dialog).getByTestId('test-phone'), '(555) 014-2290');
+    await userEvent.click(send);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Tick the box to confirm it is your own number.',
+    );
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'This is my own number.' }));
+    await userEvent.click(send);
+    expect(await within(dialog).findByTestId('test-result')).toHaveTextContent(
+      'Demo company: nothing was sent.',
+    );
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'settings.test_message',
+      diff: { to: '+1555***290', driver: 'console', language: 'en' },
+    });
+    for (let i = 0; i < 4; i++) {
+      await userEvent.click(send);
+      await waitFor(() =>
+        expect(store.data.audit.filter((a) => a.action === 'settings.test_message')).toHaveLength(
+          i + 2,
+        ),
+      );
+    }
+    await userEvent.click(send);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Five test messages an hour. Try again later.',
+    );
+  });
+
+  it('§19 Q374: a pack that lists no SMS answers that texts are off for the country', async () => {
+    const store = new DemoStore();
+    vi.spyOn(store, 'sendTestMessage').mockReturnValue({ outcome: 'console', reason: 'sms_off' });
+    renderWithProviders(<SettingsPage />, opts(store, 'channels'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Send me a test message' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Send me a test message' });
+    await userEvent.type(within(dialog).getByTestId('test-phone'), '(555) 014-2290');
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'This is my own number.' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Send test message' }));
+    expect(await within(dialog).findByTestId('test-result')).toHaveTextContent(
+      'Texts are off for United States: TalkOlog reaches site managers by WhatsApp and app notifications, so nothing was sent.',
+    );
+  });
+
+  it('Call me now (§19 Q232, Q350): a demo org’s test call is the console’s, audited masked, five an hour', async () => {
+    const store = new DemoStore();
+    renderWithProviders(<SettingsPage />, opts(store, 'channels'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Call me now' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Call me now' });
+    expect(dialog).toHaveTextContent('Nothing is recorded and the number is not saved.');
+    // The US pack's field languages.
+    expect(within(dialog).getByLabelText('Language of the call')).toBeInTheDocument();
+    const call = within(dialog).getByRole('button', { name: 'Call me now' });
+    await userEvent.click(call);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Enter a valid mobile number.',
+    );
+    await userEvent.type(within(dialog).getByTestId('call-phone'), '(555) 014-3378');
+    await userEvent.click(call);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Tick the box to confirm it is your own number.',
+    );
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'This is my own number.' }));
+    await userEvent.click(call);
+    expect(await within(dialog).findByTestId('call-result')).toHaveTextContent(
+      'Demo company: the call was placed on TalkOlog’s console, so no real phone rings.',
+    );
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'settings.test_call',
+      diff: { to: '+1555***378', telephony: 'console', language: 'en' },
+    });
+    expect(JSON.stringify(store.data.audit)).not.toContain('5550143378');
+    for (let i = 0; i < 4; i++) {
+      await userEvent.click(call);
+      await waitFor(() =>
+        expect(store.data.audit.filter((a) => a.action === 'settings.test_call')).toHaveLength(
+          i + 2,
+        ),
+      );
+    }
+    await userEvent.click(call);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Five test calls an hour. Try again later.',
+    );
+  });
+
+  it('has no Call me now where the org places no calls (the Calls card says why)', async () => {
+    const store = new DemoStore();
+    store.data.org.is_demo = false;
+    renderWithProviders(<SettingsPage />, opts(store, 'channels'));
+    expect(await screen.findByTestId('no-calls')).toHaveTextContent(
+      'TalkOlog does not place calls in United States yet.',
+    );
+    expect(screen.getByRole('button', { name: 'Send me a test message' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Call me now' })).toBeNull();
+  });
+
+  it('Call me now in Turkish for Demir Yapı', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    const store = demirStore();
+    renderWithProviders(<SettingsPage />, {
+      ...opts(store, 'channels'),
+      auth: demirAuth(store),
+    });
+    await userEvent.click(await screen.findByRole('button', { name: 'Beni şimdi ara' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Beni şimdi ara' });
+    expect(dialog).toHaveTextContent('Hiçbir şey kaydedilmez, numara saklanmaz.');
+    expect(within(dialog).getByLabelText('Aramanın dili')).toBeInTheDocument();
+  });
+});
+
+describe('Settings → Reports & reminders on v1.2 and the report language (W4-05, §19 Q233)', () => {
+  afterEach(async () => {
+    await act(() => i18n.changeLanguage('en'));
+  });
+
+  it('shows the daily link in the ladder, R1 per person, and no WhatsApp word', async () => {
+    renderWithProviders(<SettingsPage />, opts(new DemoStore()));
+    const ladder = await screen.findByTestId('ladder');
+    const daily = within(ladder).getByTestId('stage-dailyLink');
+    expect(daily).toHaveTextContent('Daily link');
+    expect(daily).toHaveTextContent('at 17:00');
+    expect(within(daily).getByRole('link', { name: 'Change on Field channels' })).toHaveAttribute(
+      'href',
+      '/settings/channels',
+    );
+    expect(within(ladder).getByTestId('stage-reminder1')).toHaveTextContent(
+      'Text or call — per person',
+    );
+    expect(screen.getByText(/one question on the recorder or the call/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('radio', {
+        name: 'Reporter confirms — on the recorder or by voice on the call',
+      }),
+    ).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/WhatsApp/);
+  });
+
+  it('reads in Turkish', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    renderWithProviders(<SettingsPage />, opts(new DemoStore()));
+    expect(await screen.findByRole('heading', { name: 'Ayarlar' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Rapor son saati')).toHaveValue('17:30');
+    expect(
+      within(screen.getByTestId('working-days')).getByRole('button', { name: 'Cmt' }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('stage-reminder1')).toHaveTextContent(
+      'Mesaj veya arama — kişiye göre',
+    );
+  });
+
+  it('changes the report language and units after a confirm, audited, without Save', async () => {
+    const store = new DemoStore();
+    renderWithProviders(<SettingsPage />, opts(store, 'pdf'));
+    const card = await screen.findByTestId('report-locale');
+    const apply = within(card).getByRole('button', { name: 'Change language and units' });
+    expect(apply).toBeDisabled();
+    await userEvent.click(within(card).getByRole('combobox', { name: 'Report language' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Turkish' }));
+    await userEvent.click(within(card).getByRole('combobox', { name: 'Units' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Metric (°C, mm, km/h)' }));
+    await userEvent.click(apply);
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent(
+      'New report versions will be in Turkish, Metric (°C, mm, km/h). Filed versions keep their language and units.',
+    );
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Change' }));
+    await waitFor(() => expect(store.data.org.locale).toBe('tr-TR'));
+    expect(store.data.org.units).toBe('metric');
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'org.updated',
+      diff: { locale: { from: 'en-US', to: 'tr-TR' }, units: { from: 'imperial', to: 'metric' } },
+    });
+    // The company details are untouched.
+    expect(store.data.org.name).toBe(kestrelDemo().org.name);
+    expect(screen.getByTestId('save-settings')).toBeDisabled();
   });
 });

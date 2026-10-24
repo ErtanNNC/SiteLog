@@ -7,7 +7,7 @@ import { asService, asUser, bootDatabase } from './harness.ts';
  * retry / discard with audit) and the cost-per-report inputs, baseline and outlier list.
  */
 
-const OPERATOR = 'bbbbbbbb-1111-4111-8111-111111111111'; // SiteLog staff, no org membership
+const OPERATOR = 'bbbbbbbb-1111-4111-8111-111111111111'; // TalkOlog staff, no org membership
 const ORG_ADMIN = 'bbbbbbbb-2222-4222-8222-222222222222'; // customer admin
 const UUID_A = 'cccccccc-1111-4111-8111-111111111111';
 
@@ -58,8 +58,8 @@ async function report(opts: { date: string; kind?: string; filedAt?: string }) {
     [siteId, opts.date, `${opts.date}T22:30:00Z`],
   );
   const r = await svc<{ id: string }>(
-    `insert into reports (org_id, site_id, site_day_id, report_no, status, kind, filed_at)
-     values ($1, $2, $3, $4, 'filed', $5, $6) returning id`,
+    `insert into reports (org_id, site_id, site_day_id, report_no, status, kind, filed_at, language)
+     values ($1, $2, $3, $4, 'filed', $5, $6, 'en') returning id`,
     [
       orgId,
       siteId,
@@ -120,15 +120,17 @@ describe('platform admins', () => {
       );
     expect(await check(OPERATOR)).toBe(true);
     expect(await check(ORG_ADMIN)).toBe(false);
+    // `revoke all … from anon, authenticated` (20261012000003_ops.sql): not even RLS is reached.
     for (const user of [OPERATOR, ORG_ADMIN]) {
-      const rows = await asUser(db, user, (q) => q(`select * from platform_admins`));
-      expect(rows.rows).toEqual([]);
+      await expect(asUser(db, user, (q) => q(`select * from platform_admins`))).rejects.toThrow(
+        /permission denied for table platform_admins/,
+      );
     }
     await expect(
       asUser(db, ORG_ADMIN, (q) =>
         q(`insert into platform_admins (user_id) values ($1)`, [ORG_ADMIN]),
       ),
-    ).rejects.toThrow(/row-level security/);
+    ).rejects.toThrow(/permission denied for table platform_admins/);
     // Anonymous callers (no JWT) are never platform admins.
     expect((await svc<{ ok: boolean }>(`select is_platform_admin() as ok`))[0]!.ok).toBe(false);
   });
@@ -145,6 +147,7 @@ describe('platform admins', () => {
       `select ops_retry_job(${dead})`,
       `select ops_discard_job(${dead})`,
       `select * from ops_cost_outliers()`,
+      `select * from ops_outbound_call_share()`,
     ]) {
       await expect(
         asUser(db, ORG_ADMIN, (q) => q(sql)),
@@ -294,24 +297,32 @@ describe('ops: queue and dead jobs', () => {
     await svc(`delete from jobs`);
   });
 
-  it('refuses a retry when the same dedupe key is already queued again', async () => {
+  it('retries the one job of a dedupe key: no second job can hold it (D16)', async () => {
     const dead = await job(
       'render_pdf',
       { reportId: UUID_A, version: 2 },
       {
         status: 'dead',
-        attempts: 5,
+        attempts: 6,
         dedupe_key: 'render_pdf:x:2',
       },
     );
-    const again = await job(
-      'render_pdf',
-      { reportId: UUID_A, version: 2 },
-      { dedupe_key: 'render_pdf:x:2' },
-    );
+    // Before D16 the key was free again once the job died; now it stays the dead job's.
     await expect(
-      asUser(db, OPERATOR, (q: Q) => q(`select ops_retry_job($1)`, [dead])),
-    ).rejects.toThrow(new RegExp(`already queued again as job ${again}`));
+      job('render_pdf', { reportId: UUID_A, version: 2 }, { dedupe_key: 'render_pdf:x:2' }),
+    ).rejects.toThrow(/jobs_dedupe_key_key/);
+    expect(
+      await svc<{ id: number }>(
+        `select enqueue_job('render_pdf', '{}'::jsonb, null, 'render_pdf:x:2')::int as id`,
+      ),
+    ).toEqual([{ id: dead }]);
+    await asUser(db, OPERATOR, (q: Q) => q(`select ops_retry_job($1)`, [dead]));
+    expect(
+      await svc<{ status: string; attempts: number; dedupe_key: string }>(
+        `select status::text, attempts, dedupe_key from jobs where id = $1`,
+        [dead],
+      ),
+    ).toEqual([{ status: 'queued', attempts: 0, dedupe_key: 'render_pdf:x:2' }]);
     await svc(`delete from jobs`);
   });
 
@@ -410,13 +421,39 @@ describe('cost per report', () => {
     await msg('out', 'template', { kind: 'sitelog_reminder_2', siteDayId: r.siteDayId }, 'failed');
     await msg('out', 'text', { kind: 'filed', reportId: r.id });
     await msg('out', 'template', { kind: 'sitelog_reminder_1', siteDayId: other.siteDayId });
+    // W2-15: the Notifier's messages about the report, by channel (payload.report_id).
+    const notifier = async (
+      channel: string,
+      provider: string,
+      status: string,
+      payload: Record<string, unknown>,
+    ) =>
+      svc(
+        `insert into messages (phone_e164, channel, direction, provider, status, body, payload)
+         values ('+15550100000', $1::message_channel, 'out', $2, $3::msg_status, 'x', $4)`,
+        [channel, provider, status, JSON.stringify(payload)],
+      );
+    await notifier('sms', 'twilio', 'delivered', { report_id: r.id });
+    await notifier('sms', 'twilio', 'undeliverable', { report_id: r.id });
+    await notifier('sms', 'console', 'delivered', { report_id: r.id });
+    await notifier('whatsapp', 'twilio', 'read', { report_id: r.id, whatsapp_mode: 'template' });
+    await notifier('whatsapp', 'twilio', 'sent', { report_id: r.id, whatsapp_mode: 'session' });
+    await notifier('sms', 'twilio', 'sent', { report_id: other.id });
 
-    const inputs = await svc<{ ai_usd: string; job_count: number; wa_templates: number }>(
-      `select * from report_cost_inputs($1)`,
-      [r.id],
-    );
+    const inputs = await svc<{
+      ai_usd: string;
+      job_count: number;
+      wa_templates: number;
+      sms_messages: number;
+      whatsapp_templates: number;
+    }>(`select * from report_cost_inputs($1)`, [r.id]);
     expect(Number(inputs[0]!.ai_usd)).toBeCloseTo(0.1168, 6);
-    expect(inputs[0]).toMatchObject({ job_count: 4, wa_templates: 3 });
+    expect(inputs[0]).toMatchObject({
+      job_count: 4,
+      wa_templates: 3,
+      sms_messages: 1,
+      whatsapp_templates: 1,
+    });
     const none = await svc<{ ai_usd: string; job_count: number; wa_templates: number }>(
       `select * from report_cost_inputs($1)`,
       ['00000000-0000-4000-8000-000000000000'],
@@ -495,5 +532,94 @@ describe('cost per report', () => {
     expect(rows.rows[0]!.detail).toMatchObject({ waTemplates: 2 });
     const hidden = await asUser(db, ORG_ADMIN, (q: Q) => q(`select * from report_costs`));
     expect(hidden.rows).toEqual([]);
+  });
+});
+
+// 20261015000040_unknown_contacts_support.sql (spec §19 Q44, W1-16): org-less unknown contacts
+// are TalkOlog support's, never every org's.
+describe('org-less unknown contacts for TalkOlog support', () => {
+  async function contact(orgId: string | null = null): Promise<string> {
+    const rows = await svc<{ id: string }>(
+      `insert into unknown_contacts (org_id, phone_e164, snippet, channel, status)
+       values ($1, '+15550100999', 'Hi, this is Sam from the Elm St. crew', 'sms', 'pending')
+       returning id`,
+      [orgId],
+    );
+    return rows[0]!.id;
+  }
+  const asOperator = <T>(sql: string, params: unknown[] = []) =>
+    asUser(db, OPERATOR, (q: Q) => q<T>(sql, params));
+
+  it('lists the pending ones with no org to operators only', async () => {
+    const orphan = await contact();
+    const owned = await contact(orgId);
+    const list = await asOperator<{ id: string; channel: string; snippet: string }>(
+      `select * from ops_unknown_contacts()`,
+    );
+    const ids = list.rows.map((r) => r.id);
+    expect(ids).toContain(orphan);
+    expect(ids).not.toContain(owned);
+    expect(list.rows.find((r) => r.id === orphan)).toMatchObject({ channel: 'sms' });
+    await expect(
+      asUser(db, ORG_ADMIN, (q: Q) => q(`select * from ops_unknown_contacts()`)),
+    ).rejects.toThrow(/not allowed/);
+    // RLS: the org admin cannot read the org-less row either.
+    const seen = await asUser(db, ORG_ADMIN, (q: Q) =>
+      q(`select id from unknown_contacts where id = $1`, [orphan]),
+    );
+    expect(seen.rows).toEqual([]);
+  });
+
+  it('assigns one to a real org, which then sees it; audited', async () => {
+    const id = await contact();
+    await expect(
+      asUser(db, ORG_ADMIN, (q: Q) => q(`select ops_assign_unknown_contact($1, $2)`, [id, orgId])),
+    ).rejects.toThrow(/not allowed/);
+    await asOperator(`select ops_assign_unknown_contact($1, $2)`, [id, orgId]);
+    const seen = await asUser(db, ORG_ADMIN, (q: Q) =>
+      q<{ id: string }>(`select id from unknown_contacts where id = $1`, [id]),
+    );
+    expect(seen.rows).toEqual([{ id }]);
+    const audit = await svc<{ actor_id: string; org_id: string }>(
+      `select actor_id, org_id from audit_log
+       where action = 'ops.unknown_contact_assigned' and entity_id = $1`,
+      [id],
+    );
+    expect(audit).toEqual([{ actor_id: OPERATOR, org_id: orgId }]);
+    // Once it has an org it is the org's: support neither reassigns nor ignores it.
+    await expect(
+      asOperator(`select ops_assign_unknown_contact($1, $2)`, [id, orgId]),
+    ).rejects.toThrow(/only a pending contact with no organisation/);
+    await expect(asOperator(`select ops_ignore_unknown_contact($1)`, [id])).rejects.toThrow(
+      /only a pending contact with no organisation/,
+    );
+  });
+
+  it('never assigns to a demo org, and ignores one with an audit row', async () => {
+    const demo = (
+      await svc<{ id: string }>(
+        `insert into orgs (name, is_demo) values ('Demo Org', true) returning id`,
+      )
+    )[0]!.id;
+    const id = await contact();
+    await expect(
+      asOperator(`select ops_assign_unknown_contact($1, $2)`, [id, demo]),
+    ).rejects.toThrow(/demo organisation/);
+    const orgs = await asOperator<{ id: string; name: string }>(`select * from ops_real_orgs()`);
+    expect(orgs.rows.map((o) => o.id)).toContain(orgId);
+    expect(orgs.rows.map((o) => o.id)).not.toContain(demo);
+    await expect(
+      asUser(db, ORG_ADMIN, (q: Q) => q(`select * from ops_real_orgs()`)),
+    ).rejects.toThrow(/not allowed/);
+    await asOperator(`select ops_ignore_unknown_contact($1)`, [id]);
+    const row = await svc<{ status: string }>(`select status from unknown_contacts where id = $1`, [
+      id,
+    ]);
+    expect(row[0]!.status).toBe('ignored');
+    const audit = await svc(
+      `select 1 from audit_log where action = 'ops.unknown_contact_ignored' and entity_id = $1`,
+      [id],
+    );
+    expect(audit).toHaveLength(1);
   });
 });

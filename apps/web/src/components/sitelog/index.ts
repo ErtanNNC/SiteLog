@@ -1,8 +1,10 @@
 export * from './CalendarMonth';
+export * from './ChannelIcon';
 export * from './DataTable';
 export * from './EvidenceChips';
 export * from './HeatmapGrid';
 export * from './KpiTile';
+export * from './MediaPlayer';
 export * from './PageHeader';
 export * from './Skeletons';
 export * from './SourceLink';
@@ -10,4 +12,3 @@ export * from './States';
 export * from './StatusChip';
 export * from './StreakBar';
 export * from './TranscriptExcerpt';
-export * from './VoicePlayer';

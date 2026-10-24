@@ -1,0 +1,240 @@
+{
+  "id": "call-riverside-2026-10-09-en",
+  "description": "W3-09 live mode: §18's hero said on a phone call in English (Marco's reporter lane, seconds from the call's start); the Delta headcount is not stated, so the call asks F7's spoken question with two choices.",
+  "expectedQuestion": {
+    "field": "manpower.workers",
+    "path": "manpower.workers:Delta Mechanical"
+  },
+  "site": {
+    "name": "Riverside Lofts — Block B",
+    "projectCode": "RL-2041",
+    "timezone": "America/Chicago",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-09",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "en-US",
+  "channel": "call",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Marco",
+  "companies": [
+    {
+      "id": "00000000-0000-4000-8000-00000000d001",
+      "name": "Apex Concrete",
+      "trade": "Concrete",
+      "aliases": ["Apex", "the Apex guys"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d002",
+      "name": "BrightLine Electric",
+      "trade": "Electrical",
+      "aliases": ["BrightLine"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d003",
+      "name": "Delta Mechanical",
+      "trade": "HVAC",
+      "aliases": ["the Delta guys", "Delta"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d004",
+      "name": "Ironclad Steel",
+      "trade": "Rebar",
+      "aliases": ["Ironclad"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d007",
+      "name": "Kestrel self-perform",
+      "trade": "General labor",
+      "aliases": ["our guys", "Kestrel"],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    {
+      "heard": "the deck",
+      "official": "Elevated concrete slab",
+      "kind": "term"
+    },
+    {
+      "heard": "pour on four",
+      "official": "Level 4 concrete pour",
+      "kind": "term"
+    },
+    {
+      "heard": "block",
+      "official": "Concrete masonry units (CMU)",
+      "kind": "term"
+    },
+    {
+      "heard": "llovió",
+      "official": "Rain",
+      "kind": "term"
+    },
+    {
+      "heard": "stood down",
+      "official": "Work stoppage",
+      "kind": "term"
+    }
+  ],
+  "rejectedMappings": [],
+  "observedWeather": {
+    "date": "2026-10-09",
+    "provider": "Open-Meteo",
+    "fetchedAt": "2026-10-09T21:30:00Z",
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
+    "hours": [
+      {
+        "time": "06:00",
+        "precipIn": 0.05,
+        "tempF": 58,
+        "windMph": 8,
+        "gustMph": 14
+      },
+      {
+        "time": "07:00",
+        "precipIn": 0.12,
+        "tempF": 58,
+        "windMph": 9,
+        "gustMph": 16
+      },
+      {
+        "time": "08:00",
+        "precipIn": 0.11,
+        "tempF": 59,
+        "windMph": 9,
+        "gustMph": 17
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0.08,
+        "tempF": 60,
+        "windMph": 9,
+        "gustMph": 15
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0.04,
+        "tempF": 61,
+        "windMph": 8,
+        "gustMph": 13
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0,
+        "tempF": 62,
+        "windMph": 8,
+        "gustMph": 12
+      },
+      {
+        "time": "12:00",
+        "precipIn": 0,
+        "tempF": 63,
+        "windMph": 8,
+        "gustMph": 12
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 64,
+        "windMph": 9,
+        "gustMph": 13
+      },
+      {
+        "time": "14:00",
+        "precipIn": 0,
+        "tempF": 64,
+        "windMph": 9,
+        "gustMph": 13
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 64,
+        "windMph": 8,
+        "gustMph": 12
+      }
+    ],
+    "summary": {
+      "precipIn": 0.4,
+      "tempMinF": 58,
+      "tempMaxF": 64,
+      "windMph": 9,
+      "gustMph": 17,
+      "provider": "Open-Meteo",
+      "precipWorkingHoursIn": 0.35,
+      "maxGustWorkingHoursMph": 17
+    }
+  },
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [],
+  "segments": [
+    {
+      "callId": "c0110000-0000-4000-8000-000000000002",
+      "start": 6,
+      "end": 12.2,
+      "text": "Hi, it's Marco with the Friday report for Riverside Block B. Long day but a good one."
+    },
+    {
+      "callId": "c0110000-0000-4000-8000-000000000002",
+      "start": 12.2,
+      "end": 18.4,
+      "text": "Weather first: it rained from seven to ten thirty, we couldn't do block outside on the south facade."
+    },
+    {
+      "callId": "c0110000-0000-4000-8000-000000000002",
+      "start": 18.4,
+      "end": 24.9,
+      "text": "So masonry outside stood down about three and a half hours, we moved those guys inside to do the interior block on two."
+    },
+    {
+      "callId": "c0110000-0000-4000-8000-000000000002",
+      "start": 24.9,
+      "end": 32.1,
+      "text": "Then we poured the deck on four, like sixty-eight yards, finished around two thirty, Apex had six guys all day on that."
+    },
+    {
+      "callId": "c0110000-0000-4000-8000-000000000002",
+      "start": 32.1,
+      "end": 39,
+      "text": "BrightLine, five electricians full day on three, rough-in is about sixty percent now."
+    },
+    {
+      "callId": "c0110000-0000-4000-8000-000000000002",
+      "start": 39,
+      "end": 46.5,
+      "text": "The Delta guys were on two doing the ductwork in the east wing, all day too."
+    },
+    {
+      "callId": "c0110000-0000-4000-8000-000000000002",
+      "start": 46.5,
+      "end": 53.2,
+      "text": "Ironclad had three guys tying rebar for the five deck, full day, and they brought two loads of rebar around one o'clock."
+    },
+    {
+      "callId": "c0110000-0000-4000-8000-000000000002",
+      "start": 53.2,
+      "end": 59.8,
+      "text": "Our guys, four laborers all day, cleanup and helping the pour."
+    },
+    {
+      "callId": "c0110000-0000-4000-8000-000000000002",
+      "start": 59.8,
+      "end": 66,
+      "text": "Safety, we did the toolbox talk this morning on wet weather access, slippery decks, no incidents, nobody got hurt."
+    },
+    {
+      "callId": "c0110000-0000-4000-8000-000000000002",
+      "start": 66,
+      "end": 73.5,
+      "text": "Monday we need the concrete pump at seven for the five deck. That's it."
+    }
+  ]
+}

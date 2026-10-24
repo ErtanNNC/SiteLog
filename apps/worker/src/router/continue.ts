@@ -1,6 +1,7 @@
 import {
+  isVoiceSourceKind,
   looksLikeDayOff,
-  type DailyReportData,
+  type DailyReportDataV1,
   type MessageRow,
   type ReportRow,
   type TranscriptRow,
@@ -31,7 +32,7 @@ export async function afterTranscription(
   const report = await ctx.db.getReport(payload.reportId);
   if (!report) return;
   const sources = await ctx.db.listReportSources(report.id);
-  const isSource = sources.some((s) => s.message_id === message.id && s.kind === 'audio');
+  const isSource = sources.some((s) => s.message_id === message.id && isVoiceSourceKind(s.kind));
   if (!isSource) {
     await ctx.db.enqueueJob(
       'parse_reply',
@@ -125,28 +126,29 @@ export { looksLikeDayOff };
 export async function rerouteDayOff(
   ctx: Ctx,
   report: ReportRow,
-  data: DailyReportData,
+  data: DailyReportDataV1,
 ): Promise<boolean> {
   if (report.kind !== 'daily' || report.status !== 'collecting') return false;
   if (data.workPerformed.length > 0 || data.manpower.some((m) => m.workers !== 0)) return false;
   if (await audioPending(ctx, report.id)) return false;
+  // WhatsApp voice notes and typed texts: the day-off flow answers on WhatsApp (step 22 retires it).
   const sources = (await ctx.db.listReportSources(report.id)).filter(
-    (s) => s.kind === 'audio' || s.kind === 'text',
+    (s) => (isVoiceSourceKind(s.kind) || s.kind === 'text') && s.message_id,
   );
   if (sources.length === 0) return false;
   const transcripts = await ctx.db.listTranscripts(
-    sources.filter((s) => s.kind === 'audio').map((s) => s.message_id),
+    sources.flatMap((s) => (isVoiceSourceKind(s.kind) && s.media_id ? [s.media_id] : [])),
   );
   const text = sources
     .map((s) =>
-      s.kind === 'audio'
-        ? transcripts.find((t) => t.message_id === s.message_id)?.text
+      isVoiceSourceKind(s.kind)
+        ? transcripts.find((t) => (t.upload_id ?? t.message_id) === s.media_id)?.text
         : (s.body ?? undefined),
     )
     .filter((t): t is string => Boolean(t?.trim()))
     .join('\n');
   const last = sources[sources.length - 1]!;
-  const message = await ctx.db.getMessage(last.message_id);
+  const message = await ctx.db.getMessage(last.message_id!);
   if (!text || !message || !looksLikeDayOff(data, text)) return false;
   const session = await createSession(ctx, message);
   const site = session?.siteById(report.site_id);

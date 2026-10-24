@@ -2,9 +2,10 @@ import { ChevronLeft, ChevronRight, FileDown, FolderArchive, Plus, Search, X } f
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
-import { formatDateInTz, formatDateShort, formatHours } from '@sitelog/shared/format.ts';
+import { formatDate, formatDateInTz, formatHoursIn } from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { canAccess, ROUTE_ROLES } from '@/auth/guards';
+import { ChannelIcon } from '@/components/sitelog/ChannelIcon';
 import { DataTable, type Column } from '@/components/sitelog/DataTable';
 import { PageHeader } from '@/components/sitelog/PageHeader';
 import { TableSkeleton } from '@/components/sitelog/Skeletons';
@@ -32,7 +33,14 @@ import {
   useReports,
   useSites,
 } from '@/data/hooks';
-import type { ReportFilters, ReportFlag, ReportListItem, ReportStatusFilter } from '@/data/types';
+import type {
+  ReportChannel,
+  ReportFilters,
+  ReportFlag,
+  ReportListItem,
+  ReportStatusFilter,
+} from '@/data/types';
+import { useLooseCopy, type LooseT } from '@/i18n/useLooseCopy';
 import { formatCrew, formatHoursNum, monthOf } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -43,11 +51,12 @@ const STATUSES: ReportStatusFilter[] = [
   'signed_off',
   'weather_day',
 ];
+const CHANNELS: ReportChannel[] = ['link', 'call'];
 const TOGGLES = [
-  { key: 'wx', filter: 'hasWeatherDelay', label: copy.reports.filters.weatherDelay },
-  { key: 'edited', filter: 'edited', label: copy.reports.filters.edited },
-  { key: 'late', filter: 'late', label: copy.reports.filters.late },
-  { key: 'incident', filter: 'incident', label: copy.reports.filters.incident },
+  { key: 'wx', filter: 'hasWeatherDelay', label: 'reports.filters.weatherDelay' },
+  { key: 'edited', filter: 'edited', label: 'reports.filters.edited' },
+  { key: 'late', filter: 'late', label: 'reports.filters.late' },
+  { key: 'incident', filter: 'incident', label: 'reports.filters.incident' },
 ] as const;
 
 const FLAG_VARIANT: Record<
@@ -60,12 +69,36 @@ const FLAG_VARIANT: Record<
   unknown_sub: 'dashed',
   late: 'missing',
   incident: 'missing',
+  no_photo: 'dashed',
 };
+
+/** A flag's words in the panel's language (P6). */
+function flagLabel(f: ReportFlag, t: LooseT, language: string): string {
+  switch (f.kind) {
+    case 'rain':
+      return t('reports.flags.rain', {
+        hours: formatHoursIn(f.hours ?? 0, language === 'tr' ? 'tr-TR' : 'en-US'),
+      });
+    case 'version':
+      return t('reports.flags.version', { version: f.version ?? 1 });
+    case 'late':
+      return t('reports.flags.late', { time: f.time ?? '' }).trim();
+    case 'unknown_sub':
+      return t('reports.flags.unknownSub');
+    case 'weather_day':
+      return t('reports.flags.weatherDay');
+    case 'no_photo':
+      return t('reports.flags.noPhoto');
+    case 'incident':
+      return t('reports.flags.incident');
+  }
+}
 
 /** URL search params → DataSource filters (the URL is the single source of truth). */
 function filtersFrom(params: URLSearchParams): ReportFilters {
   const status = params.get('status') as ReportStatusFilter | null;
   const page = Number(params.get('page') ?? '1');
+  const channel = params.get('channel') as ReportChannel | null;
   return {
     siteId: params.get('site') || null,
     from: params.get('from') || null,
@@ -75,6 +108,7 @@ function filtersFrom(params: URLSearchParams): ReportFilters {
     edited: params.get('edited') === '1',
     late: params.get('late') === '1',
     incident: params.get('incident') === '1',
+    channel: channel && CHANNELS.includes(channel) ? channel : null,
     q: params.get('q') ?? '',
     page: Number.isFinite(page) && page > 0 ? page : 1,
   };
@@ -89,6 +123,7 @@ function withoutPage(params: URLSearchParams): string {
 /** P6 · Reports archive — filters in the URL, 50 per page from the DataSource (§11.4). */
 export default function ReportsPage() {
   const { isDemo, currentOrg, role } = useAuth();
+  const { tx: t, language } = useLooseCopy();
   const source = useDataSource();
   const pdfZip = usePdfZipExport();
   const openPdf = useOpenReportPdf();
@@ -127,17 +162,18 @@ export default function ReportsPage() {
 
   // Debounce the search box into the URL; typing a new query resets to page 1.
   useEffect(() => {
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       if ((filters.q ?? '') !== search) update({ q: search || null, page: null });
     }, 250);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [search, filters.q, update]);
 
   const activeFilterCount =
     (filters.siteId ? 1 : 0) +
     (filters.from || filters.to ? 1 : 0) +
     (filters.status !== 'all' ? 1 : 0) +
-    TOGGLES.filter((t) => filters[t.filter]).length +
+    (filters.channel ? 1 : 0) +
+    TOGGLES.filter((toggle) => filters[toggle.filter]).length +
     (filters.q ? 1 : 0);
 
   const data = reports.data;
@@ -170,11 +206,11 @@ export default function ReportsPage() {
   const onExport = () => {
     const n = selected.size || data?.total || 0;
     if (isDemo) {
-      toast.message(copy.reports.exportDemo(n));
+      toast.message(t('reports.exportDemo', { count: n }));
       return;
     }
     if (!n) {
-      toast.message(copy.reports.exportNone);
+      toast.message(t('reports.exportNone'));
       return;
     }
     pdfZip.mutate({
@@ -182,7 +218,7 @@ export default function ReportsPage() {
         ? { reportIds: [...selected] }
         : { filters: { ...filters, page: 1 } },
       fileName: copy.pdfZip.fileName(
-        copy.pdfZip.labels.archive,
+        t('pdfZip.labels.archive'),
         formatDateInTz(source.now(), currentOrg?.timezone ?? 'UTC'),
       ),
     });
@@ -203,7 +239,7 @@ export default function ReportsPage() {
         <Checkbox
           checked={allOnPageSelected}
           onCheckedChange={toggleAll}
-          aria-label={copy.reports.selectAll}
+          aria-label={t('reports.selectAll')}
           disabled={items.length === 0}
         />
       ),
@@ -214,21 +250,23 @@ export default function ReportsPage() {
           <Checkbox
             checked={selected.has(r.reportId)}
             onCheckedChange={() => toggleOne(r.reportId)}
-            aria-label={copy.reports.selectRow(r.reportNo)}
+            aria-label={t('reports.selectRow', { no: r.reportNo })}
           />
         </span>
       ),
     },
     {
       key: 'date',
-      header: copy.reports.columns.date,
+      header: t('reports.columns.date'),
       cell: (r) => (
-        <span className="whitespace-nowrap font-mono text-data">{formatDateShort(r.date)}</span>
+        <span className="whitespace-nowrap font-mono text-data">
+          {formatDate(r.date, 'monthDay', language)}
+        </span>
       ),
     },
     {
       key: 'no',
-      header: copy.reports.columns.reportNo,
+      header: t('reports.columns.reportNo'),
       cell: (r) => (
         <Link
           to={`/reports/${r.reportId}`}
@@ -241,37 +279,42 @@ export default function ReportsPage() {
     },
     {
       key: 'site',
-      header: copy.reports.columns.site,
+      header: t('reports.columns.site'),
       cell: (r) => (
         <div className="min-w-[160px]">
           <div className="font-medium">{r.siteName}</div>
           {r.managerName ? (
-            <div className="text-caption text-dust">{copy.reports.manager(r.managerName)}</div>
+            <div className="text-caption text-dust">
+              {t('reports.manager', { name: r.managerName })}
+            </div>
           ) : null}
         </div>
       ),
     },
     {
       key: 'crew',
-      header: copy.reports.columns.crew,
+      header: t('reports.columns.crew'),
       numeric: true,
       cell: (r) => formatCrew(r.crew),
     },
     {
       key: 'hours',
-      header: copy.reports.columns.hours,
+      header: t('reports.columns.hours'),
       numeric: true,
       cell: (r) => formatHoursNum(r.hours),
     },
     {
       key: 'flags',
-      header: copy.reports.columns.flags,
+      header: t('reports.columns.flags'),
       hideBelowMd: true,
       cell: (r) => (
-        <span className="inline-flex flex-wrap gap-1">
+        <span className="inline-flex flex-wrap items-center gap-1">
+          {r.channel ? (
+            <ChannelIcon channel={r.channel} showLabel={false} className="mr-0.5" />
+          ) : null}
           {r.flags.map((f) => (
-            <Badge key={`${f.kind}-${f.label}`} variant={FLAG_VARIANT[f.kind]} data-flag={f.kind}>
-              {f.label}
+            <Badge key={f.kind} variant={FLAG_VARIANT[f.kind]} data-flag={f.kind}>
+              {flagLabel(f, t, language)}
             </Badge>
           ))}
         </span>
@@ -279,19 +322,19 @@ export default function ReportsPage() {
     },
     {
       key: 'status',
-      header: copy.reports.columns.status,
-      cell: (r) => <StatusChip variant={r.chip.variant} label={r.chip.label} />,
+      header: t('reports.columns.status'),
+      cell: (r) => <StatusChip variant={r.chip.variant} />,
     },
     {
       key: 'pdf',
-      header: <span className="sr-only">{copy.reports.columns.pdf}</span>,
+      header: <span className="sr-only">{t('reports.columns.pdf')}</span>,
       className: 'w-12 pl-0',
       cell: (r) => (
         <Button
           variant="subtle"
           size="iconDense"
-          aria-label={copy.reports.downloadPdf(r.reportNo)}
-          title={r.pdfPath ? undefined : copy.reports.pdfNotStored}
+          aria-label={t('reports.downloadPdf', { no: r.reportNo })}
+          title={r.pdfPath ? undefined : t('reports.pdfNotStored')}
           onClick={(e) => {
             e.stopPropagation();
             onPdf(r);
@@ -314,8 +357,8 @@ export default function ReportsPage() {
   return (
     <>
       <PageHeader
-        title={copy.reports.title}
-        subtitle={copy.reports.subtitle}
+        title={t('reports.title')}
+        subtitle={t('reports.subtitle')}
         actions={
           <>
             <Button
@@ -325,7 +368,7 @@ export default function ReportsPage() {
               data-testid="export-zip"
             >
               <FolderArchive aria-hidden="true" />
-              {copy.reports.exportZip}
+              {t('reports.exportZip')}
               {selected.size ? (
                 <span className="font-mono text-[12px] opacity-80">{selected.size}</span>
               ) : null}
@@ -333,26 +376,26 @@ export default function ReportsPage() {
             <Button asChild data-testid="new-report">
               <Link to="/reports/new">
                 <Plus aria-hidden="true" />
-                {copy.reports.newReport}
+                {t('reports.newReport')}
               </Link>
             </Button>
           </>
         }
       />
 
-      <Card className="mb-4 p-4" role="search" aria-label={copy.reports.filterBar}>
-        <div className="grid gap-3 md:grid-cols-[minmax(180px,1fr)_auto_auto_minmax(160px,1fr)] md:items-end">
+      <Card className="mb-4 p-4" role="search" aria-label={t('reports.filterBar')}>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(180px,1fr)_auto_auto_minmax(150px,1fr)_minmax(130px,0.7fr)] lg:items-end">
           <div className="grid gap-1.5">
-            <Label htmlFor="rf-site">{copy.reports.filters.site}</Label>
+            <Label htmlFor="rf-site">{t('reports.filters.site')}</Label>
             <Select
               value={filters.siteId ?? 'all'}
               onValueChange={(v) => update({ site: v === 'all' ? null : v })}
             >
               <SelectTrigger id="rf-site" dense>
-                <SelectValue placeholder={copy.reports.filters.allSites} />
+                <SelectValue placeholder={t('reports.filters.allSites')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">{copy.reports.filters.allSites}</SelectItem>
+                <SelectItem value="all">{t('reports.filters.allSites')}</SelectItem>
                 {(sites.data ?? []).map((s) => (
                   <SelectItem key={s.siteId} value={s.siteId}>
                     {s.name}
@@ -362,29 +405,29 @@ export default function ReportsPage() {
             </Select>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="rf-from">{copy.reports.filters.from}</Label>
+            <Label htmlFor="rf-from">{t('reports.filters.from')}</Label>
             <Input
               id="rf-from"
               type="date"
-              className="h-10 font-mono"
+              className="h-target-dense font-mono"
               value={filters.from ?? ''}
               max={filters.to ?? undefined}
               onChange={(e) => update({ from: e.target.value || null })}
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="rf-to">{copy.reports.filters.to}</Label>
+            <Label htmlFor="rf-to">{t('reports.filters.to')}</Label>
             <Input
               id="rf-to"
               type="date"
-              className="h-10 font-mono"
+              className="h-target-dense font-mono"
               value={filters.to ?? ''}
               min={filters.from ?? undefined}
               onChange={(e) => update({ to: e.target.value || null })}
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="rf-status">{copy.reports.filters.status}</Label>
+            <Label htmlFor="rf-status">{t('reports.filters.status')}</Label>
             <Select
               value={filters.status ?? 'all'}
               onValueChange={(v) => update({ status: v === 'all' ? null : v })}
@@ -395,7 +438,26 @@ export default function ReportsPage() {
               <SelectContent>
                 {STATUSES.map((s) => (
                   <SelectItem key={s} value={s}>
-                    {copy.reports.statuses[s]}
+                    {t(`reports.statuses.${s}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="rf-channel">{t('reports.filters.channel')}</Label>
+            <Select
+              value={filters.channel ?? 'any'}
+              onValueChange={(v) => update({ channel: v === 'any' ? null : v })}
+            >
+              <SelectTrigger id="rf-channel" dense data-testid="channel-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">{t('reports.channels.any')}</SelectItem>
+                {CHANNELS.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {t(`reports.channels.${c}`)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -403,31 +465,31 @@ export default function ReportsPage() {
           </div>
         </div>
         <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="flex flex-wrap gap-2" role="group" aria-label={copy.reports.toggles}>
-            {TOGGLES.map((t) => {
-              const on = !!filters[t.filter];
+          <div className="flex flex-wrap gap-2" role="group" aria-label={t('reports.toggles')}>
+            {TOGGLES.map((toggle) => {
+              const on = !!filters[toggle.filter];
               return (
                 <button
-                  key={t.key}
+                  key={toggle.key}
                   type="button"
                   aria-pressed={on}
-                  onClick={() => update({ [t.key]: on ? null : '1' })}
+                  onClick={() => update({ [toggle.key]: on ? null : '1' })}
                   className={cn(
-                    'inline-flex h-10 items-center gap-1.5 rounded-chip border px-3 text-caption font-medium transition-colors',
+                    'inline-flex h-target-dense items-center gap-1.5 rounded-chip border px-3 text-caption font-medium transition-colors',
                     on
                       ? 'border-asphalt bg-asphalt text-chalk'
                       : 'border-rebar bg-chalk text-asphalt hover:bg-concrete',
                   )}
-                  data-testid={`toggle-${t.key}`}
+                  data-testid={`toggle-${toggle.key}`}
                 >
-                  {t.label}
+                  {t(toggle.label)}
                 </button>
               );
             })}
           </div>
           <div className="relative flex-1 lg:max-w-md">
             <label className="sr-only" htmlFor="rf-q">
-              {copy.reports.filters.search}
+              {t('reports.filters.search')}
             </label>
             <Search
               className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-dust"
@@ -436,8 +498,8 @@ export default function ReportsPage() {
             <Input
               id="rf-q"
               type="search"
-              className="h-10 pl-10"
-              placeholder={copy.reports.filters.search}
+              className="h-target-dense pl-10"
+              placeholder={t('reports.filters.search')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -453,7 +515,7 @@ export default function ReportsPage() {
               }}
             >
               <X aria-hidden="true" />
-              {copy.reports.filters.clear}
+              {t('reports.filters.clear')}
             </Button>
           ) : null}
         </div>
@@ -469,7 +531,7 @@ export default function ReportsPage() {
           </>
         ) : reports.isError || !data ? (
           <ErrorState
-            thing={copy.nav.reports.toLowerCase()}
+            thing={t('reports.thing')}
             error={reports.error}
             onRetry={() => void reports.refetch()}
             className="m-5"
@@ -479,33 +541,33 @@ export default function ReportsPage() {
             {activeFilterCount === 0 ? (
               // Nothing filed yet: no filter to widen, so say what to do instead.
               <EmptyState
-                title={copy.reports.emptyNone}
+                title={t('reports.emptyNone')}
                 body={
                   !noSites
-                    ? copy.reports.emptyNoneBody
+                    ? t('reports.emptyNoneBody')
                     : canAddSite
-                      ? copy.reports.emptyNoSitesBody
-                      : copy.reports.emptyNoSitesAskAdmin
+                      ? t('reports.emptyNoSitesBody')
+                      : t('reports.emptyNoSitesAskAdmin')
                 }
                 action={
                   noSites ? (
                     canAddSite ? (
                       <Button asChild>
-                        <Link to="/setup/site">{copy.overview.connectFirstSite}</Link>
+                        <Link to="/setup/site">{t('reports.connectFirstSite')}</Link>
                       </Button>
                     ) : null
                   ) : (
                     <Button asChild>
                       <Link to="/reports/new">
                         <Plus aria-hidden="true" />
-                        {copy.reports.newReport}
+                        {t('reports.newReport')}
                       </Link>
                     </Button>
                   )
                 }
               />
             ) : (
-              <EmptyState title={copy.reports.empty} body={copy.reports.emptyHint} />
+              <EmptyState title={t('reports.empty')} body={t('reports.emptyHint')} />
             )}
           </div>
         ) : (
@@ -515,7 +577,7 @@ export default function ReportsPage() {
             rowKey={(r) => r.reportId}
             rowHref={(r) => `/reports/${r.reportId}`}
             rowTone={(r) => (selected.has(r.reportId) ? 'attention' : 'default')}
-            aria-label={copy.reports.title}
+            aria-label={t('reports.title')}
             className={cn(reports.isFetching && 'opacity-70')}
           />
         )}
@@ -527,11 +589,13 @@ export default function ReportsPage() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span data-testid="result-count">
                 {selected.size
-                  ? copy.reports.countSelected(data.total, selected.size)
-                  : copy.reports.count(data.total)}
+                  ? t('reports.countSelected', { count: data.total, selected: selected.size })
+                  : t('reports.count', { count: data.total })}
               </span>
               {data.total > 0 ? (
-                <span className="font-mono">{copy.reports.showing(from, to, data.total)}</span>
+                <span className="font-mono">
+                  {t('reports.showing', { from, to, total: data.total })}
+                </span>
               ) : null}
               {filters.hasWeatherDelay && data.total > 0 ? (
                 <Link
@@ -539,28 +603,35 @@ export default function ReportsPage() {
                   className="font-medium text-level underline-offset-4 hover:underline"
                   data-testid="build-pack"
                 >
-                  {copy.reports.buildPack} →
+                  {t('reports.buildPack')} →
                   <span className="ml-1 font-mono text-[12px] text-dust">
-                    {copy.reports.buildPackHint(formatHours(data.weatherHours))}
+                    {t('reports.buildPackHint', {
+                      hours: formatHoursIn(
+                        data.weatherHours,
+                        language === 'tr' ? 'tr-TR' : 'en-US',
+                      ),
+                    })}
                   </span>
                 </Link>
               ) : null}
             </div>
-            <nav className="flex items-center gap-2" aria-label={copy.reports.pagination}>
+            <nav className="flex items-center gap-2" aria-label={t('reports.pagination')}>
               <Button
                 variant="ghost"
                 size="iconDense"
-                aria-label={copy.common.previousPage}
+                aria-label={t('reports.previousPage')}
                 disabled={data.page <= 1}
                 onClick={() => update({ page: String(data.page - 1) })}
               >
                 <ChevronLeft aria-hidden="true" />
               </Button>
-              <span className="font-mono">{copy.common.page(data.page, data.pageCount)}</span>
+              <span className="font-mono">
+                {t('reports.page', { page: data.page, total: data.pageCount })}
+              </span>
               <Button
                 variant="ghost"
                 size="iconDense"
-                aria-label={copy.common.nextPage}
+                aria-label={t('reports.nextPage')}
                 disabled={data.page >= data.pageCount}
                 onClick={() => update({ page: String(data.page + 1) })}
               >

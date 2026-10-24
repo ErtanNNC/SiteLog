@@ -1,7 +1,10 @@
 {
   "languageDetected": ["en"],
   "summary": "Level 2 patient-wing topping slab poured by Apex Concrete (approx. 18 yd³). Level 1 mechanical rough-in, north elevation glazing and Level 2 drywall continued. BrightLine Electric made the Level 1 temporary power safe (half day). Toolbox talk on housekeeping; no incidents.",
-  "weather": { "conditionsText": "", "periods": [] },
+  "weather": {
+    "conditionsText": "",
+    "periods": []
+  },
   "manpower": [
     {
       "companyId": "00000000-0000-4000-8000-00000000d001",
@@ -16,8 +19,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "type": "voice_note",
+          "uploadId": "e0000024-0000-4000-8000-000000002401",
           "start": 6,
           "end": 13.5
         }
@@ -36,8 +39,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "type": "voice_note",
+          "uploadId": "e0000024-0000-4000-8000-000000002401",
           "start": 13.5,
           "end": 20.5
         }
@@ -56,8 +59,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "type": "voice_note",
+          "uploadId": "e0000024-0000-4000-8000-000000002401",
           "start": 13.5,
           "end": 20.5
         }
@@ -76,8 +79,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "type": "voice_note",
+          "uploadId": "e0000024-0000-4000-8000-000000002401",
           "start": 20.5,
           "end": 26
         }
@@ -95,8 +98,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "type": "voice_note",
+          "uploadId": "e0000024-0000-4000-8000-000000002401",
           "start": 20.5,
           "end": 26
         }
@@ -115,8 +118,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "type": "voice_note",
+          "uploadId": "e0000024-0000-4000-8000-000000002401",
           "start": 26,
           "end": 31.5
         }
@@ -128,11 +131,15 @@
       "area": "Level 2",
       "activity": "Concrete topping slab, patient wing",
       "status": "complete",
-      "quantity": { "value": 18, "unit": "yd³", "heardAs": "eighteen yards" },
+      "quantity": {
+        "value": 18,
+        "unit": "yd³",
+        "heardAs": "eighteen yards"
+      },
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "type": "voice_note",
+          "uploadId": "e0000024-0000-4000-8000-000000002401",
           "start": 6,
           "end": 13.5
         }
@@ -144,8 +151,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "type": "voice_note",
+          "uploadId": "e0000024-0000-4000-8000-000000002401",
           "start": 13.5,
           "end": 20.5
         }
@@ -157,8 +164,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "type": "voice_note",
+          "uploadId": "e0000024-0000-4000-8000-000000002401",
           "start": 13.5,
           "end": 20.5
         }
@@ -170,8 +177,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "type": "voice_note",
+          "uploadId": "e0000024-0000-4000-8000-000000002401",
           "start": 20.5,
           "end": 26
         }
@@ -183,8 +190,8 @@
       "status": "complete",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "type": "voice_note",
+          "uploadId": "e0000024-0000-4000-8000-000000002401",
           "start": 26,
           "end": 31.5
         }
@@ -200,8 +207,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000024-0000-4000-8000-000000002401",
+        "type": "voice_note",
+        "uploadId": "e0000024-0000-4000-8000-000000002401",
         "start": 31.5,
         "end": 37
       }

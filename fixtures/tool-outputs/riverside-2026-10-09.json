@@ -12,8 +12,8 @@
         "lostHours": 3.5,
         "source": [
           {
-            "type": "audio",
-            "messageId": "11111111-0000-4000-8000-000000000101",
+            "type": "voice_note",
+            "uploadId": "11111111-0000-4000-8000-000000000101",
             "start": 6.2,
             "end": 18.9
           }
@@ -35,8 +35,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 18.9,
           "end": 26.1
         }
@@ -55,10 +55,10 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 26.1,
-          "end": 33.0
+          "end": 33
         }
       ]
     },
@@ -75,9 +75,9 @@
       "confidence": 0.85,
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
-          "start": 33.0,
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
+          "start": 33,
           "end": 40.5
         }
       ]
@@ -95,8 +95,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 40.5,
           "end": 47.2
         }
@@ -115,8 +115,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 47.2,
           "end": 53.8
         }
@@ -128,11 +128,15 @@
       "area": "Level 4",
       "activity": "Slab pour",
       "status": "complete",
-      "quantity": { "value": 68, "unit": "yd³", "heardAs": "sixty-eight yards" },
+      "quantity": {
+        "value": 68,
+        "unit": "yd³",
+        "heardAs": "sixty-eight yards"
+      },
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 18.9,
           "end": 26.1
         }
@@ -145,10 +149,10 @@
       "percentComplete": 60,
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 26.1,
-          "end": 33.0
+          "end": 33
         }
       ]
     },
@@ -158,9 +162,9 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
-          "start": 33.0,
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
+          "start": 33,
           "end": 40.5
         }
       ]
@@ -171,8 +175,8 @@
       "status": "stopped",
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 6.2,
           "end": 18.9
         }
@@ -184,8 +188,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 12.4,
           "end": 18.9
         }
@@ -197,8 +201,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 40.5,
           "end": 47.2
         }
@@ -213,8 +217,8 @@
       "time": "13:00",
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 40.5,
           "end": 47.2
         }
@@ -229,10 +233,10 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "11111111-0000-4000-8000-000000000101",
+        "type": "voice_note",
+        "uploadId": "11111111-0000-4000-8000-000000000101",
         "start": 53.8,
-        "end": 60.0
+        "end": 60
       }
     ]
   },
@@ -242,9 +246,9 @@
       "item": "Concrete pump Monday 07:00 for the Level 5 deck",
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
-          "start": 60.0,
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
+          "start": 60,
           "end": 67.5
         }
       ]
@@ -255,10 +259,9 @@
   "lowConfidence": [],
   "proposedQuestions": [
     {
-      "field": "manpower.workers",
+      "field": "manpower.workers:Delta Mechanical",
       "question": "Quick check: you said 'the Delta guys' were on Level 2. How many, and for how long?",
-      "options": ["4 · full day", "5 · full day"],
-      "target": { "companyNameHeard": "the Delta guys", "manpowerIndex": 2 }
+      "options": ["4 · full day", "5 · full day"]
     }
   ]
 }
