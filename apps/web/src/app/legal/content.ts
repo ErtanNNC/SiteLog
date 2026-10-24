@@ -44,7 +44,7 @@ export interface LegalDoc {
 }
 
 export const COMPANY = 'TalkOlog';
-export const CONTACT_EMAIL = 'support@talkolog.com';
+export const CONTACT_EMAIL = 'reports@talkolog.com';
 export const EFFECTIVE = '2026-10-24';
 
 const email: Inline = { href: `mailto:${CONTACT_EMAIL}`, text: CONTACT_EMAIL };

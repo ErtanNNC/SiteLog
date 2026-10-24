@@ -39,9 +39,9 @@ function expectLegalFooter(current: string) {
     '/privacy',
   );
   expect(within(footer).getByRole('link', { current: 'page' })).toHaveAttribute('href', current);
-  expect(screen.getAllByRole('link', { name: 'support@talkolog.com' })[0]).toHaveAttribute(
+  expect(screen.getAllByRole('link', { name: 'reports@talkolog.com' })[0]).toHaveAttribute(
     'href',
-    'mailto:support@talkolog.com',
+    'mailto:reports@talkolog.com',
   );
   expect(screen.getByRole('link', { name: 'TalkOlog' })).toHaveAttribute('href', '/');
 }
