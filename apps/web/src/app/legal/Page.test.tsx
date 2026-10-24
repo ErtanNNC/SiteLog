@@ -39,9 +39,9 @@ function expectLegalFooter(current: string) {
     '/privacy',
   );
   expect(within(footer).getByRole('link', { current: 'page' })).toHaveAttribute('href', current);
-  expect(screen.getAllByRole('link', { name: 'ertan@yalpllc.com' })[0]).toHaveAttribute(
+  expect(screen.getAllByRole('link', { name: 'support@talkolog.com' })[0]).toHaveAttribute(
     'href',
-    'mailto:ertan@yalpllc.com',
+    'mailto:support@talkolog.com',
   );
   expect(screen.getByRole('link', { name: 'TalkOlog' })).toHaveAttribute('href', '/');
 }
@@ -86,17 +86,19 @@ describe('public legal pages', () => {
     expect(SAMPLE_WELCOME.endsWith(smsReplyHintEn)).toBe(true);
   });
 
-  it('/terms: Yalp LLC, Wyoming, the SMS terms, version 2', async () => {
+  it('/terms: TalkOlog, the SMS terms, version 3, no company named', async () => {
     renderSignedOut('/terms');
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Terms of Service' }),
     ).toBeVisible();
     expect(document.title).toBe('Terms of Service · TalkOlog');
-    expect(screen.getByText('Yalp LLC · Effective: 2026-10-20 · Version 2')).toBeInTheDocument();
-    expect(screen.getByText(/Yalp LLC, a Wyoming \(USA\) limited liability company/)).toBeVisible();
+    expect(screen.getByText('TalkOlog · Effective: 2026-10-24 · Version 3')).toBeInTheDocument();
+    expect(
+      screen.getByText(/These terms govern the use of TalkOlog \(“we”, “us”\)\./),
+    ).toBeVisible();
     expect(screen.getByRole('heading', { level: 2, name: '4. SMS messaging terms' })).toBeVisible();
-    expect(screen.getByRole('heading', { level: 2, name: '14. Governing law' })).toBeVisible();
-    expect(screen.getByText(/governed by the laws of the State of Wyoming/)).toBeVisible();
+    expect(screen.getByRole('heading', { level: 2, name: '14. Contact' })).toBeVisible();
+    expect(document.body.textContent).not.toMatch(/Yalp|Wyoming/);
     expect(
       screen.getByText(/Reply STOP to opt out, START to resume and HELP for help\./),
     ).toBeVisible();
@@ -107,7 +109,7 @@ describe('public legal pages', () => {
     renderSignedOut('/privacy');
     expect(await screen.findByRole('heading', { level: 1, name: 'Privacy Policy' })).toBeVisible();
     expect(document.title).toBe('Privacy Policy · TalkOlog');
-    expect(screen.getByText('Yalp LLC · Effective: 2026-10-20 · Version 2')).toBeInTheDocument();
+    expect(screen.getByText('TalkOlog · Effective: 2026-10-24 · Version 3')).toBeInTheDocument();
     expect(
       screen.getByText(
         `${NO_SHARING} Text messaging originator opt-in data and consent will not be shared with any third parties.`,
@@ -117,7 +119,7 @@ describe('public legal pages', () => {
     expect(
       screen.getByText(/Phone numbers are removed before any text is sent to the model/),
     ).toBeVisible();
-    expect(screen.getByText(/Wyoming \(USA\)/)).toBeVisible();
+    expect(document.body.textContent).not.toMatch(/Yalp|Wyoming/);
     expectLegalFooter('/privacy');
   });
 

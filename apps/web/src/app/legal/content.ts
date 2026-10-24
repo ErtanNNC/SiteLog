@@ -43,9 +43,9 @@ export interface LegalDoc {
   sections: LegalSection[];
 }
 
-export const COMPANY = 'Yalp LLC';
-export const CONTACT_EMAIL = 'ertan@yalpllc.com';
-export const EFFECTIVE = '2026-10-20';
+export const COMPANY = 'TalkOlog';
+export const CONTACT_EMAIL = 'support@talkolog.com';
+export const EFFECTIVE = '2026-10-24';
 
 const email: Inline = { href: `mailto:${CONTACT_EMAIL}`, text: CONTACT_EMAIL };
 const terms: Inline = { href: '/terms', text: 'Terms of Service' };
@@ -113,9 +113,9 @@ const sms: LegalDoc = {
   title: 'TalkOlog SMS program',
   documentTitle: 'SMS program · TalkOlog',
   effective: EFFECTIVE,
-  version: 2,
+  version: 3,
   intro: [
-    `TalkOlog is a service of ${COMPANY}. This page describes the text messages TalkOlog sends to field staff in the United States, by SMS or WhatsApp, how people agree to receive them and how to stop them.`,
+    `This page describes the text messages TalkOlog sends to field staff in the United States, by SMS or WhatsApp, how people agree to receive them and how to stop them.`,
   ],
   sections: [
     {
@@ -211,7 +211,7 @@ const sms: LegalDoc = {
     {
       id: 'contact',
       heading: 'Contact',
-      blocks: [p(`${COMPANY}, Wyoming, USA. Email `, email, '.')],
+      blocks: [p('Email ', email, '.')],
     },
   ],
 };
@@ -222,9 +222,9 @@ const termsDoc: LegalDoc = {
   title: 'Terms of Service',
   documentTitle: 'Terms of Service · TalkOlog',
   effective: EFFECTIVE,
-  version: 2,
+  version: 3,
   intro: [
-    `These terms govern the use of TalkOlog, a service operated by ${COMPANY}, a Wyoming (USA) limited liability company (“we”, “us”). By creating an account, using the TalkOlog panel or the field app, or receiving TalkOlog messages, you agree to them.`,
+    `These terms govern the use of TalkOlog (“we”, “us”). By creating an account, using the TalkOlog panel or the field app, or receiving TalkOlog messages, you agree to them.`,
   ],
   sections: [
     {
@@ -325,7 +325,7 @@ const termsDoc: LegalDoc = {
       heading: '9. Intellectual property',
       blocks: [
         p(
-          'TalkOlog, its software, design and brand belong to Yalp LLC. We grant the customer a non-exclusive, non-transferable right to use the service during the subscription. Feedback you give us may be used to improve the service without obligation.',
+          'TalkOlog, its software, design and brand belong to TalkOlog. We grant the customer a non-exclusive, non-transferable right to use the service during the subscription. Feedback you give us may be used to improve the service without obligation.',
         ),
       ],
     },
@@ -343,7 +343,7 @@ const termsDoc: LegalDoc = {
       heading: '11. Limitation of liability',
       blocks: [
         p(
-          'To the extent the law allows, Yalp LLC is not liable for indirect, incidental, special, consequential or punitive damages, or for lost profits, revenue or data. Our total liability for any claim relating to the service is limited to the fees the customer paid us for the service in the twelve months before the claim.',
+          'To the extent the law allows, TalkOlog is not liable for indirect, incidental, special, consequential or punitive damages, or for lost profits, revenue or data. Our total liability for any claim relating to the service is limited to the fees the customer paid us for the service in the twelve months before the claim.',
         ),
       ],
     },
@@ -368,18 +368,9 @@ const termsDoc: LegalDoc = {
       ],
     },
     {
-      id: 'law',
-      heading: '14. Governing law',
-      blocks: [
-        p(
-          'These terms are governed by the laws of the State of Wyoming, USA, without regard to its conflict-of-laws rules. The courts located in Wyoming have exclusive jurisdiction, unless the law gives you the right to sue elsewhere.',
-        ),
-      ],
-    },
-    {
       id: 'contact',
-      heading: '15. Contact',
-      blocks: [p(`${COMPANY}, Wyoming, USA. Email `, email, '.')],
+      heading: '14. Contact',
+      blocks: [p('Email ', email, '.')],
     },
   ],
 };
@@ -390,9 +381,9 @@ const privacyDoc: LegalDoc = {
   title: 'Privacy Policy',
   documentTitle: 'Privacy Policy · TalkOlog',
   effective: EFFECTIVE,
-  version: 2,
+  version: 3,
   intro: [
-    `This policy explains how ${COMPANY}, a Wyoming (USA) limited liability company, handles personal information in TalkOlog. TalkOlog is used by employers (our customers) for the daily reports of their construction sites. For the data of field workers, the employer decides why it is collected and we process it on the employer’s behalf.`,
+    `This policy explains how TalkOlog (“we”, “us”) handles personal information in TalkOlog. TalkOlog is used by employers (our customers) for the daily reports of their construction sites. For the data of field workers, the employer decides why it is collected and we process it on the employer’s behalf.`,
   ],
   sections: [
     {
@@ -532,7 +523,7 @@ const privacyDoc: LegalDoc = {
     {
       id: 'contact',
       heading: 'Contact',
-      blocks: [p(`${COMPANY}, Wyoming, USA. Email `, email, '. See also our ', terms, '.')],
+      blocks: [p('Email ', email, '. See also our ', terms, '.')],
     },
   ],
 };

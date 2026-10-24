@@ -1,5 +1,11 @@
 # TalkOlog · Durum
 
+**2026-10-24 — Yasal sayfalardan Yalp LLC kaldırıldı (isteğiniz).**
+
+- **Değişen:** `talkolog.com/sms`, `/terms`, `/privacy` sayfalarında artık hiçbir şirket adı ve eski e-posta adresi yok. Hizmet "TalkOlog" adıyla anılıyor; iletişim adresi **support@talkolog.com**. Wyoming'e bağlı "Governing law" maddesi (Kullanım Koşulları §14) çıkarıldı; "Contact" artık §14. Sayfalar sürüm 3, yürürlük 2026-10-24.
+- **Sizin adımınız:** `support@talkolog.com` adresine gelen e-postaları alabildiğinizden emin olun (ör. alan adınızda bir yönlendirme). Farklı bir adres isterseniz söyleyin, değiştiririm. Panel deploy'unu Netlify'da yayınlayın. Twilio toll-free başvurusunu bu sürüm yayındayken gönderin (başvurudaki şirket bilgisi de Yalp LLC olmamalı).
+- **Not:** Sayfalar hâlâ taslak; ileride bir şirket kurulursa adı ve hangi ülkenin hukukunun geçerli olduğu eklenmeli (mümkünse bir avukatla).
+
 **2026-10-24 — WhatsApp canlı (preview).**
 
 - **Şablonlar:** Meta 28 şablonun hepsini onayladı (15:19 TR). TR paketinde 15 anahtar × TR/EN, US paketinde 15 × EN kayıtlı (`whatsapp-templates sync`, audit `country.endpoints_set`). ES şablonu yok.
@@ -45,7 +51,7 @@
 **2026-10-20 — Twilio toll-free doğrulaması için hazırlık (§19 Q371, onayınızla).**
 
 - **Panelde onay kutusu:** Team'de kişi eklerken ve kurulum sihirbazında "{isim} TalkOlog'dan günlük rapor mesajları almayı kabul etti" kutusu zorunlu. Kutu işaretlenmeden davet gitmez; sunucu da reddeder. Kayıt, ekleyen ofis kullanıcısının adı ve saatiyle audit log'a düşer (`team.invite_sms.v1 (artık v2)`).
-- **Herkese açık sayfalar:** `talkolog.com/sms` (program, sözlü izin metni, örnek mesajlar), `talkolog.com/terms`, `talkolog.com/privacy`. Şirket: Yalp LLC, Wyoming, ertan@yalpllc.com. Metinler taslak; okuyup onaylamanız gerekir (mümkünse bir avukat).
+- **Herkese açık sayfalar:** `talkolog.com/sms` (program, sözlü izin metni, örnek mesajlar), `talkolog.com/terms`, `talkolog.com/privacy`. Şirket adı geçmiyor (2026-10-24: TalkOlog başka bir şirkete bağlı değil); iletişim support@talkolog.com. Metinler taslak; okuyup onaylamanız gerekir (mümkünse bir avukat).
 - **Fly.io test worker'ı çalışıyor (2026-10-20 11:53 UTC):** `talkolog-worker-preview` (iad, 1 makine, sürekli açık), preview projesine bağlı; `/health` dinliyor. Artık her test öncesi `preview-worker` başlatmak gerekmiyor. Worker değişince Deploy → preview → `preview-worker-fly` yeniden çalıştırılır.
 - **E-posta Resend ile (2026-10-20 12:24 UTC):** Fly worker `RESEND_API_KEY` ile yeniden kuruldu; gerçek şirketlerin e-postaları `reports@talkolog.com` adresinden gidiyor, demo şirketlerinki Demo telefonun E-posta sekmesinde kalıyor. Giriş e-postaları için Supabase Auth SMTP ayarı sizde (RUNBOOK).
 - **Yayında:** yeni panel talkolog.com'da (sizin yayınınız), `api-invite-reporter` preview'e kuruldu (kutusuz davet reddediliyor).
