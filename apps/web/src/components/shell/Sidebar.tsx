@@ -226,25 +226,30 @@ export function Sidebar({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="top" className="w-[216px]">
-            {/* §11.2 menu: Language EN/TR, Profile, Sign out. Switching keeps the route (§11.5). */}
-            <DropdownMenuLabel id={languageLabelId}>{tc('language')}</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              value={language}
-              onValueChange={(v) => {
-                if (!isPanelLanguage(v)) return;
-                setLanguage(v);
-                // §19 Q340: the next sign-in email follows the language chosen here.
-                saveEmailLanguage(source, v);
-              }}
-              aria-labelledby={languageLabelId}
-            >
-              {PANEL_LANGUAGES.map((lang) => (
-                <DropdownMenuRadioItem key={lang} value={lang} lang={lang}>
-                  {tc(`languageNames.${lang}`)}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
+            {/* §11.2 menu: Language EN/TR, Profile, Sign out. Switching keeps the route (§11.5).
+                §19 Q378: no Language group while the build offers English only. */}
+            {PANEL_LANGUAGES.length > 1 ? (
+              <>
+                <DropdownMenuLabel id={languageLabelId}>{tc('language')}</DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={language}
+                  onValueChange={(v) => {
+                    if (!isPanelLanguage(v)) return;
+                    setLanguage(v);
+                    // §19 Q340: the next sign-in email follows the language chosen here.
+                    saveEmailLanguage(source, v);
+                  }}
+                  aria-labelledby={languageLabelId}
+                >
+                  {PANEL_LANGUAGES.map((lang) => (
+                    <DropdownMenuRadioItem key={lang} value={lang} lang={lang}>
+                      {tc(`languageNames.${lang}`)}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
             <DropdownMenuItem
               onSelect={() => void navigate('/settings/reports')}
               disabled={role !== 'admin'}

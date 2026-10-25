@@ -11,7 +11,7 @@ import { useApi } from '@/api/useApi';
 import { PrimaryButton } from '@/components/Buttons';
 import { Screen, ScreenTitle, ActionBar } from '@/components/Screen';
 import { i18n } from '@/i18n/i18n';
-import { fieldLanguageOf, type FieldLanguage } from '@/i18n/language';
+import { fieldLanguageOf, offeredFieldLocales, type FieldLanguage } from '@/i18n/language';
 import { useFieldCopy } from '@/i18n/useFieldCopy';
 import { placesAutomatedCalls } from '@/lib/features';
 import { privacyNoticeHref } from '@/lib/legal';
@@ -58,7 +58,7 @@ export function Welcome({
     whatsapp: useId(),
   };
 
-  const locales = country.fieldLocales;
+  const locales = offeredFieldLocales(country.fieldLocales);
   const chosen: ReporterLocale =
     locales.find((l) => fieldLanguageOf(l) === language) ?? locales[0] ?? reporter.locale;
 

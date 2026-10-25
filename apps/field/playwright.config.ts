@@ -67,5 +67,7 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
+    // §19 Q378: Turkish is off in the deployed builds; the e2e builds keep it on to test it.
+    env: { VITE_TURKISH: 'true' },
   },
 });

@@ -57,6 +57,8 @@ export default defineConfig({
     timeout: 180_000,
     env: {
       VITE_DEMO: 'false',
+      // §19 Q378: Turkish is off in the deployed builds; the e2e builds keep it on to test it.
+      VITE_TURKISH: 'true',
       VITE_SUPABASE_URL: SUPABASE_URL,
       VITE_SUPABASE_ANON_KEY: ANON_KEY,
       VITE_APP_URL: APP_URL,

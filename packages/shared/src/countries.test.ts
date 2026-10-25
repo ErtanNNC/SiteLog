@@ -100,8 +100,9 @@ describe('country pack rows (spec §4.6)', () => {
   it('maps a row to the camelCase pack', () => {
     expect(demoPack('TR')).toEqual({
       code: 'TR',
-      defaultLocale: 'tr-TR',
-      fieldLocales: ['tr-TR', 'en-US'],
+      // §19 Q378: Turkish is off, the TR pack speaks English.
+      defaultLocale: 'en-US',
+      fieldLocales: ['en-US'],
       units: 'metric',
       paper: 'a4',
       currency: 'TRY',
@@ -143,14 +144,14 @@ describe('country pack rows (spec §4.6)', () => {
     });
     expect(orgDefaultsFor(demoPack('TR'))).toEqual({
       country: 'TR',
-      locale: 'tr-TR',
+      locale: 'en-US',
       units: 'metric',
       currency: 'TRY',
       timezone: 'Europe/Istanbul',
       pdfPaper: 'a4',
     });
     expect(reporterDefaultsFor(demoPack('US'))).toEqual({ locale: 'en-US', languages: ['en'] });
-    expect(reporterDefaultsFor(demoPack('TR'))).toEqual({ locale: 'tr-TR', languages: ['tr'] });
+    expect(reporterDefaultsFor(demoPack('TR'))).toEqual({ locale: 'en-US', languages: ['en'] });
   });
 
   it("picks a reporter's locale from the languages the office says they speak (F2, F3)", () => {

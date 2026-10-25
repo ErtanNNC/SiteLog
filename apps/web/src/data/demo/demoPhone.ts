@@ -1,6 +1,6 @@
 import { smsRenderOptions } from '@sitelog/shared/channels.ts';
 import { renderSms, type SmsKey } from '@sitelog/shared/copy/sms.ts';
-import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
+import { demoCountriesFor } from '@sitelog/shared/demo/countries.ts';
 import { DEMO_SITELOG_NUMBER } from '@sitelog/shared/demo/kestrel.ts';
 import { DEMO_LINK_BASE } from '@sitelog/shared/demo/rows.ts';
 import { demoLinkCode } from '@sitelog/shared/demo/ids.ts';
@@ -13,6 +13,7 @@ import { dailyLinkExpiresAt, fieldLinkUrl, linkCodeHash } from '@sitelog/shared/
 import { languageOf } from '@sitelog/shared/locale.ts';
 import { optOutNotification } from '@sitelog/shared/sms/inbound.ts';
 import { planInboundSms } from '@sitelog/shared/sms/keywords.ts';
+import { TURKISH_ON } from '@/i18n/language';
 import { localId } from '@/lib/utils';
 import { mergeDemoPhoneCalls } from '../demoPhoneCalls';
 import type { DemoPhoneData, DemoPhoneMessage } from '../types';
@@ -27,7 +28,8 @@ import type { DemoPhoneData, DemoPhoneMessage } from '../types';
 
 /** The demo org's country pack (the launch packs; Kestrel is US). */
 export function demoOrgPack(data: DemoDataset): CountryPack {
-  const row = DEMO_COUNTRIES.find((c) => c.code === data.org.country) ?? DEMO_COUNTRIES[0]!;
+  const packs = demoCountriesFor(TURKISH_ON);
+  const row = packs.find((c) => c.code === data.org.country) ?? packs[0]!;
   return toCountryPack(row);
 }
 

@@ -3,6 +3,8 @@ import {
   browserLanguages,
   FIELD_LANGUAGES,
   fieldLanguageOf,
+  fieldLanguagesFor,
+  offeredFieldLocales,
   resolveFieldLanguage,
 } from './language';
 
@@ -52,5 +54,29 @@ describe('field language (§9.6, W1-04)', () => {
     expect(browserLanguages()).toEqual([]);
     vi.stubGlobal('navigator', undefined);
     expect(browserLanguages()).toEqual([]);
+  });
+});
+
+describe('Turkish off (§19 Q378)', () => {
+  const off = fieldLanguagesFor(false);
+
+  it('a deployed build offers EN and ES; a build with VITE_TURKISH=true adds TR', () => {
+    expect(off).toEqual(['en', 'es']);
+    expect(fieldLanguagesFor(true)).toEqual(['en', 'es', 'tr']);
+  });
+
+  it('never resolves Turkish: a Turkish reporter or phone gets English', () => {
+    expect(fieldLanguageOf('tr-TR', off)).toBeNull();
+    expect(resolveFieldLanguage({ reporterLocale: 'tr-TR' }, off)).toBe('en');
+    expect(resolveFieldLanguage({ browser: ['tr-TR', 'es-MX'] }, off)).toBe('es');
+  });
+
+  it('Welcome and Settings list only the offered locales, English when none is', () => {
+    expect(offeredFieldLocales(['tr-TR', 'en-US'], off)).toEqual(['en-US']);
+    expect(offeredFieldLocales(['tr-TR'], off)).toEqual(['en-US']);
+    expect(offeredFieldLocales(['tr-TR', 'en-US'], fieldLanguagesFor(true))).toEqual([
+      'tr-TR',
+      'en-US',
+    ]);
   });
 });

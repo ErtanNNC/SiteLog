@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEMO_COUNTRIES, demoPack } from '@sitelog/shared/demo/countries.ts';
+import { toCountryPack } from '@sitelog/shared/countries.ts';
+import { demoCountriesFor } from '@sitelog/shared/demo/countries.ts';
 import type { CountryRow } from '@sitelog/shared/db/types.ts';
 import { copy } from '@/copy/en';
 import { i18n } from '@/i18n/i18n';
@@ -37,8 +38,11 @@ function fakeDb(result: { data: unknown[] | null; error: { message: string } | n
   return { db: db as unknown as Db, calls };
 }
 
+// The tests run with Turkish on (§19 Q378): the TR pack has its Turkish locales.
+const DEMO_COUNTRIES = demoCountriesFor(true);
 const US = DEMO_COUNTRIES.find((c) => c.code === 'US')!;
 const TR = DEMO_COUNTRIES.find((c) => c.code === 'TR')!;
+const demoPack = (code: 'US' | 'TR') => toCountryPack(code === 'US' ? US : TR);
 /** A pack no code knows about (spec §4.6: a new country is a new row). */
 const ZZ: CountryRow = {
   ...US,

@@ -1,21 +1,41 @@
 import type { OrgLocale } from '@sitelog/shared/locale.ts';
 import { storage } from '@/lib/utils';
 
-/** The panel speaks EN and TR (CLAUDE.md, `UI_LANGUAGES.panel` in `@sitelog/shared`). */
-export const PANEL_LANGUAGES = ['en', 'tr'] as const;
-export type PanelLanguage = (typeof PANEL_LANGUAGES)[number];
+/** The panel has EN and TR copy (CLAUDE.md, `UI_LANGUAGES.panel` in `@sitelog/shared`). */
+export const ALL_PANEL_LANGUAGES = ['en', 'tr'] as const;
+export type PanelLanguage = (typeof ALL_PANEL_LANGUAGES)[number];
+
+/**
+ * §19 Q378 (2026-10-25): Turkish is off. Its copy stays in the repo, and a build with
+ * `VITE_TURKISH=true` speaks it again (the test and e2e builds do, to keep it working).
+ */
+export const TURKISH_ON = import.meta.env.VITE_TURKISH === 'true';
+
+/** The languages a build offers: English only while Turkish is off. */
+export function panelLanguagesFor(turkish: boolean): readonly PanelLanguage[] {
+  return turkish ? ALL_PANEL_LANGUAGES : ['en'];
+}
+
+/** The languages this build offers (the switch, the menu, i18next's `supportedLngs`). */
+export const PANEL_LANGUAGES = panelLanguagesFor(TURKISH_ON);
 
 /** localStorage key of the viewer's language choice on this device. */
 export const LANGUAGE_KEY = 'sitelog.language';
 
-export function isPanelLanguage(value: unknown): value is PanelLanguage {
-  return typeof value === 'string' && (PANEL_LANGUAGES as readonly string[]).includes(value);
+export function isPanelLanguage(
+  value: unknown,
+  languages: readonly PanelLanguage[] = PANEL_LANGUAGES,
+): value is PanelLanguage {
+  return typeof value === 'string' && (languages as readonly string[]).includes(value);
 }
 
-/** 'tr-TR' → 'tr', 'en' → 'en'; a language the panel does not speak ('es-US') → null. */
-export function panelLanguageOf(tag: string | null | undefined): PanelLanguage | null {
+/** 'tr-TR' → 'tr', 'en' → 'en'; a language the build does not offer ('es-US') → null. */
+export function panelLanguageOf(
+  tag: string | null | undefined,
+  languages: readonly PanelLanguage[] = PANEL_LANGUAGES,
+): PanelLanguage | null {
   const lang = tag?.split('-')[0]?.toLowerCase();
-  return isPanelLanguage(lang) ? lang : null;
+  return isPanelLanguage(lang, languages) ? lang : null;
 }
 
 /**
@@ -23,15 +43,18 @@ export function panelLanguageOf(tag: string | null | undefined): PanelLanguage |
  * own choice wins; without one, the org's locale once the org is known. Before that (`/login`,
  * `/auth/callback`, the boot skeleton) the browser's language when the panel speaks it, else English.
  */
-export function resolveLanguage(input: {
-  chosen?: PanelLanguage | null;
-  browser?: string | null;
-  orgLocale?: OrgLocale | null;
-}): PanelLanguage {
-  if (input.chosen) return input.chosen;
-  const org = panelLanguageOf(input.orgLocale);
+export function resolveLanguage(
+  input: {
+    chosen?: PanelLanguage | null;
+    browser?: string | null;
+    orgLocale?: OrgLocale | null;
+  },
+  languages: readonly PanelLanguage[] = PANEL_LANGUAGES,
+): PanelLanguage {
+  if (input.chosen && isPanelLanguage(input.chosen, languages)) return input.chosen;
+  const org = panelLanguageOf(input.orgLocale, languages);
   if (org) return org;
-  return panelLanguageOf(input.browser) ?? 'en';
+  return panelLanguageOf(input.browser, languages) ?? 'en';
 }
 
 /** The browser's preferred language tag ('tr-TR'), or null outside a browser. */

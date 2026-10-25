@@ -766,8 +766,9 @@ describe('processInboundSms on WhatsApp (W2-16; spec §9.5, §19 Q26, Q40, Q85)'
     const out = await h.run('merhaba', { ...wa, from: assertE164('+905329999999') });
     expect(out.unknownContact).toBe(true);
     expect(h.unknown[0]).toMatchObject({ channel: 'whatsapp' });
+    // §19 Q378: an unknown number gets the pack's first field language, English since Turkish is off.
     expect(h.waForms[0]!.get('Body')).toBe(
-      "Bu numara TalkOlog'da kayıtlı değil. Ofisinizden sizi eklemesini isteyin.",
+      "This number isn't set up with TalkOlog. Ask your office to add you.",
     );
   });
 });

@@ -31,6 +31,8 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       globals: true,
       setupFiles: ['./vitest.setup.ts'],
+      // §19 Q378: the tests run with Turkish on; `*LanguagesFor(false)` covers the deployed builds.
+      env: { VITE_TURKISH: 'true' },
       include: ['src/**/*.test.{ts,tsx}', 'config/**/*.test.ts'],
       css: false,
       restoreMocks: true,

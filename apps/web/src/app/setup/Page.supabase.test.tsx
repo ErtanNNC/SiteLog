@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { Route, Routes } from 'react-router';
 import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
+import { demoCountriesFor } from '@sitelog/shared/demo/countries.ts';
 import type { CountryRow } from '@sitelog/shared/db/types.ts';
 import { DemoStore, demoUserFor } from '@/data/demo/store';
 import type * as EnvModule from '@/lib/env';
@@ -46,7 +46,8 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 const ADMIN = demoUserFor('admin').id;
-const ROWS = [...DEMO_COUNTRIES].sort((a, b) => a.code.localeCompare(b.code));
+// A stack whose TR pack speaks Turkish, as the e2e global setup makes it (§19 Q378).
+const ROWS = [...demoCountriesFor(true)].sort((a, b) => a.code.localeCompare(b.code));
 
 function Harness() {
   return (

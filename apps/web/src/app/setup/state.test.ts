@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { demoPack } from '@sitelog/shared/demo/countries.ts';
+import { toCountryPack } from '@sitelog/shared/countries.ts';
+import { demoCountriesFor } from '@sitelog/shared/demo/countries.ts';
+
+// The tests run with Turkish on (§19 Q378): the TR pack has its Turkish locales.
+const demoPack = (code: 'US' | 'TR') =>
+  toCountryPack(demoCountriesFor(true).find((c) => c.code === code)!);
 import { storage } from '@/lib/utils';
 import { siteDefaultsFor } from './countries';
 import {

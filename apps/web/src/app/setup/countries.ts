@@ -2,10 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { reporterDefaultsFor, toCountryPack, type CountryPack } from '@sitelog/shared/countries.ts';
 import type { ContactPref } from '@sitelog/shared/enums.ts';
 import type { CountryRow } from '@sitelog/shared/db/types.ts';
-import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
+import { demoCountriesFor } from '@sitelog/shared/demo/countries.ts';
 import { reportLanguageFor, type OrgLocale, type ReporterLocale } from '@sitelog/shared/locale.ts';
 import { phoneCountryFor } from '@/components/sitelog/PhoneInput';
-import type { PanelLanguage } from '@/i18n/language';
+import { TURKISH_ON, type PanelLanguage } from '@/i18n/language';
 import { translate, type CopyT } from '@/i18n/useCopy';
 import { supabase, type Db } from '@/lib/supabase';
 import { languageLabel } from '../team/labels';
@@ -14,12 +14,13 @@ import { languageLabel } from '../team/labels';
  * The setup wizard's country packs (spec §4.6, GAP D47). The `countries` table is the one source
  * of truth: in Supabase mode the wizard reads it under RLS (every signed-in user may, since the
  * wizard runs before the user has an org); without a database (`VITE_DEMO`, unit tests) it lists
- * `DEMO_COUNTRIES`, which supabase/db-tests keeps equal to the migrated rows. A new country is a
+ * `DEMO_COUNTRIES` (supabase/db-tests keeps them equal to the migrated rows; with Turkish on, §19
+ * Q378, the TR pack has its Turkish locales back). A new country is a
  * new row: the wizard lists it with its name from the browser (`Intl.DisplayNames`), no code.
  */
 
 /** The packs without a database, by code (the order of the database query). */
-export const DEMO_PACKS: readonly CountryPack[] = [...DEMO_COUNTRIES]
+export const DEMO_PACKS: readonly CountryPack[] = [...demoCountriesFor(TURKISH_ON)]
   .sort((a, b) => a.code.localeCompare(b.code))
   .map(toCountryPack);
 

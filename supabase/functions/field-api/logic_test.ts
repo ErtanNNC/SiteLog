@@ -96,7 +96,8 @@ Deno.test('fieldCountryView: the pack subset, never the sender or a provider', (
   assertEquals(view, {
     code: 'TR',
     voiceNumber: null,
-    fieldLocales: ['tr-TR', 'en-US'],
+    // §19 Q378: Turkish is off, the TR pack speaks English.
+    fieldLocales: ['en-US'],
     twoWaySms: false,
     messageChannels: ['push', 'whatsapp'],
     legalKeys: {},

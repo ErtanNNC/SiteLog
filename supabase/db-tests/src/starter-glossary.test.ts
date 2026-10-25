@@ -17,6 +17,11 @@ let db: PGlite;
 beforeAll(async () => {
   db = await bootDatabase();
   await db.exec(`insert into auth.users (id, email) values ('${ELIF}', 'elif@example.test');`);
+  // §19 Q378 turned Turkish off (the TR pack speaks English); the Turkish list stays built, so the
+  // TR pack gets its Turkish locales back here, as the e2e global setup does on a local stack.
+  await db.exec(
+    `update countries set default_locale = 'tr-TR', field_locales = '{tr-TR,en-US}' where code = 'TR'`,
+  );
 });
 
 async function createOrg(name: string, country: 'US' | 'TR'): Promise<string> {

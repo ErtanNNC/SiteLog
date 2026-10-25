@@ -2,6 +2,7 @@ import i18next, { type Resource } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import { UI_RESOURCES, type UiResources } from '@sitelog/shared/copy/ui/index.ts';
 import {
+  ALL_FIELD_LANGUAGES,
   browserLanguages,
   FIELD_LANGUAGES,
   fieldLanguageOf,
@@ -14,7 +15,7 @@ import {
  * TR (`packages/shared/src/copy/ui`). The panel's Turkish (`panel`) is not loaded here.
  */
 export const FIELD_RESOURCES = Object.fromEntries(
-  FIELD_LANGUAGES.map((lng) => [
+  ALL_FIELD_LANGUAGES.map((lng) => [
     lng,
     { common: UI_RESOURCES[lng].common, field: UI_RESOURCES[lng].field },
   ]),

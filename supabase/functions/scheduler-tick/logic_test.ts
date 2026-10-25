@@ -1,6 +1,7 @@
 import { assertEquals, assertThrows } from '@std/assert';
 import { type CountryPack, deadlineInstant, type SiteDayWeather } from '@sitelog/shared';
-import { demoPack } from '@sitelog/shared/demo/countries.ts';
+import { toCountryPack } from '@sitelog/shared/countries.ts';
+import { demoCountriesFor, demoPack } from '@sitelog/shared/demo/countries.ts';
 import {
   asSiteDayWeather,
   claimArgs,
@@ -561,7 +562,8 @@ Deno.test(
 // ── W2-06: the reminder ladder (planLadder → claim_site_day_reminder) ─────────────────────────────
 
 const US = demoPack('US');
-const TR = demoPack('TR');
+// The TR pack with Turkish on (§19 Q378 turned it off; its Turkish texts stay built).
+const TR = toCountryPack(demoCountriesFor(true).find((c) => c.code === 'TR')!);
 
 function orgOf(id: string, over: Partial<OrgInput> = {}): OrgInput {
   return {

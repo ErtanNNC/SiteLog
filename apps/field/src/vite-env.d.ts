@@ -4,6 +4,8 @@
 interface ImportMetaEnv {
   /** Same-origin path of field-api; `/api` when unset (D39). */
   readonly VITE_FIELD_API_URL?: string;
+  /** `true` turns Turkish back on (§19 Q378); unset in the deployed builds. */
+  readonly VITE_TURKISH?: string;
 }
 
 interface ImportMeta {

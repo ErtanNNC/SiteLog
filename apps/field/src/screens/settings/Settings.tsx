@@ -15,7 +15,7 @@ import { OutlineButton, QuietButton, SolidButton } from '@/components/Buttons';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { Screen, ScreenTitle } from '@/components/Screen';
 import { Sheet } from '@/components/Sheet';
-import { fieldLanguageOf, type FieldLanguage } from '@/i18n/language';
+import { fieldLanguageOf, offeredFieldLocales, type FieldLanguage } from '@/i18n/language';
 import { pushBlocked, pushSupported, subscribeBrowser, unsubscribeBrowser } from '@/lib/push';
 import { useFieldCopy } from '@/i18n/useFieldCopy';
 import { NoLink } from '@/screens/NoLink';
@@ -313,7 +313,7 @@ function SettingsLoaded({
   const busy = saving !== null;
   const shownPref = choosing && 'pref' in choosing ? choosing.pref : prefs.contactPref;
   const shownChannel = choosing && 'channel' in choosing ? choosing.channel : prefs.messageChannel;
-  const locales = country.fieldLocales;
+  const locales = offeredFieldLocales(country.fieldLocales);
   const card = (on: boolean) =>
     `flex min-h-target items-center gap-3.5 rounded-card bg-white p-3.5 ${
       on ? 'border-2 border-asphalt' : 'border border-rebar'

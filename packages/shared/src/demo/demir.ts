@@ -377,7 +377,9 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
       // §18.2: Turkey, preset from the TR pack as create_org does (tr-TR, metric, TRY); a demo
       // org (console SMS driver, Demo phone).
       country: trPack.code,
-      locale: trPack.defaultLocale,
+      // The Turkish demo org (§18.2) keeps Turkish: it is the `@m11` suites' data, while the TR pack
+      // speaks English (§19 Q378).
+      locale: 'tr-TR',
       units: trPack.units,
       currency: trPack.currency,
       is_demo: true,

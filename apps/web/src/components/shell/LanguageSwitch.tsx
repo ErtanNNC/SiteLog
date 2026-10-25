@@ -17,6 +17,8 @@ export function LanguageSwitch({
   const { tc } = useCopy();
   const { language, setLanguage } = useLanguage();
   const dark = tone === 'dark';
+  // §19 Q378: nothing to switch while the build offers English only.
+  if (PANEL_LANGUAGES.length < 2) return null;
   return (
     <div
       role="group"

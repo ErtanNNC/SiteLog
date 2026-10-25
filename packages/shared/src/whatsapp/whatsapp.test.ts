@@ -30,7 +30,10 @@ import {
 const SID = `HX${'0123456789abcdef'.repeat(2)}`;
 const pack = (code: 'US' | 'TR', patch: Partial<CountryRow> = {}) =>
   toCountryPack({ ...DEMO_COUNTRIES.find((c) => c.code === code)!, ...patch });
+// The TR pack with its Turkish locales (before §19 Q378): the Turkish templates stay built.
 const TR_WA = pack('TR', {
+  default_locale: 'tr-TR',
+  field_locales: ['tr-TR', 'en-US'],
   whatsapp_sender_id: '+905320000099',
   whatsapp_templates: { daily_link: { tr: SID } },
 });

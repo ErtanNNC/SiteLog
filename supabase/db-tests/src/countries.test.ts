@@ -172,8 +172,9 @@ describe('country pack rows (§4.6)', () => {
     expect(rows).toEqual([
       {
         code: 'TR',
-        default_locale: 'tr-TR',
-        field_locales: ['tr-TR', 'en-US'],
+        // §19 Q378 (20261025000100_turkish_off.sql): Turkish is off, the TR pack speaks English.
+        default_locale: 'en-US',
+        field_locales: ['en-US'],
         units: 'metric',
         paper: 'a4',
         currency: 'TRY',
@@ -350,11 +351,11 @@ describe('orgs.country → countries', () => {
 });
 
 describe('create_org(p_country)', () => {
-  it('presets a TR org from its pack: tr-TR, metric, TRY, Europe/Istanbul, A4', async () => {
+  it('presets a TR org from its pack: en-US (§19 Q378), metric, TRY, Europe/Istanbul, A4', async () => {
     const orgId = await createOrg(`p_name => 'Demir Yapı', p_country => 'TR'`);
     expect(await presets(orgId)).toEqual({
       country: 'TR',
-      locale: 'tr-TR',
+      locale: 'en-US',
       units: 'metric',
       currency: 'TRY',
       timezone: 'Europe/Istanbul',

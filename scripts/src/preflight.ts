@@ -58,6 +58,7 @@ export const PUBLIC_VITE = new Set([
   'VITE_DEMO_PHONE_ALL_ORGS',
   'VITE_WA_DISPLAY_NUMBER',
   'VITE_ROUTER',
+  'VITE_TURKISH',
 ]);
 
 /**

@@ -13,7 +13,7 @@ import {
   readReportData,
   speakable,
 } from '@sitelog/shared';
-import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
+import { demoCountriesFor } from '@sitelog/shared/demo/countries.ts';
 import { createFieldApp } from './app.ts';
 import { FakeFieldStore } from './fake_store.ts';
 import { FakeVoiceSpecialStore } from './fake_voice_special.ts';
@@ -42,7 +42,8 @@ function setup() {
   const clock = { now: T0 };
   const store = new FakeFieldStore(() => clock.now);
   const special = new FakeVoiceSpecialStore(store, () => clock.now);
-  const tr = DEMO_COUNTRIES.find((c) => c.code === 'TR')!;
+  // The TR pack with Turkish on (§19 Q378 turned it off; the Turkish voice stays built).
+  const tr = demoCountriesFor(true).find((c) => c.code === 'TR')!;
   // The TR pack has no voice number (§19 Q2): its calls are Talk now.
   store.countries.push({ ...tr, voice_number: null } as CountryRow);
   store.orgs.push({

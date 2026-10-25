@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly VITE_DEMO_PHONE_ALL_ORGS?: string;
   /** `memory` for hosts without history-API routing (the demo artifact build). */
   readonly VITE_ROUTER?: string;
+  /** `true` turns Turkish back on (§19 Q378); unset in the deployed builds. */
+  readonly VITE_TURKISH?: string;
 }
 
 interface ImportMeta {

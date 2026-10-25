@@ -7,7 +7,7 @@ import {
   twilioSignature,
   type CountryRow,
 } from '@sitelog/shared';
-import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
+import { demoCountriesFor } from '@sitelog/shared/demo/countries.ts';
 import { EnvError } from '../_shared/env.ts';
 import { HttpError } from '../_shared/http.ts';
 import { fakeMessaging, type FakeMessaging } from '../_shared/fake_messaging.ts';
@@ -29,6 +29,8 @@ const US_SENDER = '+18885550142';
 const TR_SENDER = '+18885550199';
 const T0 = new Date('2026-10-09T23:00:00Z');
 
+// The packs with Turkish on (§19 Q378 turned it off; the Turkish replies stay built).
+const DEMO_COUNTRIES = demoCountriesFor(true);
 const row = (code: 'US' | 'TR', patch: Partial<CountryRow>) => ({
   ...DEMO_COUNTRIES.find((c) => c.code === code)!,
   ...patch,

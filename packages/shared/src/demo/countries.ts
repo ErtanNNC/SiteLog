@@ -16,8 +16,9 @@ import { toCountryPack, type CountryPack } from '../countries.ts';
 export const DEMO_COUNTRIES: readonly CountryRow[] = [
   {
     code: 'TR',
-    default_locale: 'tr-TR',
-    field_locales: ['tr-TR', 'en-US'],
+    // §19 Q378 (20261025000100_turkish_off.sql): Turkish is off, the pack speaks English.
+    default_locale: 'en-US',
+    field_locales: ['en-US'],
     units: 'metric',
     paper: 'a4',
     currency: 'TRY',
@@ -59,6 +60,27 @@ export const DEMO_COUNTRIES: readonly CountryRow[] = [
     created_at: '2026-10-14T00:00:00.000Z',
   },
 ];
+
+/** The TR pack's locales before §19 Q378 turned Turkish off (20261014000004_country_packs.sql). */
+export const TR_TURKISH_LOCALES = {
+  default_locale: 'tr-TR',
+  field_locales: ['tr-TR', 'en-US'],
+} as const satisfies Pick<CountryRow, 'default_locale' | 'field_locales'>;
+
+/**
+ * The launch packs as a build sees them. With Turkish off (the deployed builds) they are
+ * `DEMO_COUNTRIES`; a build with Turkish on (`VITE_TURKISH=true`: the panel's and the field app's
+ * tests and e2e builds, §19 Q378) gets the TR pack's Turkish locales back, as the e2e global setup
+ * gives the local stack's TR pack.
+ */
+export function demoCountriesFor(turkish: boolean): readonly CountryRow[] {
+  if (!turkish) return DEMO_COUNTRIES;
+  return DEMO_COUNTRIES.map((c) =>
+    c.code === 'TR'
+      ? { ...c, ...TR_TURKISH_LOCALES, field_locales: [...TR_TURKISH_LOCALES.field_locales] }
+      : c,
+  );
+}
 
 /** The demo datasets' packs: Kestrel is a US org (§18.1), Demir Yapı a TR org (§18.2). */
 export type DemoCountryCode = 'US' | 'TR';

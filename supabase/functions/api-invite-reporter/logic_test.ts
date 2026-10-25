@@ -1,5 +1,6 @@
 import { assertEquals } from '@std/assert';
-import { demoPack } from '@sitelog/shared/demo/countries.ts';
+import { toCountryPack } from '@sitelog/shared/countries.ts';
+import { demoCountriesFor, demoPack } from '@sitelog/shared/demo/countries.ts';
 import { INVITE_MESSAGES_ATTESTATION, type E164 } from '@sitelog/shared';
 import {
   ATTESTATION_REQUIRED,
@@ -55,7 +56,8 @@ Deno.test(
   'inviteProfile: locale and preference default from the pack; the old contract works',
   () => {
     const us = demoPack('US');
-    const tr = demoPack('TR');
+    // The TR pack with its Turkish locales (before §19 Q378 turned Turkish off): the pack's order.
+    const tr = toCountryPack(demoCountriesFor(true).find((c) => c.code === 'TR')!);
     // The panel's request: no locale, no preference, the "Speaks" languages. The first pack
     // locale whose language was ticked wins (the pack's order, not the office's).
     assertEquals(inviteProfile(us, { languages: ['es', 'en'] }), {

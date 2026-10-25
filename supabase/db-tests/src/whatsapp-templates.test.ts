@@ -74,9 +74,10 @@ describe('whatsapp:templates --sync on the migrated schema', () => {
       await query(`select set_country_endpoints('TR', null, null, null, $1::text::jsonb, null)`, [
         JSON.stringify({ filed: { tr: hx(90) } }),
       ]);
+      // §19 Q378: the TR pack speaks English, so it takes the English templates.
       const fetch = listing([
-        [1, 'talkolog_welcome_v2_tr', 'UTILITY'],
-        [2, 'talkolog_verify_code_tr', 'AUTHENTICATION'],
+        [1, 'talkolog_welcome_v2_en', 'UTILITY'],
+        [2, 'talkolog_verify_code_en', 'AUTHENTICATION'],
         [3, 'talkolog_daily_link_v2_en', 'MARKETING'],
       ]);
       const deps = { env, connect, fetch, log: () => undefined };
@@ -90,8 +91,8 @@ describe('whatsapp:templates --sync on the migrated schema', () => {
       }>;
       expect(row!.whatsapp_templates).toEqual({
         filed: { tr: hx(90) },
-        welcome: { tr: hx(1) },
-        verify_code: { tr: hx(2) },
+        welcome: { en: hx(1) },
+        verify_code: { en: hx(2) },
       });
       const audits = await query(
         `select diff from audit_log where action = 'country.endpoints_set' order by id`,

@@ -4,6 +4,7 @@ import {
   chosenLanguage,
   LANGUAGE_KEY,
   panelLanguageOf,
+  panelLanguagesFor,
   rememberLanguage,
   resolveLanguage,
 } from './language';
@@ -62,5 +63,21 @@ describe('panel language (§11.2, F1)', () => {
     });
     expect(() => rememberLanguage('tr')).not.toThrow();
     expect(chosenLanguage()).toBeNull();
+  });
+});
+
+describe('Turkish off (§19 Q378)', () => {
+  const off = panelLanguagesFor(false);
+
+  it('a deployed build offers English only; a build with VITE_TURKISH=true offers EN and TR', () => {
+    expect(off).toEqual(['en']);
+    expect(panelLanguagesFor(true)).toEqual(['en', 'tr']);
+  });
+
+  it('never resolves Turkish: a Turkish choice, org or browser falls back to English', () => {
+    expect(panelLanguageOf('tr-TR', off)).toBeNull();
+    expect(resolveLanguage({ chosen: 'tr' }, off)).toBe('en');
+    expect(resolveLanguage({ orgLocale: 'tr-TR' }, off)).toBe('en');
+    expect(resolveLanguage({ browser: 'tr-TR' }, off)).toBe('en');
   });
 });

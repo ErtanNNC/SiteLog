@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/Select';
 import { useSaveReportLocale } from '@/data/hooks';
 import type { SettingsData } from '@/data/types';
+import { TURKISH_ON } from '@/i18n/language';
 import { useCopy } from '@/i18n/useCopy';
 import { LOGO_ACCEPT } from '@/lib/logo';
 import { cn } from '@/lib/utils';
@@ -306,7 +307,8 @@ export function PdfThumbnail({
   );
 }
 
-const REPORT_LOCALES: readonly OrgLocale[] = ['en-US', 'tr-TR'];
+// §19 Q378: Turkish reports only in a build with Turkish on.
+const REPORT_LOCALES: readonly OrgLocale[] = TURKISH_ON ? ['en-US', 'tr-TR'] : ['en-US'];
 const UNITS: readonly UnitSystem[] = ['imperial', 'metric'];
 const languageKey = (l: OrgLocale) => (l === 'tr-TR' ? 'tr' : 'en');
 
@@ -337,7 +339,10 @@ function ReportLocaleCard({ org }: { org: SettingsData['org'] }) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {REPORT_LOCALES.map((l) => (
+              {(REPORT_LOCALES.includes(org.locale)
+                ? REPORT_LOCALES
+                : [...REPORT_LOCALES, org.locale]
+              ).map((l) => (
                 <SelectItem key={l} value={l}>
                   {t(`settings.pdf.reportLanguages.${languageKey(l)}`)}
                 </SelectItem>

@@ -57,6 +57,7 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 180_000,
     // The /api proxy's target (server-side only: nothing here reaches the bundle).
-    env: { SUPABASE_URL: API_URL, VITE_FIELD_API_URL: '/api' },
+    // §19 Q378: Turkish is off in the deployed builds; the e2e builds keep it on to test it.
+    env: { SUPABASE_URL: API_URL, VITE_FIELD_API_URL: '/api', VITE_TURKISH: 'true' },
   },
 });
