@@ -9,6 +9,7 @@
     "seed-demo": "tsx src/seed-demo.ts",
     "countries-set": "tsx src/countries-set.ts",
     "whatsapp-templates": "tsx src/whatsapp-templates.ts",
+    "auth-templates": "tsx src/auth-templates.ts",
     "cutover-preflight": "tsx src/cutover-preflight.ts",
     "db-types-drift": "tsx src/db-types-drift.ts",
     "voice-contract": "tsx src/voice-contract.ts",

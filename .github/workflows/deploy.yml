@@ -38,6 +38,8 @@ name: Deploy
 #   workflow_dispatch preview, target     → the WhatsApp templates in Twilio's Content API: create and
 #     whatsapp-templates                    submit the missing ones, or write the approved ids into the
 #                                           preview project's country packs, from spec-v1.2 only
+#   workflow_dispatch preview, target     → the Supabase Auth sign-in and invite emails (English only,
+#     auth-templates                        §19 Q378) on the preview project, from spec-v1.2 only
 #   push to main                          → skipped by the guard (there is no main yet, D40)
 #
 # Until the cut-over (W1-19) the live branch runs its own pre-W1-01 deploy.yml (no guard, no
@@ -56,7 +58,7 @@ on:
         options: [staging, production, preview]
         default: staging
       target:
-        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project; phone-setup = field-api secrets and a panel sign-in link on the preview project; preview-worker = the worker in the runner against the preview project for 60 minutes, fake transcription and extraction, console texts; preview-worker-fly = the always-on worker for the preview project on its own Fly.io app; voice-setup = the voice secrets on the preview project and the agent deployed to LiveKit Cloud; billing-setup = Stripe test mode for the preview project (product, price, webhook and secrets); countries-set = a country pack's SMS and WhatsApp sender and WhatsApp templates on the preview project (or, with pack_print, the template bodies to submit); whatsapp-templates = the WhatsApp templates created and submitted in Twilio (wa_mode submit), or the approved ids written into the preview project's packs (wa_mode sync); all eight owner-approved; eval = Claude models on the golden sets with the preview key, environment preview)
+        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project; phone-setup = field-api secrets and a panel sign-in link on the preview project; preview-worker = the worker in the runner against the preview project for 60 minutes, fake transcription and extraction, console texts; preview-worker-fly = the always-on worker for the preview project on its own Fly.io app; voice-setup = the voice secrets on the preview project and the agent deployed to LiveKit Cloud; billing-setup = Stripe test mode for the preview project (product, price, webhook and secrets); countries-set = a country pack's SMS and WhatsApp sender and WhatsApp templates on the preview project (or, with pack_print, the template bodies to submit); whatsapp-templates = the WhatsApp templates created and submitted in Twilio (wa_mode submit), or the approved ids written into the preview project's packs (wa_mode sync); auth-templates = the sign-in and invite email templates (English) on the preview project's Supabase Auth; all nine owner-approved; eval = Claude models on the golden sets with the preview key, environment preview)
         type: choice
         options:
           [
@@ -74,6 +76,7 @@ on:
             billing-setup,
             countries-set,
             whatsapp-templates,
+            auth-templates,
             eval,
           ]
         default: all
@@ -154,6 +157,7 @@ jobs:
       billing_setup: ${{ steps.plan.outputs.billing_setup }}
       countries_set: ${{ steps.plan.outputs.countries_set }}
       whatsapp_templates: ${{ steps.plan.outputs.whatsapp_templates }}
+      auth_templates: ${{ steps.plan.outputs.auth_templates }}
       eval: ${{ steps.plan.outputs.eval }}
     steps:
       - name: Decide what this run may touch
@@ -166,9 +170,9 @@ jobs:
           TARGET: ${{ inputs.target || 'all' }}
           PR_NUMBER: ${{ github.event.number }}
         run: |
-          supabase=false worker=false web=false field=false preview=false inventory=false seed=false phone_setup=false preview_worker=false preview_worker_fly=false voice_setup=false billing_setup=false countries_set=false whatsapp_templates=false eval=false
+          supabase=false worker=false web=false field=false preview=false inventory=false seed=false phone_setup=false preview_worker=false preview_worker_fly=false voice_setup=false billing_setup=false countries_set=false whatsapp_templates=false auth_templates=false eval=false
           # `all` covers the four deploy targets; the inventory runs only when asked for.
-          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ] && [ "$1" != phone-setup ] && [ "$1" != preview-worker ] && [ "$1" != preview-worker-fly ] && [ "$1" != voice-setup ] && [ "$1" != billing-setup ] && [ "$1" != countries-set ] && [ "$1" != whatsapp-templates ] && [ "$1" != eval ]; }; }
+          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ] && [ "$1" != phone-setup ] && [ "$1" != preview-worker ] && [ "$1" != preview-worker-fly ] && [ "$1" != voice-setup ] && [ "$1" != billing-setup ] && [ "$1" != countries-set ] && [ "$1" != whatsapp-templates ] && [ "$1" != auth-templates ] && [ "$1" != eval ]; }; }
 
           if [ "$EVENT" = pull_request ]; then
             web=true field=true preview=true
@@ -228,6 +232,13 @@ jobs:
             else
               echo "::notice::whatsapp-templates skipped: it writes the preview project's country packs only, dispatched with environment preview from $PREVIEW_BRANCH."
             fi
+          elif [ "$TARGET" = auth-templates ]; then
+            # The Auth email templates (pnpm auth:templates) on the preview project only.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              auth_templates=true
+            else
+              echo "::notice::auth-templates skipped: it writes the preview project's Auth email templates only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
           elif [ "$TARGET" = eval ]; then
             # The model comparison (.github/workflows/eval.yml) with the preview Environment's key only.
             if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
@@ -277,6 +288,7 @@ jobs:
             echo "billing_setup=$billing_setup"
             echo "countries_set=$countries_set"
             echo "whatsapp_templates=$whatsapp_templates"
+            echo "auth_templates=$auth_templates"
             echo "eval=$eval"
           } >> "$GITHUB_OUTPUT"
           {
@@ -290,7 +302,7 @@ jobs:
             echo
             echo "| Job | Runs |"
             echo "| --- | --- |"
-            for k in supabase worker web field preview inventory seed phone_setup preview_worker preview_worker_fly voice_setup billing_setup countries_set whatsapp_templates eval; do echo "| $k | ${!k} |"; done
+            for k in supabase worker web field preview inventory seed phone_setup preview_worker preview_worker_fly voice_setup billing_setup countries_set whatsapp_templates auth_templates eval; do echo "| $k | ${!k} |"; done
           } >> "$GITHUB_STEP_SUMMARY"
 
   supabase:
@@ -638,6 +650,56 @@ jobs:
             echo "### WhatsApp templates · $WA_MODE · $PACK_CODE (preview)"
             echo
             cat "$RUNNER_TEMP/whatsapp-templates.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+  auth-templates:
+    name: Auth email templates · sign-in and invite, English (preview)
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # `pnpm auth:templates`: the magic-link and invite subjects and bodies from supabase/config.toml
+    # and supabase/templates, English only (§19 Q378), PATCHed into the preview project's Auth config
+    # through the Management API with SUPABASE_ACCESS_TOKEN, then read back. No database access.
+    if: >-
+      needs.plan.outputs.auth_templates == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: preview
+    env:
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      # Presence only: the token reaches the script's step alone.
+      HAS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+    steps:
+      - name: Check configuration
+        run: |
+          if [ "$HAS_TOKEN" != true ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::auth-templates needs SUPABASE_ACCESS_TOKEN (secret) and SUPABASE_PROJECT_REF (variable) in the preview Environment."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: pnpm auth:templates
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -o pipefail
+          status=0
+          pnpm -s auth:templates -- --yes > "$RUNNER_TEMP/auth-templates.md" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/auth-templates.md"
+          {
+            echo "### Auth email templates (preview)"
+            echo
+            cat "$RUNNER_TEMP/auth-templates.md"
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
 

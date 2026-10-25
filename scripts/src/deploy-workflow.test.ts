@@ -89,6 +89,7 @@ describe('deploy.yml', () => {
       'seed',
       'countries-set',
       'whatsapp-templates',
+      'auth-templates',
       'phone-setup',
       'preview-worker',
       'preview-worker-fly',
@@ -192,6 +193,7 @@ describe('deploy.yml', () => {
       'billing-setup',
       'countries-set',
       'whatsapp-templates',
+      'auth-templates',
       'preview-worker-fly',
     ];
     for (const id of PREVIEW_ONLY) {
@@ -622,7 +624,13 @@ describe('deploy.yml plan step, run under bash', () => {
         ENVIRONMENT: environment,
         PR_NUMBER: '',
       });
-    for (const target of ['voice-setup', 'billing-setup', 'countries-set', 'whatsapp-templates']) {
+    for (const target of [
+      'voice-setup',
+      'billing-setup',
+      'countries-set',
+      'whatsapp-templates',
+      'auth-templates',
+    ]) {
       const output = target.replace('-', '_');
       const ok = run(PREVIEW, 'preview', target);
       expect(ok.status, ok.log).toBe(0);
@@ -633,6 +641,7 @@ describe('deploy.yml plan step, run under bash', () => {
         'billing_setup',
         'countries_set',
         'whatsapp_templates',
+        'auth_templates',
         'preview_worker',
         'seed',
         'eval',
@@ -655,6 +664,40 @@ describe('deploy.yml plan step, run under bash', () => {
       expect(run(LIVE, 'staging', 'all').outputs[output]).toBe('false');
       expect(JOBS.get('plan')!.text).toContain(`[ "$1" != ${target} ]`);
     }
+  });
+
+  it('auth-templates: the access token reaches the script step only, never staging', () => {
+    const job = JOBS.get('auth-templates')!;
+    expect(job.text).toMatch(/^ {4}timeout-minutes: 10$/m);
+    expect(job.text).not.toContain('SUPABASE_DB_PASSWORD');
+    const steps = jobSteps(job.text);
+    const withSecret = steps.filter((st) => st.text.includes('secrets.SUPABASE_ACCESS_TOKEN }}'));
+    expect(withSecret.map((st) => st.name)).toEqual(['pnpm auth:templates']);
+
+    const check = stepScript('auth-templates', 'Check configuration');
+    const base = { HAS_TOKEN: 'true', SUPABASE_PROJECT_REF: 'previewref0000000000' };
+    expect(runStep(check, base).status).toBe(0);
+    expect(runStep(check, { ...base, HAS_TOKEN: 'false' }).log).toContain(
+      'needs SUPABASE_ACCESS_TOKEN',
+    );
+    expect(runStep(check, { ...base, SUPABASE_PROJECT_REF: STAGING_PROJECT_REF }).status).toBe(1);
+
+    const run = stepScript('auth-templates', 'pnpm auth:templates');
+    const pnpm =
+      'printf "%s\\n" "$@" > "$GITHUB_WORKSPACE/argv"; echo "| t | x |"; exit "${FAKE_EXIT:-0}"';
+    const r = runStep(run, { ...base, RUNNER_TEMP: '.' }, undefined, { pnpm });
+    expect(r.status, r.log).toBe(0);
+    expect(readFileSync(join(r.dir, 'argv'), 'utf8').trim().split('\n')).toEqual([
+      '-s',
+      'auth:templates',
+      '--',
+      '--yes',
+    ]);
+    expect(r.summary).toContain('### Auth email templates (preview)');
+    expect(r.summary).toContain('| t | x |');
+    const failed = runStep(run, { ...base, RUNNER_TEMP: '.', FAKE_EXIT: '1' }, undefined, { pnpm });
+    expect(failed.status).toBe(1);
+    expect(failed.summary).toContain('| t | x |');
   });
 
   it('whatsapp-templates: Twilio secrets reach the script step only; the modes map to the script', () => {
@@ -857,6 +900,7 @@ describe('deploy.yml field job (W1-04, D42/D43)', () => {
       'billing-setup',
       'countries-set',
       'whatsapp-templates',
+      'auth-templates',
       'eval',
     ]);
   });

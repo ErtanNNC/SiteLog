@@ -2,6 +2,8 @@
 
 **2026-10-25 — Türkçe kapatıldı (§19 Q378, kararınız).**
 
+- **Giriş ve davet e-postaları:** Supabase'deki şablonlar artık otomatik yükleniyor (Deploy → preview → `auth-templates`, yalnız İngilizce metin). Kullanıcının dil ayarı ne olursa olsun e-postalar İngilizce.
+
 - **Değişen:** Panel, saha uygulaması, WhatsApp mesajları, sesli asistan, rapor PDF'i ve e-postalar İngilizce. Panelde dil seçici yok; Ayarlar'da rapor dili yalnız İngilizce; saha uygulamasında İngilizce ve İspanyolca kaldı.
 - **Veritabanı (migration `20261025000100_turkish_off.sql`, preview'e uygulandı 2026-10-25, onayınızla):** TR paketi İngilizce konuşuyor (TL, saat dilimi, WhatsApp numarası ve şablonları aynı). Türkçe şirketler, raporcular ve ofis kullanıcıları İngilizceye geçiyor. Daha önce kaydedilmiş Türkçe rapor sürümleri Türkçe kalıyor (raporlar değiştirilemez).
 - **Seçtiğinizden farklı tek nokta:** Türkiye yeni şirket kurulumunda seçilebilir kalıyor, şirket İngilizce açılıyor. Türkiye'yi listeden kaldırmak veritabanına yeni bir alan ister; isterseniz eklerim.
