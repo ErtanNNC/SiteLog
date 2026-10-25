@@ -3,10 +3,10 @@
 **2026-10-25 — Türkçe kapatıldı (§19 Q378, kararınız).**
 
 - **Değişen:** Panel, saha uygulaması, WhatsApp mesajları, sesli asistan, rapor PDF'i ve e-postalar İngilizce. Panelde dil seçici yok; Ayarlar'da rapor dili yalnız İngilizce; saha uygulamasında İngilizce ve İspanyolca kaldı.
-- **Veritabanı (migration `20261025000100_turkish_off.sql`, preview'e henüz uygulanmadı):** TR paketi İngilizce konuşuyor (TL, saat dilimi, WhatsApp numarası ve şablonları aynı). Türkçe şirketler, raporcular ve ofis kullanıcıları İngilizceye geçiyor. Daha önce kaydedilmiş Türkçe rapor sürümleri Türkçe kalıyor (raporlar değiştirilemez).
+- **Veritabanı (migration `20261025000100_turkish_off.sql`, preview'e uygulandı 2026-10-25, onayınızla):** TR paketi İngilizce konuşuyor (TL, saat dilimi, WhatsApp numarası ve şablonları aynı). Türkçe şirketler, raporcular ve ofis kullanıcıları İngilizceye geçiyor. Daha önce kaydedilmiş Türkçe rapor sürümleri Türkçe kalıyor (raporlar değiştirilemez).
 - **Seçtiğinizden farklı tek nokta:** Türkiye yeni şirket kurulumunda seçilebilir kalıyor, şirket İngilizce açılıyor. Türkiye'yi listeden kaldırmak veritabanına yeni bir alan ister; isterseniz eklerim.
 - **Kod saklı:** Türkçe metinler ve testler depoda. Geri açmak: TR paketinin dillerini geri koyan bir migration ve panel/saha deploy'larında `VITE_TURKISH=true`.
-- **Sizin adımlarınız:** (1) Migration'ı preview'e uygulama onayı (Deploy → preview → `supabase`). (2) Netlify'da yeni panel ve saha deploy'larını yayınlayın. (3) Demo şirketi Demir Yapı'nın rapor içerikleri Türkçe yazılmış örnek veriler; arayüzü İngilizce olur ama içerik Türkçe kalır. İsterseniz preview'den kaldırırız.
+- **Sizin adımlarınız:** (1) Netlify'da yeni panel ve saha deploy'larını yayınlayın. (2) Demo şirketi Demir Yapı'nın rapor içerikleri Türkçe yazılmış örnek veriler; arayüzü İngilizce olur ama içerik Türkçe kalır. İsterseniz preview'den kaldırırız.
 
 **2026-10-24 — Yasal sayfalardan Yalp LLC kaldırıldı (isteğiniz).**
 
