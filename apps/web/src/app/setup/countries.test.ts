@@ -16,7 +16,7 @@ import {
   reportLanguageName,
   siteDefaultsFor,
 } from './countries';
-import { TIMEZONES } from './timezones';
+import { TIMEZONES, timezoneOptions } from './timezones';
 
 /** PostgREST as loadCountryPacks() meets it: `from(t).select(cols).order(col)`. */
 function fakeDb(result: { data: unknown[] | null; error: { message: string } | null }) {
@@ -43,6 +43,8 @@ const DEMO_COUNTRIES = demoCountriesFor(true);
 const US = DEMO_COUNTRIES.find((c) => c.code === 'US')!;
 const TR = DEMO_COUNTRIES.find((c) => c.code === 'TR')!;
 const demoPack = (code: 'US' | 'TR') => toCountryPack(code === 'US' ? US : TR);
+const ALL_PACKS = DEMO_PACKS;
+const LAUNCH_PACKS = DEMO_PACKS.filter((p) => p.code === 'TR' || p.code === 'US');
 /** A pack no code knows about (spec §4.6: a new country is a new row). */
 const ZZ: CountryRow = {
   ...US,
@@ -64,9 +66,14 @@ afterEach(() => vi.restoreAllMocks());
 describe('loadCountryPacks', () => {
   it('lists DEMO_COUNTRIES without a database (demo mode, tests), by code', async () => {
     const packs = await loadCountryPacks(null);
-    expect(packs.map((p) => p.code)).toEqual(['TR', 'US']);
+    // §19 Q379: every country, the launch packs among them.
     expect(packs).toEqual([...DEMO_PACKS]);
-    expect(packs).toEqual([demoPack('TR'), demoPack('US')]);
+    expect(packs.map((p) => p.code)).toEqual(packs.map((p) => p.code).sort());
+    expect(packs.length).toBeGreaterThan(200);
+    expect(packs.filter((p) => p.code === 'TR' || p.code === 'US')).toEqual([
+      demoPack('TR'),
+      demoPack('US'),
+    ]);
   });
 
   it('reads every row of the countries table under RLS, parsed into packs', async () => {
@@ -154,6 +161,9 @@ describe('pack labels and defaults', () => {
   });
 
   it('preselects the pack of the browser’s region before the org exists (spec §19 Q32)', () => {
+    // §19 Q379: every region has a pack now; the rules below run on the launch packs.
+    const DEMO_PACKS = LAUNCH_PACKS;
+    expect(browserPackCountry(ALL_PACKS, ['de-DE', 'en'])).toBe('DE');
     expect(browserPackCountry(DEMO_PACKS, ['tr-TR', 'en-US'])).toBe('TR');
     expect(browserPackCountry(DEMO_PACKS, ['en-US', 'tr-TR'])).toBe('US');
     // A tag without a region, or a region without a pack, is skipped.
@@ -168,6 +178,9 @@ describe('pack labels and defaults', () => {
   });
 
   it('lists every pack’s default time zone in the setup selects', () => {
-    for (const pack of DEMO_PACKS) expect(TIMEZONES).toContain(pack.defaultTimezone);
+    // The launch packs' zones are in the list; any other pack's is added as the select's value.
+    for (const pack of LAUNCH_PACKS) expect(TIMEZONES).toContain(pack.defaultTimezone);
+    for (const pack of ALL_PACKS)
+      expect(timezoneOptions(pack.defaultTimezone)).toContain(pack.defaultTimezone);
   });
 });

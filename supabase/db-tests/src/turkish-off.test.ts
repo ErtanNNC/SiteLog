@@ -29,7 +29,8 @@ afterAll(async () => {
 const packs = async (db: PGlite) =>
   (
     await db.query<{ code: string; default_locale: string; field_locales: string }>(
-      `select code, default_locale, field_locales::text from countries order by code`,
+      `select code, default_locale, field_locales::text from countries
+       where code in ('TR', 'US') order by code`,
     )
   ).rows;
 

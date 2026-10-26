@@ -7,6 +7,9 @@ import { demoPack } from '@sitelog/shared/demo/countries.ts';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { CompanyStep } from './CompanyStep';
 import { countryName, DEMO_PACKS } from './countries';
+
+// The launch packs: most tests pick between these two; §19 Q379 lists every country.
+const LAUNCH_PACKS = DEMO_PACKS.filter((p) => p.code === 'TR' || p.code === 'US');
 import { emptyCompany, type CompanyDraft } from './state';
 
 /** The step is controlled: the harness keeps the draft and exposes the latest one. */
@@ -32,7 +35,7 @@ function renderStep(
         busy={false}
         logoUrl={null}
         onLogoChange={() => null}
-        packs={props.packs ?? DEMO_PACKS}
+        packs={props.packs ?? LAUNCH_PACKS}
         countryLocked={props.countryLocked}
       />
     );
@@ -76,10 +79,24 @@ describe('CompanyStep · country (spec §4.6, F2 step 1)', () => {
     await userEvent.keyboard('{Escape}');
   });
 
+  it('lists every country (§19 Q379), by name', async () => {
+    renderStep({}, { packs: DEMO_PACKS });
+    await userEvent.click(country());
+    const options = await screen.findAllByRole('option');
+    expect(options).toHaveLength(DEMO_PACKS.length);
+    expect(DEMO_PACKS.length).toBeGreaterThan(200);
+    const names = options.map((o) => o.textContent?.slice(0, -3) ?? '');
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, 'en')));
+    expect(options.map((o) => o.textContent?.slice(-2))).toEqual(
+      expect.arrayContaining(['DE', 'GB', 'TR', 'US']),
+    );
+    await userEvent.keyboard('{Escape}');
+  });
+
   it('lists the countries by name, not by code (a new country is a new row)', async () => {
     // GB sorts before TR by code, but "United Kingdom" after "Türkiye" by name.
     const gb: CountryPack = { ...demoPack('US'), code: 'GB', defaultTimezone: 'Europe/London' };
-    renderStep({}, { packs: [gb, ...DEMO_PACKS] });
+    renderStep({}, { packs: [gb, ...LAUNCH_PACKS] });
     await userEvent.click(country());
     const options = await screen.findAllByRole('option');
     expect(options.map((o) => o.textContent?.slice(-2))).toEqual(['TR', 'GB', 'US']);
@@ -122,7 +139,7 @@ describe('CompanyStep · country (spec §4.6, F2 step 1)', () => {
   it('asks for a country the packs do not offer before continuing', async () => {
     const onContinue = vi.fn();
     // Saved progress naming a country that is no pack (any more): shown as no choice.
-    renderStep({ name: 'Fresh Build Co', country: 'DE' }, { onContinue });
+    renderStep({ name: 'Fresh Build Co', country: 'ZZ' }, { onContinue });
     expect(country()).toHaveTextContent('Choose a country');
     expect(screen.queryByTestId('country-presets')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Continue to first site' }));

@@ -1,5 +1,6 @@
 import type { CountryRow } from '../db/types.ts';
 import { toCountryPack, type CountryPack } from '../countries.ts';
+import { GLOBAL_PACK_CODES, globalPackRow } from '../countries-global.ts';
 
 /**
  * The launch country packs as rows, for the modes without a database: the panel's demo mode
@@ -61,6 +62,15 @@ export const DEMO_COUNTRIES: readonly CountryRow[] = [
   },
 ];
 
+/**
+ * Every pack a database has (§19 Q379): the launch packs above and the shared pack of every other
+ * country (`countries-global.ts`). The setup wizard without a database lists these.
+ */
+export const ALL_DEMO_COUNTRIES: readonly CountryRow[] = [
+  ...DEMO_COUNTRIES,
+  ...GLOBAL_PACK_CODES.map(globalPackRow),
+];
+
 /** The TR pack's locales before §19 Q378 turned Turkish off (20261014000004_country_packs.sql). */
 export const TR_TURKISH_LOCALES = {
   default_locale: 'tr-TR',
@@ -74,8 +84,8 @@ export const TR_TURKISH_LOCALES = {
  * gives the local stack's TR pack.
  */
 export function demoCountriesFor(turkish: boolean): readonly CountryRow[] {
-  if (!turkish) return DEMO_COUNTRIES;
-  return DEMO_COUNTRIES.map((c) =>
+  if (!turkish) return ALL_DEMO_COUNTRIES;
+  return ALL_DEMO_COUNTRIES.map((c) =>
     c.code === 'TR'
       ? { ...c, ...TR_TURKISH_LOCALES, field_locales: [...TR_TURKISH_LOCALES.field_locales] }
       : c,

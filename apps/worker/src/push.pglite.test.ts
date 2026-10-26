@@ -129,7 +129,7 @@ beforeEach(async () => {
 describe('web push (W2-14)', () => {
   it('the launch packs list push first, and a pack may never end with it', async () => {
     const packs = await pg.q<{ code: string; message_channels: string }>(
-      `select code, message_channels::text from countries order by code`,
+      `select code, message_channels::text from countries where code in ('TR', 'US') order by code`,
     );
     expect(packs.map((p) => [p.code, p.message_channels])).toEqual([
       ['TR', '{push,whatsapp,sms}'],

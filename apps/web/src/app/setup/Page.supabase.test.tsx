@@ -142,8 +142,8 @@ describe('SetupPage (no org yet, Supabase mode)', () => {
     );
   });
 
-  it('keeps US when the browser’s region has no pack', async () => {
-    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['de-DE', 'de']);
+  it('keeps US when the browser names no region (every region has a pack, §19 Q379)', async () => {
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['de', 'en']);
     h.countries.data = ROWS;
     renderNoOrg();
     await screen.findByLabelText('Company name');

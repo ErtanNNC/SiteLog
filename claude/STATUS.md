@@ -1,5 +1,11 @@
 # TalkOlog · Durum
 
+**2026-10-26 — Her ülke kurulabiliyor (§19 Q379, kararınız).**
+
+- **Değişen:** Kurulum sihirbazında bütün ülkeler (yaklaşık 245) ada göre listeleniyor. ABD ve Türkiye kendi paketlerinde. Diğer her ülke ortak ayarla açılıyor: İngilizce, WhatsApp + bildirim, aynı WhatsApp numarası ve İngilizce şablonlar, sesli arama numarası yok, USD/Stripe ile faturalama (site başına 399 USD), metrik/A4 (birkaç ülkede imperial veya Letter), ülkenin ana saat dilimi.
+- **Veritabanı:** migration `20261026000100_global_packs.sql`. Preview'e uygulanması için onayınız gerekiyor (Deploy → preview → `supabase`). Uygulanınca yeni ülkelerin paketlerine preview'deki ABD WhatsApp numarası ve şablonları kopyalanır.
+- **Sonra:** ABD'nin WhatsApp ayarı değişirse diğer ülkelere kendiliğinden geçmez; o zaman şablon eşitlemesini tüm ülkeler için çalıştırırız.
+
 **2026-10-25 — Türkçe kapatıldı (§19 Q378, kararınız).**
 
 - **Giriş ve davet e-postaları:** Supabase'deki şablonlar artık otomatik yükleniyor (Deploy → preview → `auth-templates`, yalnız İngilizce metin). Kullanıcının dil ayarı ne olursa olsun e-postalar İngilizce.

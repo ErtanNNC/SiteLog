@@ -1913,7 +1913,10 @@ describe('PostgresDb on PGlite: messaging (W1-08)', () => {
   it('reads the packs and a reporter’s consents', async () => {
     const us = await db.getCountry('US');
     expect(us).toMatchObject({ code: 'US', sms_provider: 'twilio', sms_sender_id: null });
-    expect((await db.listCountries()).map((c) => c.code)).toEqual(['TR', 'US']);
+    // §19 Q379: every country has a pack.
+    const codes = (await db.listCountries()).map((c) => c.code);
+    expect(codes).toEqual(expect.arrayContaining(['DE', 'TR', 'US']));
+    expect(codes.length).toBeGreaterThan(200);
     const consents = await db.listConsents(MARCO);
     expect(consents.map((c) => c.type).sort()).toEqual(['data_processing', 'recording', 'sms']);
     expect(consents.every((c) => c.revoked_at === null)).toBe(true);

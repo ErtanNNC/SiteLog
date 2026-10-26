@@ -14,7 +14,7 @@ import {
   toCountryPack,
   type CountryRow,
 } from '@sitelog/shared';
-import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
+import { ALL_DEMO_COUNTRIES, DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import {
   applyMigration,
   asService,
@@ -116,14 +116,15 @@ beforeAll(async () => {
 });
 
 describe('country pack rows (§4.6)', () => {
-  it('equals DEMO_COUNTRIES, both ways, and parses with CountryRowSchema', async () => {
+  it('equals ALL_DEMO_COUNTRIES (§19 Q379: every country), both ways, and parses with CountryRowSchema', async () => {
     const rows = await svc<{ row: CountryRow }>(
       `select to_jsonb(c) as row from countries c order by code`,
     );
     for (const { row } of rows) expect(CountryRowSchema.safeParse(row).error).toBeUndefined();
     // created_at is the moment the migration ran; the fixture holds the migration's date.
     const strip = ({ created_at: _created, ...rest }: CountryRow) => rest;
-    expect(rows.map((r) => strip(r.row))).toEqual(DEMO_COUNTRIES.map(strip));
+    const byCode = [...ALL_DEMO_COUNTRIES].sort((a, b) => a.code.localeCompare(b.code));
+    expect(rows.map((r) => strip(r.row))).toEqual(byCode.map(strip));
   });
 
   it('every row has its copy and a built channel, and sends through console in week 1', async () => {
@@ -167,7 +168,7 @@ describe('country pack rows (§4.6)', () => {
               message_channels::text[] as message_channels, sms_provider, whatsapp_provider,
               sms_sender_type, sms_sender_id, two_way_sms, sms_links_allowed, voice_number,
               legal_keys
-       from countries order by code`,
+       from countries where code in ('TR', 'US') order by code`,
     );
     expect(rows).toEqual([
       {
@@ -332,7 +333,7 @@ describe('orgs.country → countries', () => {
     const orgId = await createOrg(`'FK GC'`);
     expect(
       await rolledBack(() =>
-        sqlState(svc(`update orgs set country = 'DE' where id = $1`, [orgId])),
+        sqlState(svc(`update orgs set country = 'ZZ' where id = $1`, [orgId])),
       ),
     ).toBe('23503');
     expect(await rolledBack(() => sqlState(svc(`delete from countries where code = 'US'`)))).toBe(
@@ -486,7 +487,7 @@ describe('set_country_endpoints() (service role only)', () => {
     ['a 12-character title', `'TR', 'TALKOLOGAPP1', null, null, null`],
     ['a title on a toll-free pack', `'US', 'TALKOLOG', null, null, null`],
     ['a malformed voice number', `'US', null, '555-0142', null, null`],
-    ['an unknown pack', `'DE', null, null, null, null`],
+    ['an unknown pack', `'ZZ', null, null, null, null`],
     ['a WhatsApp sender that is not E.164 (W2-15)', `'TR', null, null, '0532 000 0000', null`],
     ['WhatsApp templates that are not an object', `'TR', null, null, null, '[]'::jsonb`],
     [
@@ -615,7 +616,11 @@ describe('who reads the packs (§6.5)', () => {
       { role: 'authenticated', userId: NEW_USER },
       `select code from countries order by code`,
     );
-    expect(res).toMatchObject({ ok: true, rows: [{ code: 'TR' }, { code: 'US' }] });
+    expect(res.ok).toBe(true);
+    const codes = res.ok ? res.rows.map((r) => (r as { code: string }).code) : [];
+    // §19 Q379: every country has a pack.
+    expect(codes).toHaveLength(ALL_DEMO_COUNTRIES.length);
+    expect(codes).toEqual(expect.arrayContaining(['DE', 'GB', 'TR', 'US']));
     expect(await probeAs(db, { role: 'anon' }, `select code from countries`)).toMatchObject({
       ok: false,
       code: '42501',

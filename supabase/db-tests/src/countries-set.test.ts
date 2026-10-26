@@ -174,7 +174,7 @@ describe('countries:set on the migrated schema', () => {
         'not a valid long_code sender',
       );
       expect(await pack('TR')).toEqual(before);
-      await expect(run('--code', 'DE', '--clear-voice')).rejects.toThrow('no country pack DE');
+      await expect(run('--code', 'ZZ', '--clear-voice')).rejects.toThrow('no country pack ZZ');
       expect(await audits()).toEqual([]);
     });
   });

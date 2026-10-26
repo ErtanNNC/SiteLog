@@ -27,7 +27,8 @@ afterAll(async () => {
 const channels = async (db: PGlite) =>
   (
     await db.query<{ code: string; message_channels: string }>(
-      `select code, message_channels::text from countries order by code`,
+      `select code, message_channels::text from countries
+       where code in ('TR', 'US', 'ZY', 'ZZ') order by code`,
     )
   ).rows;
 
