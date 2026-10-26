@@ -14,7 +14,7 @@ import {
   toCountryPack,
   type CountryRow,
 } from '@sitelog/shared';
-import { ALL_DEMO_COUNTRIES, DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
+import { ALL_DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import {
   applyMigration,
   asService,
