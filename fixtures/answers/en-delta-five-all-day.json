@@ -1,0 +1,55 @@
+{
+  "id": "en-delta-five-all-day",
+  "description": "English, spoken (F7 Other…): the Delta headcount of the hero report answered “Five, all day.” → 5 × full day (8 h) = 40 h, the Done-when example of W2-09.",
+  "voice": "answer-en-delta-five-all-day",
+  "language": "en",
+  "question": {
+    "field": "manpower.workers",
+    "prompt": "You said “the Delta guys” were on Level 2. How many, and for how long?",
+    "options": ["4 · full day", "5 · full day"],
+    "target": {
+      "manpowerIndex": 0,
+      "companyName": "Delta Mechanical",
+      "companyNameHeard": "the Delta guys",
+      "path": "manpower.workers:Delta Mechanical"
+    }
+  },
+  "companies": [
+    {
+      "id": "delta",
+      "name": "Delta Mechanical",
+      "aliases": ["Delta", "los de Delta"]
+    },
+    {
+      "id": "apex",
+      "name": "Apex Concrete",
+      "aliases": ["Apex"]
+    }
+  ],
+  "defaultShiftHours": 8,
+  "crew": {
+    "companyName": "Delta Mechanical",
+    "companyNameHeard": "the Delta guys",
+    "area": "Level 2"
+  },
+  "recorded": {
+    "field": "manpower.workers",
+    "value": {
+      "workers": 5,
+      "fullDay": true
+    },
+    "confidence": 0.96
+  },
+  "expected": {
+    "applies": true,
+    "value": {
+      "workers": 5,
+      "fullDay": true
+    },
+    "crew": {
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40
+    }
+  }
+}

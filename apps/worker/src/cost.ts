@@ -7,7 +7,8 @@ import type { ReportCostBaseline, ReportCostInputs } from './db';
  * §15 cost guardrail: "Track AI + WhatsApp cost per report; alert if a single report exceeds
  * 3× median".
  *
- * Cost of a report = AI + WhatsApp, stored in integer cents in `report_costs` when the report is
+ * Cost of a report = AI + WhatsApp (+ the per-channel messaging cost of W2-15: its texts ×
+ * COST_SMS_USD and its Twilio WhatsApp templates × COST_WHATSAPP_TEMPLATE_USD), stored in integer cents in `report_costs` when the report is
  * filed and refreshed whenever a later job that references it finishes (edits, re-renders):
  *  - AI: the `estCostUsd` (or `costUsdTotal` across retries) every job records in
  *    jobs.payload.metrics — Claude tokens and transcription minutes (ai/cost.ts) — summed over
@@ -40,20 +41,33 @@ export function usdToCents(usd: number): number {
 }
 
 export interface CostRates {
-  /** USD per outbound template message. */
+  /** USD per outbound v1.0 Meta template message. */
   waTemplateUsd: number;
+  /** W2-15: USD per text (COST_SMS_USD). */
+  smsUsd?: number;
+  /** W2-15: USD per Twilio WhatsApp template (COST_WHATSAPP_TEMPLATE_USD). */
+  whatsappTemplateUsd?: number;
 }
 
 export interface ReportCostEstimate {
   costCents: number;
   aiUsd: number;
   waUsd: number;
+  /** W2-15: the report's texts and WhatsApp templates (per-channel messaging cost, D49 (5)). */
+  messagingUsd: number;
 }
 
-export function estimateReportCost(inputs: ReportCostInputs, rates: CostRates): ReportCostEstimate {
+export function estimateReportCost(
+  inputs: Pick<ReportCostInputs, 'aiUsd' | 'jobCount' | 'waTemplates'> &
+    Partial<Pick<ReportCostInputs, 'smsMessages' | 'whatsappTemplates'>>,
+  rates: CostRates,
+): ReportCostEstimate {
   const aiUsd = Math.max(0, inputs.aiUsd);
   const waUsd = Math.max(0, inputs.waTemplates) * rates.waTemplateUsd;
-  return { costCents: usdToCents(aiUsd + waUsd), aiUsd, waUsd };
+  const messagingUsd =
+    Math.max(0, inputs.smsMessages ?? 0) * (rates.smsUsd ?? 0) +
+    Math.max(0, inputs.whatsappTemplates ?? 0) * (rates.whatsappTemplateUsd ?? 0);
+  return { costCents: usdToCents(aiUsd + waUsd + messagingUsd), aiUsd, waUsd, messagingUsd };
 }
 
 export interface OutlierRule {
@@ -94,7 +108,11 @@ export async function recordReportCost(ctx: Ctx, reportId: string): Promise<Reco
   if (report.status !== 'filed' && report.status !== 'signed_off') return null;
 
   const inputs = await ctx.db.reportCostInputs(report.id);
-  const est = estimateReportCost(inputs, { waTemplateUsd: ctx.config.COST_WA_TEMPLATE_USD });
+  const est = estimateReportCost(inputs, {
+    waTemplateUsd: ctx.config.COST_WA_TEMPLATE_USD,
+    smsUsd: ctx.config.COST_SMS_USD,
+    whatsappTemplateUsd: ctx.config.COST_WHATSAPP_TEMPLATE_USD,
+  });
   const prev = await ctx.db.getReportCost(report.id);
   if (prev && prev.cost_cents === est.costCents)
     return { row: prev, alerted: false, changed: false };
@@ -121,6 +139,14 @@ export async function recordReportCost(ctx: Ctx, reportId: string): Promise<Reco
       waTemplates: inputs.waTemplates,
       waTemplateUsd: ctx.config.COST_WA_TEMPLATE_USD,
       jobs: inputs.jobCount,
+      // W2-15: present once the report has a text or a WhatsApp template a provider took.
+      ...(inputs.smsMessages || inputs.whatsappTemplates
+        ? {
+            smsMessages: inputs.smsMessages,
+            whatsappTemplates: inputs.whatsappTemplates,
+            messagingUsd: round6(est.messagingUsd),
+          }
+        : {}),
     },
   });
   const alerted = outlier && !prev?.outlier;

@@ -12,8 +12,8 @@
         "lostHours": 2,
         "source": [
           {
-            "type": "audio",
-            "messageId": "e0000010-0000-4000-8000-000000001001",
+            "type": "voice_note",
+            "uploadId": "e0000010-0000-4000-8000-000000001001",
             "start": 0,
             "end": 14.1
           }
@@ -35,8 +35,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "type": "voice_note",
+          "uploadId": "e0000010-0000-4000-8000-000000001001",
           "start": 21,
           "end": 28.3
         }
@@ -55,8 +55,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "type": "voice_note",
+          "uploadId": "e0000010-0000-4000-8000-000000001001",
           "start": 21,
           "end": 28.3
         }
@@ -75,8 +75,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "type": "voice_note",
+          "uploadId": "e0000010-0000-4000-8000-000000001001",
           "start": 28.3,
           "end": 34
         }
@@ -88,11 +88,15 @@
       "area": "Level 3",
       "activity": "Precast erection",
       "status": "in_progress",
-      "quantity": { "value": 9, "unit": "double tees", "heardAs": "nine double tees" },
+      "quantity": {
+        "value": 9,
+        "unit": "double tees",
+        "heardAs": "nine double tees"
+      },
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "type": "voice_note",
+          "uploadId": "e0000010-0000-4000-8000-000000001001",
           "start": 14.1,
           "end": 21
         }
@@ -104,8 +108,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "type": "voice_note",
+          "uploadId": "e0000010-0000-4000-8000-000000001001",
           "start": 6,
           "end": 14.1
         }
@@ -117,8 +121,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "type": "voice_note",
+          "uploadId": "e0000010-0000-4000-8000-000000001001",
           "start": 21,
           "end": 28.3
         }
@@ -130,8 +134,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "type": "voice_note",
+          "uploadId": "e0000010-0000-4000-8000-000000001001",
           "start": 21,
           "end": 28.3
         }
@@ -145,8 +149,8 @@
       "note": "Stood down 13:00–15:00 for wind",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "type": "voice_note",
+          "uploadId": "e0000010-0000-4000-8000-000000001001",
           "start": 6,
           "end": 14.1
         }
@@ -160,8 +164,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000010-0000-4000-8000-000000001001",
+        "type": "voice_note",
+        "uploadId": "e0000010-0000-4000-8000-000000001001",
         "start": 34,
         "end": 40.2
       }

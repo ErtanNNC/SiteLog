@@ -1,6 +1,6 @@
-import { CheckCheck, FileText, Mail, Mic, X } from 'lucide-react';
+import { CheckCheck, FileText, Mail, MessageSquareText, Mic, Phone, X } from 'lucide-react';
 import { Link } from 'react-router';
-import { formatAudioTimestamp } from '@sitelog/shared/format.ts';
+import { formatDate } from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { canAccess, ROUTE_ROLES } from '@/auth/guards';
 import { Button } from '@/components/ui/Button';
@@ -14,12 +14,19 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/Table';
-import { copy } from '@/copy/en';
 import { useSetInvoiceStatus } from '@/data/hooks';
 import type { HoursRow, InvoiceDetail, InvoiceEvidence } from '@/data/types';
-import { formatHoursNum, formatMonthDay, weekdayName } from '@/lib/format';
+import { useCopy } from '@/i18n/useCopy';
+import { formatNumberIn, formatSignedHoursIn } from '@/lib/localeFormat';
 import { useScrollRegion } from '@/lib/useScrollRegion';
 import { cn } from '@/lib/utils';
+import {
+  buildQueryMailto,
+  evidenceHref,
+  evidenceQuote,
+  evidenceSourceLabel,
+  monthDay,
+} from './evidence';
 
 const STATUS_STYLE: Record<InvoiceDetail['status'], string> = {
   open: 'border-rebar bg-concrete text-dust',
@@ -27,82 +34,57 @@ const STATUS_STYLE: Record<InvoiceDetail['status'], string> = {
   resolved: 'border-chip-filed-bg bg-chip-filed-bg text-chip-filed-fg',
 };
 
-function signed(h: number): string {
-  if (Math.abs(h) < 0.005) return '0';
-  return `${h > 0 ? '+' : '−'}${formatHoursNum(Math.abs(h))}`;
-}
-
-/** mailto: draft with the day-by-day comparison and report links (F15 step 4). */
-export function buildQueryMailto(invoice: InvoiceDetail, origin: string): string {
-  const m = copy.hours.queryMail;
-  const period = `${formatMonthDay(invoice.periodStart)} – ${formatMonthDay(invoice.periodEnd)}`;
-  const h = (n: number) => `${formatHoursNum(n)} h`;
-  const lines = [
-    m.intro(invoice.companyName, invoice.invoiceNo, period),
-    '',
-    ...invoice.days.map((d) =>
-      m.row(
-        `${weekdayName(d.date)} ${formatMonthDay(d.date)}`,
-        h(d.invoiced),
-        h(d.reported),
-        signed(d.gap),
-      ),
-    ),
-    m.total(h(invoice.totals.invoiced), h(invoice.totals.reported), signed(invoice.totals.gap)),
-  ];
-  if (invoice.evidence.length) {
-    lines.push('', m.evidence);
-    for (const e of invoice.evidence) {
-      lines.push(
-        `- ${formatMonthDay(e.date)} · ${e.siteName} · ${e.reportNo}: “${e.quote}” ${origin}/reports/${e.reportId}`,
-      );
-    }
-  }
-  lines.push('', m.outro);
-  const params = new URLSearchParams({
-    subject: m.subject(invoice.companyName, invoice.invoiceNo),
-    body: lines.join('\n'),
-  });
-  return `mailto:?${params.toString().replace(/\+/g, '%20')}`;
-}
+const KIND_ICON = {
+  voice_note: Mic,
+  call: Phone,
+  answer: MessageSquareText,
+  report: FileText,
+} as const;
 
 /**
- * The report behind a gap day: its voice note when it has one (a typed report has none), linked
- * to the report for the roles that can open reports (an accounts user sees the number only).
+ * The source behind a gap day: a voice note or call second opening P7 there, an answer, or the
+ * report; linked for the roles that can open reports (an accounts user sees the number only).
  */
 function EvidenceChip({ e, canOpen }: { e: InvoiceEvidence; canOpen: boolean }) {
-  const audio = e.audioStart !== null || !!e.messageId;
+  const { t } = useCopy();
+  const Icon = KIND_ICON[e.kind];
+  const label = evidenceSourceLabel(e, t);
   const body = (
     <>
-      {audio ? (
-        <Mic className="size-4" aria-hidden="true" />
+      <Icon className="size-4" aria-hidden="true" />
+      {e.kind === 'report' ? (
+        e.reportNo
       ) : (
-        <FileText className="size-4" aria-hidden="true" />
-      )}
-      {audio ? (
         <>
-          {e.audioStart !== null
-            ? copy.hours.audioLink(formatAudioTimestamp(e.audioStart))
-            : copy.source.audio('').trim()}
+          {label}
           <span className="text-dust">· {e.reportNo}</span>
         </>
-      ) : (
-        e.reportNo
       )}
     </>
   );
   const chip =
-    'inline-flex h-7 items-center gap-1 rounded-chip border border-rebar bg-chalk px-2 font-mono text-[12px] font-medium';
+    'inline-flex min-h-7 items-center gap-1 rounded-chip border border-rebar bg-chalk px-2 font-mono text-[12px] font-medium';
   return canOpen ? (
     <Link
-      to={`/reports/${e.reportId}`}
-      className={cn(chip, 'text-level hover:border-iron')}
-      aria-label={copy.hours.openReport(e.reportNo)}
+      to={evidenceHref(e)}
+      className={cn(
+        chip,
+        'text-level hover:border-iron',
+        // §19 Q146: the 28 px chip keeps its look, its hit area is 44 px (as SourceLink's).
+        'relative before:absolute before:inset-x-0 before:top-1/2 before:h-target before:-translate-y-1/2',
+      )}
+      aria-label={
+        e.kind === 'report'
+          ? t('hours.openReport', { no: e.reportNo })
+          : t('hours.openReportAt', { no: e.reportNo, source: label })
+      }
+      data-testid="evidence-link"
+      data-kind={e.kind}
     >
       {body}
     </Link>
   ) : (
-    <span className={cn(chip, 'text-asphalt')} data-testid="evidence-report">
+    <span className={cn(chip, 'text-asphalt')} data-testid="evidence-report" data-kind={e.kind}>
       {body}
     </span>
   );
@@ -117,23 +99,28 @@ export function InvoiceCheckAside({
   row: HoursRow;
   onClose: () => void;
 }) {
+  const { t, language } = useCopy();
   const setStatus = useSetInvoiceStatus();
   const { role } = useAuth();
   const canOpenReports = canAccess(role, ROUTE_ROLES.reports ?? []);
-  const scrollRegion = useScrollRegion(copy.hours.invoiceCheck);
+  const scrollRegion = useScrollRegion(t('hours.invoiceCheck'));
   const hasGapDay = invoice.days.some((d) => Math.abs(d.gap) >= 0.005);
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const mailto = buildQueryMailto(invoice, origin);
-  const period = `${formatMonthDay(invoice.periodStart)} – ${formatMonthDay(invoice.periodEnd)}`;
+  const mailto = buildQueryMailto(invoice, origin, t, language, { links: canOpenReports });
+  const period = `${monthDay(invoice.periodStart, language)} – ${monthDay(invoice.periodEnd, language)}`;
+  const num = (n: number) => formatNumberIn(n, language);
+  const signed = (n: number) => formatSignedHoursIn(n, language, { unit: false });
 
   return (
     <Card data-testid="invoice-check">
       <CardHeader className="items-start">
         <div className="min-w-0">
-          <div className="eyebrow text-dust">{copy.hours.invoiceCheck}</div>
+          <div className="eyebrow text-dust">{t('hours.invoiceCheck')}</div>
           <h2 className="font-h2 mt-1 text-h2">{row.companyName}</h2>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-caption text-dust">
-            <span className="font-mono">{copy.hours.invoice(invoice.invoiceNo, period)}</span>
+            <span className="font-mono">
+              {t('hours.invoice', { no: invoice.invoiceNo, period })}
+            </span>
             <span
               className={cn(
                 'inline-flex h-6 items-center rounded-chip border px-2 font-mono text-[11px] font-medium uppercase tracking-[0.08em]',
@@ -141,37 +128,36 @@ export function InvoiceCheckAside({
               )}
               data-testid="invoice-status"
             >
-              {copy.chips[invoice.status]}
+              {t(`chips.${invoice.status}`)}
             </span>
           </div>
         </div>
-        <Button variant="subtle" size="iconDense" aria-label={copy.common.close} onClick={onClose}>
+        <Button variant="subtle" size="iconDense" aria-label={t('common.close')} onClick={onClose}>
           <X aria-hidden="true" />
         </Button>
       </CardHeader>
       <CardContent className="px-0 pt-4">
         <div {...scrollRegion} className="overflow-x-auto scrollbar-thin">
-          <Table aria-label={copy.hours.invoiceCheck}>
+          <Table aria-label={t('hours.invoiceCheck')}>
             <TableHeader>
               <TableRow>
-                <TableHead>{copy.hours.compare.day}</TableHead>
-                <TableHead numeric>{copy.hours.compare.invoice}</TableHead>
-                <TableHead numeric>{copy.hours.compare.reports}</TableHead>
-                <TableHead numeric>{copy.hours.compare.gap}</TableHead>
+                <TableHead>{t('hours.compare.day')}</TableHead>
+                <TableHead numeric>{t('hours.compare.invoice')}</TableHead>
+                <TableHead numeric>{t('hours.compare.reports')}</TableHead>
+                <TableHead numeric>{t('hours.compare.gap')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {invoice.days.map((d) => (
                 <TableRow key={d.date} tone={Math.abs(d.gap) >= 0.005 ? 'attention' : 'default'}>
                   <TableCell className="py-2">
-                    <span className="font-medium">{weekdayName(d.date).slice(0, 3)}</span>{' '}
-                    <span className="text-caption text-dust">{formatMonthDay(d.date)}</span>
+                    <span className="font-medium">{formatDate(d.date, 'short', language)}</span>
                   </TableCell>
                   <TableCell numeric className="py-2">
-                    {formatHoursNum(d.invoiced)}
+                    {num(d.invoiced)}
                   </TableCell>
                   <TableCell numeric className="py-2">
-                    {formatHoursNum(d.reported)}
+                    {num(d.reported)}
                   </TableCell>
                   <TableCell
                     numeric
@@ -187,12 +173,12 @@ export function InvoiceCheckAside({
             </TableBody>
             <TableFooter>
               <TableRow>
-                <TableCell className="py-2">{copy.common.total}</TableCell>
+                <TableCell className="py-2">{t('common.total')}</TableCell>
                 <TableCell numeric className="py-2">
-                  {formatHoursNum(invoice.totals.invoiced)}
+                  {num(invoice.totals.invoiced)}
                 </TableCell>
                 <TableCell numeric className="py-2">
-                  {formatHoursNum(invoice.totals.reported)}
+                  {num(invoice.totals.reported)}
                 </TableCell>
                 <TableCell
                   numeric
@@ -207,10 +193,10 @@ export function InvoiceCheckAside({
         </div>
 
         <div className="px-5 pt-5">
-          <h3 className="eyebrow text-dust">{copy.hours.evidence}</h3>
+          <h3 className="eyebrow text-dust">{t('hours.evidence')}</h3>
           {invoice.evidence.length === 0 ? (
             <p className="mt-2 text-caption text-dust">
-              {hasGapDay ? copy.hours.noReportEvidence : copy.hours.noEvidence}
+              {hasGapDay ? t('hours.noReportEvidence') : t('hours.noEvidence')}
             </p>
           ) : (
             <ul
@@ -221,11 +207,17 @@ export function InvoiceCheckAside({
                 <li
                   key={`${e.reportId}-${e.date}`}
                   className="rounded-card border border-rebar p-3"
+                  data-kind={e.kind}
                 >
                   <div className="eyebrow text-dust">
-                    {copy.hours.evidenceFor(formatMonthDay(e.date), e.siteName)}
+                    {t('hours.evidenceFor', {
+                      date: formatDate(e.date, 'short', language),
+                      site: e.siteName,
+                    })}
                   </div>
-                  <blockquote className="mt-1 text-[15px] leading-[22px]">“{e.quote}”</blockquote>
+                  <blockquote className="mt-1 text-[15px] leading-[22px]">
+                    “{evidenceQuote(e, t, language)}”
+                  </blockquote>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <EvidenceChip e={e} canOpen={canOpenReports} />
                   </div>
@@ -252,7 +244,7 @@ export function InvoiceCheckAside({
             aria-disabled={invoice.status === 'resolved' || undefined}
           >
             <Mail aria-hidden="true" />
-            {copy.hours.sendQuery}
+            {t('hours.sendQuery')}
           </a>
         </Button>
         <Button
@@ -263,7 +255,7 @@ export function InvoiceCheckAside({
           onClick={() => setStatus.mutate({ invoiceId: invoice.invoiceId, status: 'resolved' })}
         >
           <CheckCheck aria-hidden="true" />
-          {copy.hours.markResolved}
+          {t('hours.markResolved')}
         </Button>
       </CardFooter>
     </Card>

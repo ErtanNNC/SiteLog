@@ -81,6 +81,7 @@ const input = {
     role: 'site_manager' as const,
     siteIds: [],
     languages: ['en'],
+    smsAttested: true,
   },
 };
 
@@ -100,7 +101,11 @@ describe('SupabaseSource.createSite', () => {
     expect(functionCalls()).toEqual([
       {
         name: 'api-invite-reporter',
-        body: expect.objectContaining({ orgId: 'org-1', siteIds: ['site-1'] }),
+        body: expect.objectContaining({
+          orgId: 'org-1',
+          siteIds: ['site-1'],
+          smsAttested: true,
+        }),
       },
       // The subscription quantity follows the active sites (as after pause / resume).
       { name: 'api-billing', body: { action: 'sync', orgId: 'org-1' } },

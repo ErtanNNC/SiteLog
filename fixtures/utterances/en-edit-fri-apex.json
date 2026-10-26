@@ -1,0 +1,21 @@
+{
+  "id": "en-edit-fri-apex",
+  "description": "English SMS EDIT (F10 by SMS, W2-12's Done-when): the day is Friday, the change is Apex's headcount.",
+  "channel": "sms",
+  "language": "en",
+  "text": "EDIT FRI Apex was 7 not 6",
+  "recorded": {
+    "intent": "edit_request",
+    "confidence": 0.95,
+    "entities": {
+      "dayReference": "FRI",
+      "numbers": [7, 6]
+    },
+    "correctionText": "Apex was 7 not 6"
+  },
+  "expected": {
+    "intent": "edit_request",
+    "dayReference": "FRI",
+    "correctionText": "Apex was 7 not 6"
+  }
+}

@@ -12,16 +12,27 @@ import {
   setFontSource,
   type EvidenceDay,
   type EvidencePackInput,
+  type PackExcerpt,
   type PdfImage,
   type PdfPhoto,
   type ReportPdfInput,
 } from '@sitelog/pdf';
 import {
+  isVoiceSourceKind,
+  packClaimReady,
+  packConfirmation,
+  packSections,
+  readReportData,
+  reportLanguageFor,
+  versionPdfStatus,
   versionPhotos,
+  versionSignedOff as signedOffAt,
   type DailyReportData,
   type EvidencePackRow,
   type ReportRow,
   type ReportVersionRow,
+  type StoredReportData,
+  type TranscriptRow,
   type VersionPhoto,
 } from '@sitelog/shared';
 import type { Ctx } from '../context';
@@ -100,6 +111,7 @@ export async function loadLogo(
 type PhotoSource = Pick<
   ReportSourceWithMessage,
   | 'message_id'
+  | 'upload_id'
   | 'kind'
   | 'caption'
   | 'taken_at'
@@ -136,20 +148,40 @@ async function loadPhotos(
   return out;
 }
 
+/**
+ * Whether the PDF of `version` prints the report's sign-off: only the current version of a
+ * signed-off report (the shared `versionSignedOff`, which the panel's browser PDF uses too). Pure.
+ */
+export function versionSignedOff(
+  report: Pick<ReportRow, 'status' | 'current_version'>,
+  version: Pick<ReportVersionRow, 'version'>,
+): boolean {
+  return signedOffAt(
+    { status: report.status, currentVersion: report.current_version },
+    version.version,
+  );
+}
+
+/** `data`: the version's data as readers see it (§10.3 v2; `readReportData` of the stored JSON). */
 export async function buildReportPdfInput(
   ctx: Ctx,
   args: { report: ReportRow; version: ReportVersionRow; site: SiteContext; data: DailyReportData },
 ): Promise<ReportPdfInput> {
   const { report, version, site, data } = args;
+  // Files from the uploads, else the WhatsApp messages (listReportSources).
   const sources = await ctx.db.listReportSources(report.id);
-  const audio = sources.filter((s) => s.kind === 'audio');
-  const transcripts = await ctx.db.listTranscripts(audio.map((a) => a.message_id));
+  const audio = sources.filter((s) => isVoiceSourceKind(s.kind));
+  const transcripts = await ctx.db.listTranscripts(
+    audio.flatMap((a) => (a.media_id ? [a.media_id] : [])),
+  );
   const languages = Array.from(
     new Set(transcripts.flatMap((t) => (t.language ?? '').split('+').filter(Boolean))),
   );
   const versions = await ctx.db.listVersions(report.id);
   const reporter = report.reporter_id ? await ctx.db.getReporter(report.reporter_id) : null;
-  const signer = report.signed_off_by ? await ctx.db.getUserContact(report.signed_off_by) : null;
+  const signedOff = versionSignedOff(report, version);
+  const signer =
+    signedOff && report.signed_off_by ? await ctx.db.getUserContact(report.signed_off_by) : null;
   // Typed in the panel (create_office_report): no reporter, version 1 by an office user.
   const first = versions.find((v) => v.version === 1);
   const enteredByUser =
@@ -160,15 +192,26 @@ export async function buildReportPdfInput(
     !report.reporter_id && first?.author === 'office_user'
       ? (enteredByUser?.display_name ?? enteredByUser?.email ?? 'Office')
       : null;
-  const [logo, photos] = await Promise.all([
+  const [logo, photos, questions] = await Promise.all([
     loadLogo(ctx, site.org.logo_path),
     loadPhotos(ctx, versionPhotos(data.photos, sources), site.settings.pdf_max_photos),
+    ctx.db.listQuestions(report.id),
   ]);
+  // Answered questions for the manpower footnote, by id and (v1 data: a reply source carries the
+  // reply's message id as its questionId) by the answering message.
+  const answers: NonNullable<ReportPdfInput['answers']> = {};
+  for (const q of questions) {
+    if (!q.answered_at) continue;
+    const a = { answeredAt: q.answered_at, field: q.field };
+    answers[q.id] = a;
+    if (q.answered_message_id) answers[q.answered_message_id] = a;
+  }
   return {
     org: {
       name: site.org.name,
       address: site.org.address,
       licenseNo: site.org.license_no,
+      taxNo: site.org.tax_no,
       letterheadLines: site.settings.letterhead_lines ?? [],
       logo,
     },
@@ -182,14 +225,20 @@ export async function buildReportPdfInput(
     report: {
       reportNo: report.report_no,
       version: version.version,
-      status: report.status,
+      // An older version of a signed-off report was filed, not signed off.
+      status: versionPdfStatus(
+        { status: report.status, currentVersion: report.current_version },
+        version.version,
+      ),
       kind: report.kind as ReportPdfInput['report']['kind'],
       filedAt: report.filed_at,
       confirmedAt: report.confirmed_at,
-      signedOffAt: report.signed_off_at,
-      signedOffByName: signer?.display_name ?? signer?.email ?? null,
+      signedOffAt: signedOff ? report.signed_off_at : null,
+      signedOffByName: signedOff ? (signer?.display_name ?? signer?.email ?? null) : null,
       isLate: report.is_late,
       reviewReasons: report.review_reasons,
+      channel: report.channel,
+      confirmedVia: report.confirmed_via,
     },
     data: data.languageDetected.length ? data : { ...data, languageDetected: languages },
     reporterName: reporter?.name ?? null,
@@ -214,6 +263,7 @@ export async function buildReportPdfInput(
       changeNote: v.change_note,
       createdAt: v.created_at,
     })),
+    answers,
     settings: {
       paper: site.settings.pdf_paper === 'a4' ? 'a4' : 'letter',
       footerEnabled: site.settings.pdf_footer_enabled,
@@ -223,22 +273,73 @@ export async function buildReportPdfInput(
   };
 }
 
+/** A clip a pack day quotes: a voice note (by media id) or a call, with its segments. */
+export interface PackClip {
+  kind: 'voice_note' | 'call';
+  /** The voice note's media id (upload, else message) or the call id. */
+  id: string;
+  /** Its number among the day's clips of that kind, when there is more than one. */
+  clipNo: number | null;
+  /** A call's segments are the reporter's lane only (never the agent's). */
+  segments: Array<{ start: number; end: number; text: string }>;
+}
+
+/** A call segment's speaker lane (§6.3 `dialog_log` / Deepgram): the reporter, or TalkOlog. */
+function speakerOf(value: unknown): 'reporter' | 'agent' | null {
+  if (value === 'reporter' || value === 'user' || value === 'caller') return 'reporter';
+  if (value === 'agent' || value === 'assistant') return 'agent';
+  return null;
+}
+
+/**
+ * The reporter's lane of a call transcript: segments marked reporter, or unmarked when none is
+ * marked (a one-lane transcript); the agent's lines never become evidence.
+ */
+export function reporterSegments(
+  transcript: TranscriptRow,
+): Array<{ start: number; end: number; text: string }> {
+  const raw = Array.isArray(transcript.segments)
+    ? (transcript.segments as Array<Record<string, unknown>>)
+    : [];
+  const segs = raw.map((s) => ({
+    start: Number(s.start) || 0,
+    end: Number(s.end) || 0,
+    text: String(s.text ?? ''),
+    speaker: speakerOf(s.speaker ?? s.role),
+  }));
+  const marked = segs.some((s) => s.speaker === 'reporter');
+  return segs
+    .filter((s) => (marked ? s.speaker === 'reporter' : s.speaker !== 'agent'))
+    .map(({ start, end, text }) => ({ start, end, text }));
+}
+
 export async function buildEvidencePackInput(
   ctx: Ctx,
   pack: EvidencePackRow,
   site: SiteContext,
 ): Promise<EvidencePackInput> {
+  const sections = packSections(pack.sections);
+  const wants = new Set<string>(sections);
   const reports = await ctx.db.listReportsForSitePeriod(
     site.site.id,
     pack.period_start,
     pack.period_end,
   );
   const events = await ctx.db.listWeatherEvents(site.site.id, pack.period_start, pack.period_end);
+  const signers = new Map<string, string | null>();
+  const signerName = async (userId: string | null) => {
+    if (!userId) return null;
+    if (!signers.has(userId)) {
+      const u = await ctx.db.getUserContact(userId);
+      signers.set(userId, u?.display_name ?? u?.email ?? null);
+    }
+    return signers.get(userId) ?? null;
+  };
   const days: EvidenceDay[] = [];
   for (const r of reports) {
     const version = await ctx.db.getVersion(r.id, r.current_version);
     if (!version) continue;
-    const data = version.data as DailyReportData;
+    const data = readReportData(version.data as unknown as StoredReportData);
     const dayEvents = events.filter((e) => e.report_id === r.id);
     const lost =
       Math.round(
@@ -250,31 +351,44 @@ export async function buildEvidencePackInput(
       dayEvents.some((e) => e.full_day) || data.weather.periods.some((p) => p.fullDay === true);
     if (lost <= 0 && !fullDay) continue;
     const sources = await ctx.db.listReportSources(r.id);
-    const audio = sources.filter((s) => s.kind === 'audio');
-    const transcripts = await ctx.db.listTranscripts(audio.map((a) => a.message_id));
+    const voice = sources.filter((s) => isVoiceSourceKind(s.kind) && s.media_id);
+    const callIds = Array.from(new Set(sources.flatMap((s) => (s.call_id ? [s.call_id] : []))));
     const siteDay = await ctx.db.getSiteDay(r.site_day_id);
     const observed = siteDayWeatherOf(siteDay?.weather);
+    // The version's photos (data.photos): counted for the evidence marks and claim-ready whether
+    // or not the Photos section prints, downloaded only when it does.
     const shown = versionPhotos(data.photos, sources);
-    const photos = await loadPhotos(ctx, shown, 4);
+    const photos = wants.has('photos') ? await loadPhotos(ctx, shown, 4) : [];
+    const audioCount = voice.length + callIds.length;
+    const transcriptExcerpts = wants.has('transcripts')
+      ? weatherExcerpts(data, await packClips(ctx, voice, callIds))
+      : [];
+    const confirmation = packConfirmation(r);
+    const signedOff = r.status === 'signed_off';
+    // §19 Q134: the delay record's evidence (voice note or call, photo, observed weather), on a
+    // report the site manager confirmed or the office signed off.
+    const evidenceReady =
+      dayEvents.some((e) => e.claim_ready) || (audioCount > 0 && shown.length > 0 && !!observed);
     days.push({
       date: data.reportDate,
       reportNo: r.report_no,
       version: r.current_version,
-      signedOff: r.status === 'signed_off',
+      signedOff,
+      signedOffByName: signedOff ? await signerName(r.signed_off_by) : null,
+      signedOffAt: signedOff ? r.signed_off_at : null,
+      confirmation,
+      typed: !r.reporter_id,
+      confirmedAt: r.confirmed_at,
+      filedAt: r.filed_at,
       data,
       lostHours: lost,
       fullDay,
-      claimReady:
-        dayEvents.some((e) => e.claim_ready) ||
-        (audio.length > 0 && photos.length > 0 && !!observed),
-      transcriptExcerpts: weatherExcerpts(
-        data,
-        transcripts.flatMap((t) => transcriptSegments(t.message_id, t)),
-      ),
+      claimReady: packClaimReady(evidenceReady, confirmation, signedOff),
+      transcriptExcerpts,
       photos,
       observed,
       photoCount: shown.length,
-      audioCount: audio.length,
+      audioCount,
     });
   }
   const requester = pack.created_by ? await ctx.db.getUserContact(pack.created_by) : null;
@@ -286,8 +400,12 @@ export async function buildEvidencePackInput(
       address: site.site.address,
       timezone: site.site.timezone,
     },
+    // F20: the org's report language and units (§9.6, §10.11), its paper (§12).
+    language: reportLanguageFor(site.org.locale),
+    units: site.org.units,
     periodStart: pack.period_start,
     periodEnd: pack.period_end,
+    sections,
     days,
     settings: { paper: site.settings.pdf_paper === 'a4' ? 'a4' : 'letter' },
     generatedAt: ctx.now().toISOString(),
@@ -295,25 +413,91 @@ export async function buildEvidencePackInput(
   };
 }
 
-/** Segments the weather periods point at (± one neighbour), else the first few segments. */
+/** The day's clips with their segments: voice notes in order, then calls (reporter lane). */
+async function packClips(
+  ctx: Ctx,
+  voice: ReadonlyArray<Pick<ReportSourceWithMessage, 'media_id'>>,
+  callIds: string[],
+): Promise<PackClip[]> {
+  const mediaIds = voice.map((v) => v.media_id!);
+  const [notes, calls] = await Promise.all([
+    ctx.db.listTranscripts(mediaIds),
+    ctx.db.listCallTranscripts(callIds),
+  ]);
+  const byMedia = new Map(notes.map((t) => [t.upload_id ?? t.message_id, t]));
+  const number = (i: number, n: number) => (n > 1 ? i + 1 : null);
+  return [
+    ...mediaIds.map((id, i) => ({
+      kind: 'voice_note' as const,
+      id,
+      clipNo: number(i, mediaIds.length),
+      segments: transcriptSegments(id, byMedia.get(id) ?? null).map(({ start, end, text }) => ({
+        start,
+        end,
+        text,
+      })),
+    })),
+    ...callIds.map((id, i) => {
+      const t = calls.find((c) => c.call_id === id);
+      return {
+        kind: 'call' as const,
+        id,
+        clipNo: number(i, callIds.length),
+        segments: t ? reporterSegments(t) : [],
+      };
+    }),
+  ];
+}
+
+/**
+ * The excerpts a pack day quotes (F20): for each second a weather period cites (a voice note's
+ * or a call's), the segment of THAT clip at that second with its neighbours in the same clip,
+ * never a segment of another clip (audit "Evidence-pack transcript excerpts match timestamps
+ * across different voice notes"); a call quotes its reporter's lane only. With no cited second
+ * that matches a clip, the first segments of the first clip that has any. Pure.
+ */
 export function weatherExcerpts(
   data: DailyReportData,
-  segments: Array<{ start: number; end: number; text: string }>,
+  clips: readonly PackClip[],
   max = 6,
-): Array<{ start: number; end: number; text: string }> {
-  if (segments.length === 0) return [];
-  const starts = data.weather.periods.flatMap((p) =>
-    p.source.filter((s) => s.type === 'audio').map((s) => (s as { start: number }).start),
+): PackExcerpt[] {
+  type Cite = { kind: PackClip['kind']; id: string; start: number };
+  const cites = data.weather.periods.flatMap((p) =>
+    p.source.flatMap((s): Cite[] =>
+      s.type === 'voice_note'
+        ? [{ kind: 'voice_note', id: s.uploadId, start: s.start }]
+        : s.type === 'call'
+          ? [{ kind: 'call', id: s.callId, start: s.start }]
+          : [],
+    ),
   );
-  const picked = new Set<number>();
-  for (const st of starts) {
-    const idx = segments.findIndex((s) => st >= s.start && st <= s.end + 0.5);
-    const i = idx >= 0 ? idx : segments.findIndex((s) => s.start >= st);
+  const picked: Array<{ clip: number; seg: number }> = [];
+  const seen = new Set<string>();
+  const pick = (clip: number, seg: number) => {
+    const key = `${clip}:${seg}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    picked.push({ clip, seg });
+  };
+  for (const c of cites) {
+    const ci = clips.findIndex((x) => x.kind === c.kind && x.id === c.id);
+    if (ci < 0) continue;
+    const segs = clips[ci]!.segments;
+    let i = segs.findIndex((s) => c.start >= s.start && c.start <= s.end + 0.5);
+    if (i < 0) i = segs.findIndex((s) => s.start >= c.start);
     if (i < 0) continue;
-    for (const j of [i - 1, i, i + 1]) if (j >= 0 && j < segments.length) picked.add(j);
+    for (const j of [i - 1, i, i + 1]) if (j >= 0 && j < segs.length) pick(ci, j);
   }
-  const idxs = (picked.size ? Array.from(picked) : segments.slice(0, 3).map((_, i) => i))
-    .sort((a, b) => a - b)
-    .slice(0, max);
-  return idxs.map((i) => segments[i]!);
+  if (picked.length === 0) {
+    const ci = clips.findIndex((x) => x.segments.length > 0);
+    if (ci >= 0) clips[ci]!.segments.slice(0, 3).forEach((_, j) => pick(ci, j));
+  }
+  return picked
+    .sort((a, b) => a.clip - b.clip || a.seg - b.seg)
+    .slice(0, max)
+    .map(({ clip, seg }) => {
+      const c = clips[clip]!;
+      const s = c.segments[seg]!;
+      return { clip: c.kind, clipNo: c.clipNo, start: s.start, end: s.end, text: s.text };
+    });
 }

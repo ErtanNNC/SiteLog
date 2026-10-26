@@ -4,14 +4,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
-import { formatTimeInTz, formatWeekdayMonthDay } from '@sitelog/shared/format.ts';
+import { formatAudioTimestamp, formatDate, formatTimeInTz } from '@sitelog/shared/format.ts';
+import { readReportData } from '@sitelog/shared/report/upgrade.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { PageHeader } from '@/components/sitelog/PageHeader';
 import { TopBarControls } from '@/components/shell/TopBar';
 import { PageSkeleton } from '@/components/sitelog/Skeletons';
 import { ErrorState, ReviewReasonsBanner } from '@/components/sitelog/States';
 import { LateBadge, StatusChip } from '@/components/sitelog/StatusChip';
-import { VoicePlayerProvider } from '@/components/sitelog/VoicePlayer';
+import { MediaPlayerProvider, useMediaPlayer } from '@/components/sitelog/MediaPlayer';
 import { Button } from '@/components/ui/Button';
 import {
   ConfirmDialog,
@@ -32,8 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
-import { copy } from '@/copy/en';
-import { reviewReasonText, unlinkedCompanyReasons } from '@/data/assemble';
+import { unlinkedCompanyReasons } from '@/data/assemble';
 import { useDataSource } from '@/data/DataProvider';
 import {
   useCreateReportVersion,
@@ -46,24 +46,27 @@ import {
 } from '@/data/hooks';
 import { officeEntryAuthor } from '@/data/pdfInput';
 import type { ReportDetail } from '@/data/types';
-import { formatDateTimeShort } from '@/lib/format';
+import { useLooseCopy } from '@/i18n/useLooseCopy';
+import { formatWhen } from '@/lib/format';
 import { openInNewTab } from '@/lib/tab';
 import { errorMessage } from '@/lib/utils';
 import { PhotoPicker } from './PhotoPicker';
 import { ReportEditor } from './ReportEditor';
 import { ReportView } from './ReportView';
+import { durationPhrase, provenancePhrases, wordPhrases } from './provenance';
+import { callSourceAt, parseCallMismatch, reasonText } from './reasons';
 import { SourcePanel } from './SourcePanel';
 import {
   reportFormSchema,
   sameReportData,
   toFormValues,
   toReportData,
+  withPhotoEntries,
   type ReportFormValues,
 } from './reportForm';
 import { reportPhotoEntries, usePhotoDraft } from './usePhotoDraft';
 
 const UNDO_WINDOW_MS = 10 * 60_000;
-const cp = copy.report.editMode.photos;
 
 /** P7 · Report review — structured report + source panel, versions, sign-off, edit → new version (§11.4, F14). */
 export default function ReportDetailPage() {
@@ -72,18 +75,19 @@ export default function ReportDetailPage() {
   const vParam = Number(params.get('v'));
   const version = Number.isInteger(vParam) && vParam > 0 ? vParam : null;
   const detail = useReportDetail(reportId, version);
+  const { tx: t } = useLooseCopy();
 
   if (detail.isPending) return <PageSkeleton />;
   if (detail.isError || !detail.data)
     return (
       <ErrorState
-        thing={copy.nav.reports.toLowerCase()}
+        thing={t('report.thing')}
         error={detail.error}
         onRetry={() => void detail.refetch()}
       />
     );
   return (
-    <VoicePlayerProvider>
+    <MediaPlayerProvider>
       <ReportScreen
         key={`${reportId}:${detail.data.version}`}
         detail={detail.data}
@@ -94,7 +98,7 @@ export default function ReportDetailPage() {
           setParams(next, { replace: true });
         }}
       />
-    </VoicePlayerProvider>
+    </MediaPlayerProvider>
   );
 }
 
@@ -106,6 +110,8 @@ function ReportScreen({
   onSelectVersion: (v: number) => void;
 }) {
   const source = useDataSource();
+  const { tx: t, language } = useLooseCopy();
+  const player = useMediaPlayer();
   const { role } = useAuth();
   const navigate = useNavigate();
   const signOff = useSignOff();
@@ -119,8 +125,22 @@ function ReportScreen({
   const [note, setNote] = useState('');
   const [noteError, setNoteError] = useState<string | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
-  const [openMessageId, setOpenMessageId] = useState<string | null>(null);
-  const [pendingData, setPendingData] = useState<ReportDetail['data'] | null>(null);
+  const [focusAnchor, setFocusAnchor] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  // `?clip=<voice note or call>&at=<s>` (Crew hours evidence, W3-06): the player waits there,
+  // highlighted, without playing on its own.
+  const cueClip = params.get('clip');
+  const cueAt = Number(params.get('at'));
+  useEffect(() => {
+    if (!player || !cueClip || !Number.isFinite(cueAt) || cueAt < 0) return;
+    if (!detail.clips.some((c) => c.id === cueClip)) return;
+    player.seek(cueAt, cueClip, false);
+    // Once per opened link: the player's identity changes as it plays.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cueClip, cueAt, detail.clips]);
+  const [pendingData, setPendingData] = useState<ReportDetail['storedData'] | null>(null);
+  // The version the edit was opened on: a newer one by save time refuses it (§19 Q106).
+  const [editBase, setEditBase] = useState<number | null>(null);
   // The version's photos while editing: re-caption, move, remove, add (uploaded on save).
   const photos = usePhotoDraft(detail.photos);
   const settings = useSettings();
@@ -154,7 +174,19 @@ function ReportScreen({
     if (!editing) reset(toFormValues(detail.data));
   }, [detail.data, editing, reset]);
 
-  const provenance = buildProvenance(detail);
+  const provenance = wordPhrases(
+    t,
+    provenancePhrases(detail, officeEntryAuthor(detail), (seconds) => {
+      const d = durationPhrase(seconds);
+      return t(d.key, d.vars);
+    }),
+  );
+  const versionLine = (v: ReportDetail['versions'][number]) =>
+    t(v.changeNote ? 'report.versionLineNote' : 'report.versionLine', {
+      author: v.authorName,
+      time: formatWhen(v.createdAt, tz, '', language),
+      note: v.changeNote ?? '',
+    });
   const viewedVersion = detail.versions.find((v) => v.version === detail.version) ?? null;
 
   const startEdit = () => {
@@ -164,31 +196,31 @@ function ReportScreen({
     }
     reset(toFormValues(detail.data));
     photos.reset(detail.photos);
+    setEditBase(detail.version);
     setEditing(true);
   };
 
   const onSaveClick = form.handleSubmit((values) => {
-    let data: ReportDetail['data'];
+    const storedV2 = readReportData(detail.storedData);
+    let data: ReportDetail['storedData'];
     try {
-      // data.photos: the version's photos still listed, with their captions (new picks are
-      // uploaded on confirm and appended by the server).
-      data = toReportData(
-        values,
-        { ...detail.data, photos: photos.kept() },
-        {
-          userId: source.user.id,
-          at: source.now().toISOString(),
-          companies: detail.companies,
-        },
-      );
+      // The new version is report data v2 (W1-12): a stored v1 version is edited through its v2
+      // view, which keeps every list's order, so the form rows map onto it. data.photos: the
+      // version's photos still listed, with their captions (new picks are uploaded on confirm and
+      // appended by the server).
+      data = toReportData(values, withPhotoEntries(storedV2, photos.kept()), {
+        userId: source.user.id,
+        at: source.now().toISOString(),
+        companies: detail.companies,
+      });
     } catch (err) {
-      toast.error(errorMessage(err, copy.errors.generic));
+      toast.error(errorMessage(err, t('errors.generic')));
       return;
     }
     // A photo change alone is an edit.
-    const shown = { ...detail.data, photos: reportPhotoEntries(detail.photos) };
+    const shown = withPhotoEntries(storedV2, reportPhotoEntries(detail.photos));
     if (sameReportData(data, shown) && !photos.hasNew) {
-      toast.message(copy.report.editMode.noChanges);
+      toast.message(t('report.editMode.noChanges'));
       return;
     }
     setPendingData(data);
@@ -200,7 +232,7 @@ function ReportScreen({
   const onConfirmSave = async () => {
     if (!pendingData) return;
     if (!note.trim()) {
-      setNoteError(copy.report.edit.changeNoteRequired);
+      setNoteError(t('report.edit.changeNoteRequired'));
       return;
     }
     setSaving(true);
@@ -210,18 +242,22 @@ function ReportScreen({
       if (!alive.current) return;
       if (!picked) {
         setNoteOpen(false);
-        toast.error(cp.notReady);
+        toast.error(t('report.editMode.photos.notReady'));
         return;
       }
       let uploads: Awaited<ReturnType<typeof photos.upload>> = [];
       if (picked.length) {
-        toastId = toast.loading(cp.uploading(1, picked.length));
+        toastId = toast.loading(
+          t('report.editMode.photos.uploadingProgress', { i: 1, n: picked.length }),
+        );
         try {
           uploads = await photos.upload(source, detail.site.id, picked, (i, n) =>
-            toast.loading(cp.uploading(i, n), { id: toastId }),
+            toast.loading(t('report.editMode.photos.uploadingProgress', { i, n }), {
+              id: toastId,
+            }),
           );
         } catch {
-          if (alive.current) toast.error(cp.uploadFailed, { id: toastId });
+          if (alive.current) toast.error(t('report.editMode.photos.uploadFailed'), { id: toastId });
           else toast.dismiss(toastId);
           return;
         }
@@ -236,6 +272,7 @@ function ReportScreen({
         data: pendingData,
         changeNote: note.trim(),
         photos: uploads,
+        ...(editBase !== null ? { baseVersion: editBase } : {}),
       });
       if (toastId !== undefined) toast.dismiss(toastId);
       void reportPdf.prepare(r.id, res.version);
@@ -282,40 +319,50 @@ function ReportScreen({
   ].map((reason) => {
     const [kind, ...rest] = reason.split(':');
     const name = rest.join(':');
+    const mismatch = kind === 'call_mismatch' ? parseCallMismatch(reason) : null;
+    const callAt = mismatch ? callSourceAt(detail, mismatch.path) : null;
     return {
       key: reason,
-      text: reviewReasonText(reason),
-      action:
-        kind === 'unknown_company' ? (
-          <span className="inline-flex flex-wrap items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              loading={resolveCompany.isPending}
-              onClick={() => resolve(name, 'add')}
+      text: reasonText(reason, detail, t, language),
+      action: callAt ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => player?.seek(callAt.start, callAt.callId)}
+          data-testid="play-mismatch"
+        >
+          {t('report.reasons.playAt', { ts: formatAudioTimestamp(callAt.start) })}
+        </Button>
+      ) : kind === 'unknown_company' ? (
+        <span className="inline-flex flex-wrap items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={resolveCompany.isPending}
+            onClick={() => resolve(name, 'add')}
+          >
+            {t('report.reasons.addAsSub')}
+          </Button>
+          <Select onValueChange={(companyId) => resolve(name, 'map', companyId)}>
+            <SelectTrigger
+              dense
+              className="h-9 w-auto min-w-[180px]"
+              aria-label={t('report.reasons.mapTo')}
             >
-              {copy.states.reviewReasons.addAsSub}
-            </Button>
-            <Select onValueChange={(companyId) => resolve(name, 'map', companyId)}>
-              <SelectTrigger
-                dense
-                className="h-9 w-auto min-w-[180px]"
-                aria-label={copy.states.reviewReasons.mapTo}
-              >
-                <SelectValue placeholder={copy.states.reviewReasons.mapTo} />
-              </SelectTrigger>
-              <SelectContent>
-                {detail.companies
-                  .filter((c) => c.status === 'confirmed')
-                  .map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </span>
-        ) : undefined,
+              <SelectValue placeholder={t('report.reasons.mapTo')} />
+            </SelectTrigger>
+            <SelectContent>
+              {detail.companies
+                .filter((c) => c.status === 'confirmed')
+                .map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        </span>
+      ) : undefined,
     };
   });
 
@@ -325,7 +372,7 @@ function ReportScreen({
         <Button
           variant="subtle"
           size="iconDense"
-          aria-label={copy.report.previous}
+          aria-label={t('report.previous')}
           disabled={!detail.prevReportId}
           asChild={!!detail.prevReportId}
         >
@@ -340,7 +387,7 @@ function ReportScreen({
         <Button
           variant="subtle"
           size="iconDense"
-          aria-label={copy.report.next}
+          aria-label={t('report.next')}
           disabled={!detail.nextReportId}
           asChild={!!detail.nextReportId}
         >
@@ -356,20 +403,20 @@ function ReportScreen({
 
       <PageHeader
         breadcrumb={[
-          { label: copy.report.breadcrumb, to: '/reports' },
+          { label: t('report.breadcrumb'), to: '/reports' },
           { label: detail.site.name, to: `/sites/${detail.site.id}` },
           { label: r.reportNo },
         ]}
         eyebrow={
           <span className="flex flex-wrap items-center gap-2">
-            <span>{copy.report.eyebrow(r.reportNo)}</span>
-            <StatusChip variant={chipVariant(detail)} label={chipLabel(detail)} size="sm" />
+            <span>{t('report.eyebrow', { no: r.reportNo })}</span>
+            <StatusChip variant={chipVariant(detail)} size="sm" />
             {r.isLate && r.receivedAt ? (
               <LateBadge time={formatTimeInTz(r.receivedAt, tz)} />
             ) : null}
             <span className="inline-flex items-center gap-1 normal-case tracking-normal">
               <Label htmlFor="version-switch" className="sr-only">
-                {copy.report.versionSwitcher}
+                {t('report.versionSwitcher')}
               </Label>
               <Select
                 value={String(detail.version)}
@@ -386,40 +433,33 @@ function ReportScreen({
                 </SelectTrigger>
                 <SelectContent>
                   {detail.versions.map((v) => (
-                    <SelectItem
-                      key={v.version}
-                      value={String(v.version)}
-                      title={copy.report.versionLine(
-                        v.authorName,
-                        formatDateTimeShort(v.createdAt, tz),
-                        v.changeNote,
-                      )}
-                    >
-                      {copy.report.version(v.version, v.isCurrent)}
+                    <SelectItem key={v.version} value={String(v.version)} title={versionLine(v)}>
+                      {t(v.isCurrent ? 'report.versionCurrent' : 'report.version', {
+                        version: v.version,
+                      })}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {viewedVersion ? (
                 <span className="hidden text-[12px] text-dust md:inline" data-testid="version-line">
-                  {copy.report.versionLine(
-                    viewedVersion.authorName,
-                    formatDateTimeShort(viewedVersion.createdAt, tz),
-                    viewedVersion.changeNote,
-                  )}
+                  {versionLine(viewedVersion)}
                 </span>
               ) : null}
             </span>
           </span>
         }
-        title={copy.report.title(formatWeekdayMonthDay(r.date), detail.site.shortName)}
+        title={t('report.title', {
+          weekday: formatDate(r.date, 'weekdayMonthDay', language),
+          site: detail.site.shortName,
+        })}
         subtitle={<span data-testid="provenance">{provenance}</span>}
         actions={
           editing ? (
             <>
               {/* While saving, Cancel would leave a save that still creates the version. */}
               <Button variant="ghost" onClick={onCancelEdit} disabled={saving}>
-                {copy.report.actions.cancel}
+                {t('report.actions.cancel')}
               </Button>
               <Button
                 variant="primary"
@@ -428,25 +468,25 @@ function ReportScreen({
                 data-testid="save-version"
               >
                 <PenLine aria-hidden="true" />
-                {copy.report.actions.save}
+                {t('report.actions.save')}
               </Button>
             </>
           ) : (
             <>
               <Button variant="ghost" onClick={startEdit} disabled={r.status === 'void'}>
                 <Pencil aria-hidden="true" />
-                {copy.report.actions.edit}
+                {t('report.actions.edit')}
               </Button>
               <Button variant="ghost" onClick={onPdf}>
                 <FileDown aria-hidden="true" />
-                {copy.report.actions.pdf}
+                {t('report.actions.pdf')}
               </Button>
               {r.status === 'signed_off' ? (
                 <span
-                  className="inline-flex h-11 items-center gap-2 rounded-btn border border-filed px-3 text-caption font-medium text-chip-filed-fg"
+                  className="inline-flex h-target items-center gap-2 rounded-btn border border-filed px-3 text-caption font-medium text-chip-filed-fg"
                   data-testid="signed-off-state"
                 >
-                  {copy.report.actions.signedOffBy(r.signedOffByName ?? '—')}
+                  {t('report.actions.signedOffBy', { name: r.signedOffByName ?? '—' })}
                   {undoAvailable ? (
                     <>
                       <span aria-hidden="true">·</span>
@@ -456,10 +496,10 @@ function ReportScreen({
                         className="text-chip-filed-fg"
                         loading={undoSignOff.isPending}
                         onClick={() => undoSignOff.mutate({ reportId: r.id })}
-                        title={copy.report.undoWindow}
+                        title={t('report.undoWindow')}
                       >
                         <Undo2 className="!size-4" aria-hidden="true" />
-                        {copy.report.actions.undo}
+                        {t('report.actions.undo')}
                       </Button>
                     </>
                   ) : null}
@@ -471,7 +511,7 @@ function ReportScreen({
                   disabled={!isCurrent}
                   data-testid="sign-off"
                 >
-                  {copy.report.actions.signOff}
+                  {t('report.actions.signOff')}
                 </Button>
               ) : null}
             </>
@@ -484,9 +524,11 @@ function ReportScreen({
           className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-card border border-rebar bg-chalk px-4 py-3 text-caption"
           role="status"
         >
-          <span>{copy.report.viewingOld(detail.version, r.currentVersion)}</span>
+          <span>
+            {t('report.viewingOld', { version: detail.version, current: r.currentVersion })}
+          </span>
           <Button variant="link" size="sm" onClick={() => onSelectVersion(r.currentVersion)}>
-            {copy.report.viewCurrent}
+            {t('report.viewCurrent')}
           </Button>
         </div>
       ) : null}
@@ -497,8 +539,8 @@ function ReportScreen({
 
       {editing ? (
         <div className="mb-4 rounded-card border border-signal bg-signal-tint/40 px-4 py-3 text-caption">
-          <span className="font-semibold">{copy.report.editMode.title}</span> ·{' '}
-          {copy.report.editMode.hint}
+          <span className="font-semibold">{t('report.editMode.title')}</span> ·{' '}
+          {t('report.editMode.hint')}
         </div>
       ) : null}
 
@@ -524,7 +566,12 @@ function ReportScreen({
           ) : (
             <ReportView
               detail={detail}
-              onOpenMessage={(id) => setOpenMessageId(id)}
+              onShowAnswer={(anchor) => {
+                setFocusAnchor(anchor);
+                // §19 Q93: an answer said on the recorder plays its clip (in Activity).
+                const clip = detail.answerClips.find((c) => c.questionId === anchor);
+                if (clip) player?.seek(0, clip.id);
+              }}
               onOpenHistory={() => {
                 const el = document.getElementById('version-switch');
                 el?.focus();
@@ -532,17 +579,18 @@ function ReportScreen({
             />
           )}
         </div>
-        <aside aria-label={copy.report.aside.source}>
-          <SourcePanel detail={detail} openMessageId={openMessageId} />
+        <aside aria-label={t('report.aside.source')}>
+          <SourcePanel detail={detail} focusAnchor={focusAnchor} />
         </aside>
       </div>
 
       <ConfirmDialog
         open={signOffOpen}
         onOpenChange={setSignOffOpen}
-        title={copy.report.signOffDialog.title(r.reportNo, detail.version)}
-        description={copy.report.signOffDialog.body}
-        confirmLabel={copy.report.signOffDialog.confirm}
+        title={t('report.signOffDialog.title', { no: r.reportNo, version: detail.version })}
+        description={t('report.signOffDialog.body')}
+        confirmLabel={t('report.signOffDialog.confirm')}
+        cancelLabel={t('report.signOffDialog.cancel')}
         loading={signOff.isPending}
         onConfirm={() =>
           signOff.mutate(
@@ -555,13 +603,13 @@ function ReportScreen({
       <Dialog open={noteOpen} onOpenChange={(o) => !saving && setNoteOpen(o)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{copy.report.editMode.saveTitle(r.reportNo)}</DialogTitle>
+            <DialogTitle>{t('report.editMode.saveTitle', { no: r.reportNo })}</DialogTitle>
             <DialogDescription>
-              {copy.report.editMode.saveBody(r.currentVersion + 1)}
+              {t('report.editMode.saveBody', { version: r.currentVersion + 1 })}
             </DialogDescription>
           </DialogHeader>
           <div className="mt-4 grid gap-1.5">
-            <Label htmlFor="change-note">{copy.report.edit.changeNote}</Label>
+            <Label htmlFor="change-note">{t('report.edit.changeNote')}</Label>
             <Textarea
               id="change-note"
               value={note}
@@ -569,7 +617,7 @@ function ReportScreen({
                 setNote(e.target.value);
                 if (e.target.value.trim()) setNoteError(null);
               }}
-              placeholder={copy.report.edit.changeNotePlaceholder}
+              placeholder={t('report.edit.changeNotePlaceholder')}
               aria-invalid={!!noteError}
               aria-describedby={noteError ? 'change-note-error' : undefined}
               rows={3}
@@ -587,7 +635,7 @@ function ReportScreen({
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setNoteOpen(false)} disabled={saving}>
-              {copy.common.cancel}
+              {t('report.signOffDialog.cancel')}
             </Button>
             <Button
               variant="primary"
@@ -595,7 +643,7 @@ function ReportScreen({
               onClick={() => void onConfirmSave()}
               data-testid="confirm-save"
             >
-              {copy.report.actions.save}
+              {t('report.actions.save')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -604,10 +652,10 @@ function ReportScreen({
       <ConfirmDialog
         open={discardOpen}
         onOpenChange={setDiscardOpen}
-        title={copy.report.editMode.cancelTitle}
-        description={copy.report.editMode.cancelBody}
-        confirmLabel={copy.report.editMode.discard}
-        cancelLabel={copy.report.editMode.keepEditing}
+        title={t('report.editMode.cancelTitle')}
+        description={t('report.editMode.cancelBody')}
+        confirmLabel={t('report.editMode.discard')}
+        cancelLabel={t('report.editMode.keepEditing')}
         destructive
         onConfirm={() => {
           setDiscardOpen(false);
@@ -627,38 +675,4 @@ function chipVariant(detail: ReportDetail) {
   if (r.kind === 'weather_day') return 'weather_day' as const;
   if (r.status === 'filed') return 'filed' as const;
   return 'awaiting' as const;
-}
-
-function chipLabel(detail: ReportDetail): string {
-  return copy.chips[chipVariant(detail)];
-}
-
-function buildProvenance(detail: ReportDetail): string {
-  const r = detail.report;
-  const tz = detail.site.timezone;
-  const name = detail.reporter?.name ?? copy.sites.reporter;
-  const enteredBy = officeEntryAuthor(detail);
-  const parts: string[] = [];
-  if (enteredBy && r.filedAt)
-    parts.push(copy.report.provenance.enteredBy(enteredBy, formatTimeInTz(r.filedAt, tz)));
-  else if (r.receivedAt)
-    parts.push(copy.report.provenance.reportedBy(name, formatTimeInTz(r.receivedAt, tz)));
-  // Typed in the panel: there is no WhatsApp confirmation to report.
-  if (!enteredBy) {
-    if (r.confirmedAt)
-      parts.push(copy.report.provenance.confirmed(formatTimeInTz(r.confirmedAt, tz)));
-    else if (r.filedAt) parts.push(copy.report.provenance.filedWithoutConfirmation);
-  }
-  for (const v of detail.versions) {
-    if (v.version === 1) continue;
-    const t = formatTimeInTz(v.createdAt, tz);
-    if (v.author === 'reporter_reply') parts.push(copy.report.provenance.editedByReply(t));
-    else if (v.author === 'office_user')
-      parts.push(copy.report.provenance.editedBy(v.authorName, t));
-  }
-  if (r.status === 'signed_off' && r.signedOffAt)
-    parts.push(
-      copy.report.provenance.signedOff(r.signedOffByName ?? '—', formatTimeInTz(r.signedOffAt, tz)),
-    );
-  return parts.join(' · ');
 }

@@ -5,11 +5,22 @@ export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 export const LOGO_TYPES: readonly string[] = ['image/png', 'image/svg+xml'];
 export const LOGO_ACCEPT = LOGO_TYPES.join(',');
 
-/** Client-side check before upload; returns the error copy or `null` when the file is fine. */
-export function logoFileError(file: Pick<File, 'type' | 'size'>): string | null {
-  if (!LOGO_TYPES.includes(file.type)) return copy.setup.company.logoWrongType;
-  if (file.size > LOGO_MAX_BYTES) return copy.setup.company.logoTooLarge;
+/**
+ * What is wrong with a logo file, as its copy key (the same name under `setup.company.*` and
+ * `settings.pdf.*`); null when it is fine.
+ */
+export function logoFileProblem(
+  file: Pick<File, 'type' | 'size'>,
+): 'logoWrongType' | 'logoTooLarge' | null {
+  if (!LOGO_TYPES.includes(file.type)) return 'logoWrongType';
+  if (file.size > LOGO_MAX_BYTES) return 'logoTooLarge';
   return null;
+}
+
+/** Client-side check before upload; returns the error copy (English) or `null` when fine. */
+export function logoFileError(file: Pick<File, 'type' | 'size'>): string | null {
+  const problem = logoFileProblem(file);
+  return problem ? copy.setup.company[problem] : null;
 }
 
 /** Longest side of the PNG rendition of an SVG logo (sharp at the PDF letterhead size). */

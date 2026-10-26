@@ -16,7 +16,10 @@ export default tseslint.config(
       '**/coverage/**',
       'supabase/functions/**', // Deno — linted with `deno lint`
       'apps/web/e2e/**',
+      'apps/field/e2e/**',
       '**/*.d.ts',
+      '.claude/**', // agent worktrees (local only)
+      '**/.venv/**', // Python virtualenvs (apps/voice-agent, uv)
     ],
   },
   js.configs.recommended,
@@ -38,7 +41,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['apps/web/**/*.{ts,tsx}'],
+    files: ['apps/web/**/*.{ts,tsx}', 'apps/field/**/*.{ts,tsx}'],
     languageOptions: { globals: { ...globals.browser } },
     plugins: { 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
     rules: {

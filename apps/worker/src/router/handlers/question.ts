@@ -7,7 +7,7 @@ import {
   type AnswerValue,
   type Button,
   type ConversationRow,
-  type DailyReportData,
+  type DailyReportDataV1,
   type QuestionField,
   type QuestionRow,
   type QuestionSpec,
@@ -38,7 +38,11 @@ export async function sendQuestion(
     prompt: spec.prompt,
     options: null,
   });
-  const buttons = ButtonSets.question(q.id, spec.options);
+  // WhatsApp buttons carry the labels (and "Other…"); the web's [{id,label}] are W1-12's.
+  const buttons = ButtonSets.question(
+    q.id,
+    spec.options.map((o) => o.label),
+  );
   await ctx.db.updateQuestion(q.id, { options: buttons as unknown as Json });
   const msg = await sendFreeForm(ctx, convo, waCopy.questionGeneric(spec.prompt), buttons, {
     kind: 'question',
@@ -125,6 +129,7 @@ export async function handleAnswer(
         replyText: text,
         companies,
         defaultShiftHours: Number(site.settings.default_shift_hours),
+        via: via === 'voice' ? 'voice' : 'text',
       },
       ctx.log,
     );
@@ -168,11 +173,12 @@ export async function handleAnswer(
   const applied = applyAnswer(data, { field, target }, value, {
     defaultShiftHours: Number(site.settings.default_shift_hours),
     workingHours: site.site.working_hours,
-    messageId: s.message.id,
+    // v1 data (the WhatsApp worker, step 22): the reply message is the source.
+    source: { type: 'reply', messageId: s.message.id },
     confidence,
     companies,
   });
-  let next: DailyReportData = applied.data;
+  let next: DailyReportDataV1 = applied.data;
   if (
     field === 'company.unknown' &&
     value.companyAction === 'map' &&

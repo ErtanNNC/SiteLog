@@ -1,7 +1,10 @@
 {
   "languageDetected": ["en"],
   "summary": "Framing continued on Units 1–4 (Kestrel crew of 6). Dry; no weather impact. No incidents.",
-  "weather": { "conditionsText": "Dry", "periods": [] },
+  "weather": {
+    "conditionsText": "Dry",
+    "periods": []
+  },
   "manpower": [
     {
       "companyId": "00000000-0000-4000-8000-00000000d007",
@@ -16,8 +19,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000015-0000-4000-8000-000000001501",
+          "type": "voice_note",
+          "uploadId": "e0000015-0000-4000-8000-000000001501",
           "start": 0,
           "end": 8.6
         }
@@ -31,8 +34,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000015-0000-4000-8000-000000001501",
+          "type": "voice_note",
+          "uploadId": "e0000015-0000-4000-8000-000000001501",
           "start": 0,
           "end": 8.6
         }
@@ -47,8 +50,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000015-0000-4000-8000-000000001501",
+        "type": "voice_note",
+        "uploadId": "e0000015-0000-4000-8000-000000001501",
         "start": 0,
         "end": 8.6
       }

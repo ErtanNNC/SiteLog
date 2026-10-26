@@ -1,13 +1,17 @@
 {
+  "schemaVersion": 2,
+  "reportDate": "2026-10-09",
+  "reportLanguage": "en",
+  "units": "imperial",
   "languageDetected": ["en"],
   "summary": "Rain from 10:00 to 12:00 stopped roof membrane repairs for 2 h; the roofing crew moved inside to Bay 3. Summit Drywall completed the Bay 3 office wall framing. The Kestrel crew cleaned up after the mezzanine demolition and prepared the Bay 2 dock pits. Prairie Roofing (new subcontractor, 3 workers) on site. Toolbox talk on roof access and fall protection; no incidents.",
   "weather": {
     "observed": {
-      "precipIn": 0.33,
-      "tempMinF": 56,
-      "tempMaxF": 62,
-      "windMph": 11,
-      "gustMph": 20,
+      "precip": 0.33,
+      "tempMin": 56,
+      "tempMax": 62,
+      "wind": 11,
+      "gust": 20,
       "provider": "Open-Meteo"
     },
     "conditionsText": "Rain 10:00–12:00, dry afterwards",
@@ -20,8 +24,8 @@
         "lostHours": 2,
         "source": [
           {
-            "type": "audio",
-            "messageId": "e0000008-0000-4000-8000-000000000801",
+            "type": "voice_note",
+            "uploadId": "e0000008-0000-4000-8000-000000000801",
             "start": 0,
             "end": 13.8
           }
@@ -43,8 +47,8 @@
       "confidence": 0.85,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000008-0000-4000-8000-000000000801",
+          "type": "voice_note",
+          "uploadId": "e0000008-0000-4000-8000-000000000801",
           "start": 6.5,
           "end": 20.5
         }
@@ -63,8 +67,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000008-0000-4000-8000-000000000801",
+          "type": "voice_note",
+          "uploadId": "e0000008-0000-4000-8000-000000000801",
           "start": 20.5,
           "end": 27
         }
@@ -83,8 +87,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000008-0000-4000-8000-000000000801",
+          "type": "voice_note",
+          "uploadId": "e0000008-0000-4000-8000-000000000801",
           "start": 27,
           "end": 33.4
         }
@@ -98,8 +102,8 @@
       "status": "stopped",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000008-0000-4000-8000-000000000801",
+          "type": "voice_note",
+          "uploadId": "e0000008-0000-4000-8000-000000000801",
           "start": 6.5,
           "end": 13.8
         }
@@ -111,8 +115,8 @@
       "status": "complete",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000008-0000-4000-8000-000000000801",
+          "type": "voice_note",
+          "uploadId": "e0000008-0000-4000-8000-000000000801",
           "start": 20.5,
           "end": 27
         }
@@ -124,8 +128,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000008-0000-4000-8000-000000000801",
+          "type": "voice_note",
+          "uploadId": "e0000008-0000-4000-8000-000000000801",
           "start": 27,
           "end": 33.4
         }
@@ -141,8 +145,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000008-0000-4000-8000-000000000801",
+        "type": "voice_note",
+        "uploadId": "e0000008-0000-4000-8000-000000000801",
         "start": 33.4,
         "end": 39
       }
@@ -154,17 +158,25 @@
       "item": "Summit Drywall to start hanging board in Bay 3 on Monday",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000008-0000-4000-8000-000000000801",
+          "type": "voice_note",
+          "uploadId": "e0000008-0000-4000-8000-000000000801",
           "start": 20.5,
           "end": 27
         }
       ]
     }
   ],
+  "photos": [
+    {
+      "uploadId": "e0000008-0000-4000-8000-000000000805",
+      "caption": "Roof membrane",
+      "takenAt": "2026-10-09T21:52:00Z"
+    }
+  ],
   "newTerms": [
     {
       "heard": "Prairie Roofing",
+      "heardLanguage": "en",
       "proposedOfficial": "Prairie Roofing",
       "kind": "company",
       "confidence": 0.8
@@ -174,19 +186,9 @@
   "lowConfidence": [],
   "proposedQuestions": [
     {
-      "field": "company.unknown",
+      "field": "company.unknown:Prairie Roofing",
       "question": "I heard \"Prairie Roofing\" — is that a new subcontractor?",
-      "options": ["Add as new sub"],
-      "target": { "companyNameHeard": "Prairie Roofing", "manpowerIndex": 0 }
-    }
-  ],
-  "schemaVersion": 1,
-  "reportDate": "2026-10-09",
-  "photos": [
-    {
-      "messageId": "e0000008-0000-4000-8000-000000000805",
-      "caption": "Roof membrane",
-      "takenAt": "2026-10-09T21:52:00Z"
+      "options": ["Add as new sub"]
     }
   ]
 }

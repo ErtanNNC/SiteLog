@@ -1,10 +1,11 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
 import { kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
 import { DemoSource } from '@/data/demo/DemoSource';
 import { DemoStore, demoUserFor } from '@/data/demo/store';
+import { i18n } from '@/i18n/i18n';
 import { renderWithProviders } from '@/test/render';
 import BillingPage from './Page';
 
@@ -12,10 +13,13 @@ describe('BillingPage (demo data)', () => {
   it('shows the plan card, sites and invoices from §18', async () => {
     renderWithProviders(<BillingPage />, { route: '/billing' });
     expect(await screen.findByRole('heading', { name: 'Billing' })).toBeInTheDocument();
-    expect(screen.getByText('$399 per active site, per month. No setup fee.')).toBeInTheDocument();
+    expect(
+      screen.getByText('$399.00 per active site, per month. No setup fee.'),
+    ).toBeInTheDocument();
     const plan = screen.getByTestId('plan-card');
-    expect(within(plan).getByTestId('plan-total')).toHaveTextContent('$2,394');
-    expect(plan).toHaveTextContent('6 active sites × $399');
+    // W4-10 Done when: from the org's price (orgs.price_per_site_minor, §19 Q234).
+    expect(within(plan).getByTestId('plan-total')).toHaveTextContent('$2,394.00');
+    expect(within(plan).getByTestId('plan-equation')).toHaveTextContent('6 × $399.00 = $2,394.00');
     expect(plan).toHaveTextContent('Sun, Nov 1, 2026');
     expect(plan).toHaveTextContent('Visa ending 4242');
 
@@ -24,14 +28,14 @@ describe('BillingPage (demo data)', () => {
     const riverside = within(sites).getByText('Riverside Lofts — Block B').closest('tr')!;
     expect(riverside).toHaveTextContent('March 2026');
     expect(within(riverside).getByText('Active')).toBeInTheDocument();
-    expect(riverside).toHaveTextContent('$399');
+    expect(riverside).toHaveTextContent('$399.00');
 
     const invoices = screen.getByRole('table', { name: 'Invoices' });
     const rows = within(invoices).getAllByRole('row').slice(1);
     expect(rows).toHaveLength(4);
     expect(rows[0]).toHaveTextContent('Thu, Oct 1, 2026');
-    expect(rows[0]).toHaveTextContent('$2,394');
-    expect(rows[3]).toHaveTextContent('$1,596');
+    expect(rows[0]).toHaveTextContent('$2,394.00');
+    expect(rows[3]).toHaveTextContent('$1,596.00');
     expect(within(rows[0]!).getByText('Paid')).toBeInTheDocument();
   });
 
@@ -52,8 +56,8 @@ describe('BillingPage (demo data)', () => {
     const riverside = store.data.sites.find((s) => s.project_code === 'RL-2041')!;
     expect(riverside.status).toBe('paused');
     expect(refreshOrgs).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(screen.getByTestId('plan-total')).toHaveTextContent('$1,995'));
-    expect(screen.getByTestId('plan-card')).toHaveTextContent('5 active sites × $399');
+    await waitFor(() => expect(screen.getByTestId('plan-total')).toHaveTextContent('$1,995.00'));
+    expect(screen.getByTestId('plan-equation')).toHaveTextContent('5 × $399.00 = $1,995.00');
     const row = within(sites).getByText('Riverside Lofts — Block B').closest('tr')!;
     expect(within(row).getByText('Paused')).toBeInTheDocument();
 
@@ -65,7 +69,7 @@ describe('BillingPage (demo data)', () => {
     );
     await waitFor(() => expect(riverside.status).toBe('active'));
     await waitFor(() => expect(refreshOrgs).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.getByTestId('plan-total')).toHaveTextContent('$2,394'));
+    await waitFor(() => expect(screen.getByTestId('plan-total')).toHaveTextContent('$2,394.00'));
     expect(store.data.audit.at(-1)!.action).toBe('site.resumed');
   });
 
@@ -115,7 +119,7 @@ describe('BillingPage (demo data)', () => {
     const store = new DemoStore();
     store.data.org = {
       ...store.data.org,
-      stripe_subscription_id: null,
+      billing_subscription_id: null,
       billing_status: 'trialing',
     };
     const u = demoUserFor('admin');
@@ -152,8 +156,8 @@ describe('BillingPage (demo data)', () => {
       ...d,
       org: {
         ...d.org,
-        stripe_customer_id: null,
-        stripe_subscription_id: null,
+        billing_customer_id: null,
+        billing_subscription_id: null,
         billing_status: 'trialing',
         trial_ends_at: '2026-10-26T15:00:00.000Z',
       },
@@ -191,8 +195,8 @@ describe('BillingPage (demo data)', () => {
       ...d,
       org: {
         ...d.org,
-        stripe_customer_id: null,
-        stripe_subscription_id: null,
+        billing_customer_id: null,
+        billing_subscription_id: null,
         billing_status: 'trialing',
         trial_ends_at: '2026-10-26T15:00:00.000Z',
       },
@@ -215,5 +219,96 @@ describe('BillingPage (demo data)', () => {
     expect(
       within(sites).getByRole('button', { name: `Resume ${d.sites[0]!.name}` }),
     ).toBeInTheDocument();
+  });
+
+  it('a price TalkOlog changed reads from the org, not from code (§19 Q234)', async () => {
+    const d = kestrelDemo();
+    const store = new DemoStore({
+      ...d,
+      org: { ...d.org, price_per_site_minor: 29900, price_currency: 'USD' },
+    });
+    renderWithProviders(<BillingPage />, { route: '/billing', store });
+    expect(await screen.findByTestId('plan-equation')).toHaveTextContent('6 × $299.00 = $1,794.00');
+    expect(screen.getByText('$299.00 per active site, per month. No setup fee.')).toBeVisible();
+  });
+
+  it('a manual TR org reads in Turkish: no Checkout, no portal, TalkOlog invoices it (§19 Q236)', async () => {
+    const d = kestrelDemo();
+    const store = new DemoStore({
+      ...d,
+      org: {
+        ...d.org,
+        name: 'Demir Yapı A.Ş.',
+        country: 'TR',
+        locale: 'tr-TR',
+        currency: 'TRY',
+        billing_provider: 'manual',
+        billing_customer_id: null,
+        billing_subscription_id: null,
+        stripe_customer_id: null,
+        stripe_subscription_id: null,
+        billing_status: 'trialing',
+        trial_ends_at: '2026-10-20T09:00:00.000Z',
+        price_per_site_minor: null,
+        price_currency: null,
+      },
+      billing: { ...d.billing, invoices: [] },
+    });
+    const u = demoUserFor('admin');
+    const source = new DemoSource(store, { id: u.id, email: u.email, name: u.name, role: u.role });
+    const checkout = vi.spyOn(source, 'getBillingCheckoutUrl');
+    const portal = vi.spyOn(source, 'getBillingPortalUrl');
+    await act(() => i18n.changeLanguage('tr'));
+    try {
+      renderWithProviders(<BillingPage />, { route: '/billing', source, auth: { isDemo: false } });
+      expect(await screen.findByRole('heading', { name: 'Faturalandırma' })).toBeInTheDocument();
+      expect(screen.getByTestId('manual-billing')).toHaveTextContent(
+        'TalkOlog sizi doğrudan faturalandırır',
+      );
+      expect(screen.queryByTestId('start-subscription')).toBeNull();
+      expect(screen.queryByTestId('update-payment')).toBeNull();
+      expect(screen.queryByText('Ödeme bilgilerini ekle')).toBeNull();
+      const plan = screen.getByTestId('plan-card');
+      expect(within(plan).getByTestId('no-price')).toHaveTextContent(
+        'Şantiye başına fiyatınızı TalkOlog belirler.',
+      );
+      expect(within(plan).getByTestId('billing-status')).toHaveTextContent('Ücretsiz deneme');
+      expect(within(plan).getByTestId('trial')).toHaveTextContent('Deneme Sal, 20 Eki 2026');
+      // Pause and Resume stay (F23), in Turkish.
+      const sites = screen.getByRole('table', { name: 'Bu plandaki şantiyeler' });
+      expect(
+        within(sites).getByRole('button', {
+          name: 'Riverside Lofts — Block B şantiyesini duraklat',
+        }),
+      ).toBeInTheDocument();
+      expect(screen.getByText('Faturalarınız TalkOlog’dan e-postayla gelir.')).toBeInTheDocument();
+      expect(checkout).not.toHaveBeenCalled();
+      expect(portal).not.toHaveBeenCalled();
+    } finally {
+      await act(() => i18n.changeLanguage('en'));
+    }
+  });
+
+  it('with a TRY price set by TalkOlog, money reads in lira and Turkish digits', async () => {
+    const d = kestrelDemo();
+    const store = new DemoStore({
+      ...d,
+      org: {
+        ...d.org,
+        billing_provider: 'manual',
+        price_per_site_minor: 150000,
+        price_currency: 'TRY',
+      },
+      billing: { ...d.billing, invoices: [] },
+    });
+    await act(() => i18n.changeLanguage('tr'));
+    try {
+      renderWithProviders(<BillingPage />, { route: '/billing', store });
+      expect(await screen.findByTestId('plan-equation')).toHaveTextContent(
+        '6 × ₺1.500,00 = ₺9.000,00',
+      );
+    } finally {
+      await act(() => i18n.changeLanguage('en'));
+    }
   });
 });

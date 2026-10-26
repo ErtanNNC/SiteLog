@@ -1,7 +1,11 @@
 import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 4173;
+/**
+ * 4173 unless `WEB_E2E_PORT` says otherwise, so a run beside another one on 4173 (whose server
+ * `reuseExistingServer` would otherwise test) can take a free port; CI leaves it unset.
+ */
+const PORT = Number(process.env.WEB_E2E_PORT ?? 4173);
 const baseURL = `http://localhost:${PORT}`;
 
 /**
@@ -24,7 +28,8 @@ export default defineConfig({
   testDir: './e2e',
   // Demo-mode specs only; e2e/supabase/** runs against a local Supabase stack
   // (playwright.supabase.config.ts) and the screenshots spec has its own config.
-  testMatch: /(smoke|a11y)\.spec\.ts/,
+  testMatch:
+    /(smoke|a11y|sites|hours|glossary|weather|report-call|team|billing|settings)\.spec\.ts/,
   testIgnore: /supabase\//,
   timeout: 60_000,
   fullyParallel: true,
@@ -37,7 +42,11 @@ export default defineConfig({
     launchOptions: { executablePath: chromiumExecutablePath },
   },
   projects: [
-    { name: 'chromium', testMatch: /smoke\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'chromium',
+      testMatch: /(smoke|sites|hours|glossary|weather|report-call|team|billing|settings)\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
     // §15 / M9: axe WCAG 2.2 AA scan of every route at 1440 and 375 px + keyboard checks.
     { name: 'a11y', testMatch: /a11y\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
   ],
@@ -48,6 +57,7 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
-    env: { VITE_DEMO: 'true' },
+    // §19 Q378: Turkish is off in the deployed builds; the e2e builds keep it on to test it.
+    env: { VITE_DEMO: 'true', VITE_TURKISH: 'true' },
   },
 });

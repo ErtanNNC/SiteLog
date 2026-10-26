@@ -1,0 +1,137 @@
+{
+  "languageDetected": ["tr"],
+  "summary": "Usta Beton 6. katta kolon kalıplarını kurdu; öz ekip 3. katta sıva işlerine devam etti. Öğleden sonra öz ekipten bir işçi spiral taşlama ile elini kesti; ilk yardım yapıldı, işe döndü. 4. kattan bir kalıp tahtasının düştüğü bir ramak kala olay yaşandı; altında kimse yoktu, alan şeritle kapatıldı. Sabah iskele güvenliği konulu iş güvenliği bilgilendirmesi yapıldı.",
+  "weather": {
+    "conditionsText": "Açık, yağış yok",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c001",
+      "companyNameHeard": "Usta Beton",
+      "companyName": "Usta Beton",
+      "trade": "Beton",
+      "area": "6. Kat",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a7",
+          "start": 5,
+          "end": 11.5
+        }
+      ]
+    },
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c004",
+      "companyNameHeard": "Öz ekip",
+      "companyName": "Demir Yapı öz ekip",
+      "trade": "Genel işçilik",
+      "area": "3. Kat",
+      "workers": 4,
+      "hoursPerWorker": 8,
+      "totalHours": 32,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a7",
+          "start": 11.5,
+          "end": 17.5
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "6. Kat",
+      "activity": "Kolon kalıpları",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a7",
+          "start": 5,
+          "end": 11.5
+        }
+      ]
+    },
+    {
+      "area": "3. Kat",
+      "activity": "Sıva işleri",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a7",
+          "start": 11.5,
+          "end": 17.5
+        }
+      ]
+    }
+  ],
+  "deliveries": [],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "İskele güvenliği",
+    "incidents": [
+      {
+        "description": "Öz ekipten bir işçi spiral taşlama ile elini kesti; ilk yardım dolabından pansuman yapıldı, hastaneye gerek olmadı, işe döndü",
+        "severity": "first_aid",
+        "source": [
+          {
+            "type": "voice_note",
+            "uploadId": "d1000000-0000-4000-8000-0000000000a7",
+            "start": 17.5,
+            "end": 27
+          }
+        ]
+      },
+      {
+        "description": "Ramak kala: 4. kattan bir kalıp tahtası düştü; altında kimse yoktu, alan şeritle kapatıldı",
+        "severity": "near_miss",
+        "source": [
+          {
+            "type": "voice_note",
+            "uploadId": "d1000000-0000-4000-8000-0000000000a7",
+            "start": 27,
+            "end": 35
+          }
+        ]
+      }
+    ],
+    "noIncidentsStated": false,
+    "visitors": [],
+    "source": [
+      {
+        "type": "voice_note",
+        "uploadId": "d1000000-0000-4000-8000-0000000000a7",
+        "start": 17.5,
+        "end": 27
+      },
+      {
+        "type": "voice_note",
+        "uploadId": "d1000000-0000-4000-8000-0000000000a7",
+        "start": 27,
+        "end": 35
+      },
+      {
+        "type": "voice_note",
+        "uploadId": "d1000000-0000-4000-8000-0000000000a7",
+        "start": 35,
+        "end": 41
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": []
+}

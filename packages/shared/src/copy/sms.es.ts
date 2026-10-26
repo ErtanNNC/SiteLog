@@ -1,0 +1,93 @@
+import type { SmsCatalog, SmsKey, SmsWeatherPhrases } from './sms.ts';
+
+/**
+ * §9.2 SMS copy, Spanish (US reporters): mirrors the English texts in Latin American Spanish as
+ * spoken on US job sites. Formal "usted" (the same across Latin America, and the register of an
+ * assistant writing to a site manager); "reporte", "enlace", "obra". The SMS keywords STOP, HELP,
+ * START, CALL and TEXT stay in English because `sms-webhook` matches them (§9.5). Accents force
+ * UCS-2 (70 code units per segment), so the texts without variables are kept to 70 units: one
+ * segment, like their GSM-7 English versions. The welcome's reply clause is `smsReplyHintEs`,
+ * appended by `renderSms` only for packs with two-way SMS. Punctuation is GSM-7 only (spec §19 Q15):
+ * only accented letters take a text out of GSM-7.
+ */
+export const smsEs: SmsCatalog<SmsKey> = {
+  welcome: {
+    withNumber:
+      'Hola {first}, soy TalkOlog, el asistente de reportes diarios de {company} en {site}. Cada día de trabajo antes de las {deadline}, toque su enlace y hable unos 3 min, o llame al {number}: {link}',
+    withoutNumber:
+      'Hola {first}, soy TalkOlog, el asistente de reportes diarios de {company} en {site}. Cada día de trabajo antes de las {deadline}, toque su enlace y hable unos 3 min: {link}',
+  },
+  verify_code: 'Su código de TalkOlog: {code}. Vence en 10 minutos.',
+  daily_link: {
+    withNumber: 'Reporte de hoy para {site}: {link} - o simplemente llame al {number}.',
+    withoutNumber: 'Reporte de hoy para {site}: {link}',
+  },
+  call_coming: 'Le llamaré a las {time} para el reporte de hoy. ¿Prefiere hacerlo ahora? {link}',
+  weather_headsup:
+    'Aviso: el reporte se entrega a las {deadline}. {weather_phrase} - mencione las horas perdidas y qué trabajos se detuvieron.',
+  reminder_1:
+    'Todavía no hay reporte de {site} hoy. Una nota de voz de un minuto es suficiente: {link}',
+  reminder_2: {
+    withNumber:
+      'Todavía nada para hoy. Le avisaré a la oficina a las {time}. {link} o llame al {number}.',
+    withoutNumber: 'Todavía nada para hoy. Le avisaré a la oficina a las {time}. {link}',
+  },
+  missed_call: {
+    withNumber:
+      'No pude comunicarme con usted para el reporte de hoy. Llame al {number} o toque {link}.',
+    withoutNumber: 'No pude comunicarme con usted para el reporte de hoy. Toque {link}.',
+  },
+  question_ready: 'Una pregunta rápida sobre el reporte de hoy: {link}',
+  draft_ready: 'Su reporte está listo para revisar: {link}',
+  filed: 'Registrado: Reporte diario {report_no}. PDF: {pdf_link}',
+  photos_link: 'Agregue fotos al reporte de hoy: {link}',
+  edit_applied: 'Reporte del {weekday} actualizado: {change}. Versión {v} enviada a la oficina.',
+  finish_report: 'Su llamada terminó antes de registrar el reporte. Termínelo con un toque: {link}',
+  site_paused: '{site} está en pausa en TalkOlog. Pida a la oficina que reactive la obra.',
+  unknown_number: 'Este número no está en TalkOlog. Pida a su oficina que lo agregue.',
+  help: {
+    withNumber:
+      'Reportes diarios de TalkOlog para {company}. Su enlace: {link} - Llame al {number} - Envíe CALL o TEXT para elegir llamada o mensaje - STOP para darse de baja. Pueden aplicarse cargos por mensajes y datos.',
+    withoutNumber:
+      'Reportes diarios de TalkOlog para {company}. Su enlace: {link} - Envíe CALL o TEXT para elegir llamada o mensaje - STOP para darse de baja. Pueden aplicarse cargos por mensajes y datos.',
+  },
+  stop_confirm: 'Ya no recibirá mensajes de TalkOlog. Responda START para reactivarlos.',
+  // No accents, so GSM-7: one segment each (spec §19 Q46).
+  pref_call_ok:
+    'Listo, su reporte diario ahora es por llamada. Responda TEXT para cambiar a un enlace.',
+  pref_text_ok:
+    'Listo, su reporte diario ahora es por enlace en un mensaje. Responda CALL para cambiar a una llamada.',
+  // W2-12 (spec §19 Q83, Q102), for the Q63 review.
+  day_off_link: 'Agregue los detalles de {site} de hoy: {link}',
+  edit_preview: '{weekday}: {change}? Confírmelo aquí: {link}',
+  edit_unclear: 'No pude hacer ese cambio por mensaje. Hágalo en Reportes anteriores: {link}',
+  // W2-16 (spec §19 Q85, Q40): WhatsApp only, for the Q63 review.
+  whatsapp_use_link: 'Las notas de voz van por su enlace: {link}',
+  whatsapp_stop_confirm:
+    'TalkOlog deja de enviarle mensajes de WhatsApp. Responda START para reactivarlos.',
+};
+
+/** The `welcome` reply clause for packs with two-way SMS (mirrors `smsReplyHintEn`). */
+export const smsReplyHintEs = ' - Responda STOP para darse de baja, HELP para ayuda';
+
+/** The heads-up's `{weather_phrase}` (mirrors `smsWeatherPhraseEn`; W2-06, for the Q63 review). */
+export const smsWeatherPhraseEs: SmsWeatherPhrases = {
+  rainMorning: 'Llovió esta mañana ({amount})',
+  rainAfternoon: 'Llovió esta tarde ({amount})',
+  rainDay: 'Llovió hoy ({amount})',
+  gusts: 'Rachas de hasta {speed}',
+  gustsAfterRain: 'rachas de hasta {speed}',
+  and: ' y ',
+  fallback: 'El clima afectó la obra hoy',
+  decimal: '.',
+};
+
+/**
+ * W4-06 (spec §9.1): HELP's privacy clause, appended by `renderSms` when the pack names a privacy
+ * notice (`SMS_HELP_PRIVACY`). For the Q63 review.
+ */
+export const smsHelpPrivacyEs = ' - Privacidad: {privacy_link}';
+
+/** W4-05 (spec §19 Q232): Settings' "Send me a test message". For the Q63 review. */
+export const smsTestMessageEs =
+  'Mensaje de prueba de TalkOlog para {company}. Sus jefes de obra reciben los mensajes de este remitente. No hace falta responder.';

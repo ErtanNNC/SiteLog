@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Sentry from '@sentry/node';
 import {
   deadlineInstant,
-  emptyReportData,
+  emptyReportDataV1,
   type ReportCostRow,
   type ReportRow,
 } from '@sitelog/shared';
@@ -56,10 +56,17 @@ describe('cost math', () => {
   it('estimates AI + WhatsApp templates in cents', () => {
     expect(
       estimateReportCost({ aiUsd: 0.1168, jobCount: 4, waTemplates: 3 }, { waTemplateUsd: 0.004 }),
-    ).toEqual({ costCents: 13, aiUsd: 0.1168, waUsd: 0.012 });
+    ).toEqual({ costCents: 13, aiUsd: 0.1168, waUsd: 0.012, messagingUsd: 0 });
+    // W2-15: texts and Twilio WhatsApp templates at their own rates.
+    expect(
+      estimateReportCost(
+        { aiUsd: 0.1, jobCount: 1, waTemplates: 0, smsMessages: 3, whatsappTemplates: 2 },
+        { waTemplateUsd: 0.004, smsUsd: 0.01, whatsappTemplateUsd: 0.05 },
+      ),
+    ).toEqual({ costCents: 23, aiUsd: 0.1, waUsd: 0, messagingUsd: 0.13 });
     expect(
       estimateReportCost({ aiUsd: 0, jobCount: 0, waTemplates: 0 }, { waTemplateUsd: 0.004 }),
-    ).toEqual({ costCents: 0, aiUsd: 0, waUsd: 0 });
+    ).toEqual({ costCents: 0, aiUsd: 0, waUsd: 0, messagingUsd: 0 });
   });
 
   it('flags only costs strictly above 3× a median of at least 20 reports', () => {
@@ -267,7 +274,7 @@ describe('filing hook', () => {
     await h.db.insertVersion({
       report_id: report.id,
       version: 1,
-      data: emptyReportData('2026-10-09'),
+      data: emptyReportDataV1('2026-10-09'),
       summary: null,
       author: 'agent',
     });
@@ -308,7 +315,7 @@ describe('filing hook', () => {
     await h.db.insertVersion({
       report_id: report.id,
       version: 1,
-      data: emptyReportData('2026-10-09'),
+      data: emptyReportDataV1('2026-10-09'),
       summary: null,
       author: 'agent',
     });

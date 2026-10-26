@@ -1,13 +1,17 @@
 {
+  "schemaVersion": 2,
+  "reportDate": "2026-10-05",
+  "reportLanguage": "en",
+  "units": "imperial",
   "languageDetected": ["en", "es"],
   "summary": "Apex Concrete formed the Level 4 elevated slab (edge forms and shoring); Ironclad Steel started the bottom rebar mat on Level 4. Level 3 electrical rough-in approximately 45% complete; Level 2 east wing ductwork nearly complete. CMU delivered at 10:30 (8 pallets). Dry with light wind; no stoppage. Toolbox talk on working under shoring; no incidents.",
   "weather": {
     "observed": {
-      "precipIn": 0,
-      "tempMinF": 54,
-      "tempMaxF": 66,
-      "windMph": 12,
-      "gustMph": 19,
+      "precip": 0,
+      "tempMin": 54,
+      "tempMax": 66,
+      "wind": 12,
+      "gust": 19,
       "provider": "Open-Meteo"
     },
     "conditionsText": "Dry, light wind; no stoppage",
@@ -27,8 +31,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "type": "voice_note",
+          "uploadId": "e0000020-0000-4000-8000-000000002001",
           "start": 9.8,
           "end": 21.4
         }
@@ -47,8 +51,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "type": "voice_note",
+          "uploadId": "e0000020-0000-4000-8000-000000002001",
           "start": 21.4,
           "end": 33
         }
@@ -67,8 +71,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "type": "voice_note",
+          "uploadId": "e0000020-0000-4000-8000-000000002001",
           "start": 33,
           "end": 41.5
         }
@@ -87,8 +91,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "type": "voice_note",
+          "uploadId": "e0000020-0000-4000-8000-000000002001",
           "start": 55,
           "end": 66.2
         }
@@ -107,8 +111,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "type": "voice_note",
+          "uploadId": "e0000020-0000-4000-8000-000000002001",
           "start": 66.2,
           "end": 78
         }
@@ -122,8 +126,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "type": "voice_note",
+          "uploadId": "e0000020-0000-4000-8000-000000002001",
           "start": 9.8,
           "end": 21.4
         }
@@ -135,8 +139,8 @@
       "status": "started",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "type": "voice_note",
+          "uploadId": "e0000020-0000-4000-8000-000000002001",
           "start": 21.4,
           "end": 33
         }
@@ -149,8 +153,8 @@
       "percentComplete": 45,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "type": "voice_note",
+          "uploadId": "e0000020-0000-4000-8000-000000002001",
           "start": 33,
           "end": 55
         }
@@ -162,8 +166,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "type": "voice_note",
+          "uploadId": "e0000020-0000-4000-8000-000000002001",
           "start": 55,
           "end": 66.2
         }
@@ -177,8 +181,8 @@
       "time": "10:30",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "type": "voice_note",
+          "uploadId": "e0000020-0000-4000-8000-000000002001",
           "start": 101,
           "end": 112.5
         }
@@ -193,8 +197,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000020-0000-4000-8000-000000002001",
+        "type": "voice_note",
+        "uploadId": "e0000020-0000-4000-8000-000000002001",
         "start": 112.5,
         "end": 126.5
       }
@@ -206,8 +210,8 @@
       "item": "Ironclad Steel to continue the bottom mat on Level 4",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "type": "voice_note",
+          "uploadId": "e0000020-0000-4000-8000-000000002001",
           "start": 126.5,
           "end": 140.1
         }
@@ -217,26 +221,27 @@
       "item": "Level 4 deck rebar inspection, tentatively Thursday (to be confirmed)",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "type": "voice_note",
+          "uploadId": "e0000020-0000-4000-8000-000000002001",
           "start": 126.5,
           "end": 140.1
         }
       ]
     }
   ],
-  "newTerms": [],
-  "missingRequired": [],
-  "lowConfidence": [],
-  "proposedQuestions": [],
-  "schemaVersion": 1,
-  "reportDate": "2026-10-05",
   "photos": [
     {
-      "messageId": "e0000020-0000-4000-8000-000000002005",
+      "uploadId": "e0000020-0000-4000-8000-000000002005",
       "caption": "L4 shoring",
       "takenAt": "2026-10-05T22:35:00Z"
     },
-    { "messageId": "e0000020-0000-4000-8000-000000002006", "takenAt": "2026-10-05T22:35:12Z" }
-  ]
+    {
+      "uploadId": "e0000020-0000-4000-8000-000000002006",
+      "takenAt": "2026-10-05T22:35:12Z"
+    }
+  ],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": []
 }

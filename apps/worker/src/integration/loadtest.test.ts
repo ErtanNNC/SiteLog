@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULTS, formatResult, parseArgs, percentiles, runLoadTest } from './loadtest';
+import {
+  DEFAULTS,
+  DRAFT_TARGET_S,
+  formatResult,
+  parseArgs,
+  percentiles,
+  runLoadTest,
+} from './loadtest';
 
 describe('load test script', () => {
   it('parses options (scale-1 seconds, ranges, DATABASE_URL)', () => {
@@ -44,5 +51,8 @@ describe('load test script', () => {
     expect(r.privacy.phoneLeaksToClaude).toBe(0);
     expect(r.projection.slotSecondsPerReportAtScale1).toBeGreaterThan(10);
     expect(formatResult(r)).toContain('500 reports in 30 min');
+    // §15.1 (W1-12): upload → draft 60 s p50 / 150 s p95.
+    expect(DRAFT_TARGET_S).toEqual({ p50: 60, p95: 150 });
+    expect(formatResult(r)).toContain('target p50 60 / p95 150 (§15.1)');
   }, 90_000);
 });

@@ -1,0 +1,24 @@
+{
+  "id": "answer-en-unclear",
+  "description": "English. Priya Raman (EN · HI → en) answers a headcount question with no number (W2-09): the parse is below 0.7, so the question is asked once more. The answer case fixtures/answers/en-unclear.",
+  "kind": "answer",
+  "audio": null,
+  "mime": "audio/webm;codecs=opus",
+  "site": "Elm St. Townhomes",
+  "reporter": {
+    "locale": "en-US",
+    "languages": ["en", "hi"]
+  },
+  "transcriptionLanguage": "en",
+  "expectedLanguage": "en",
+  "goldenCase": null,
+  "durationS": 3.6,
+  "text": "Hang on, I'll have to check with the foreman later.",
+  "segments": [
+    {
+      "start": 0,
+      "end": 3.3,
+      "text": "Hang on, I'll have to check with the foreman later."
+    }
+  ]
+}

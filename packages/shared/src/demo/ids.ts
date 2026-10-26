@@ -1,3 +1,5 @@
+import { LINK_CODE_ALPHABET } from '../links.ts';
+
 /** Deterministic, valid-looking UUIDs for demo data (FNV-1a based; not for production ids). */
 export function demoId(key: string): string {
   const hex = (seed: number) => {
@@ -25,4 +27,17 @@ export function demoRand(key: string, i = 0): number {
     h = Math.imul(h, 16777619) >>> 0;
   }
   return (h % 10000) / 10000;
+}
+
+/**
+ * A deterministic field-link code for demo data (`/r/{code}`): six characters of
+ * LINK_CODE_ALPHABET (links.ts) from a key, e.g. `demoLinkCode('link:personal:marco')`. The seed
+ * stores only its hash (`linkCodeHash`), as field-api does; the code is in the seeded SMS text.
+ */
+export function demoLinkCode(key: string): string {
+  let out = '';
+  for (let i = 0; out.length < 6; i++) {
+    out += LINK_CODE_ALPHABET[Math.floor(demoRand(`code:${key}`, i) * LINK_CODE_ALPHABET.length)];
+  }
+  return out;
 }

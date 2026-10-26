@@ -1,0 +1,198 @@
+{
+  "id": "call-kartal-2026-10-09-tr",
+  "description": "W4-07 live mode in Turkish: Kartal Konutları — B Blok (Demir Yapı, §18.2) said on a Talk now call by Emre Yıldız (tr-TR), Fri Oct 9. Report language tr, metric. Rain 10:00–11:30 stopped the façade plaster (1,5 saat lost); Usta Beton 5 × 8, Volt Elektrik 3 × 8, the own crew 4 × 6,5 = 12 kişi, 90 saat in code; a 45 m³ pour, a rebar delivery, the toolbox talk, no incidents. Nothing missing on a call, so the call reads back (fixtures/calls/kartal-hero-tr, kartal-fix-tr, kartal-two-sites-tr).",
+  "expectedQuestion": null,
+  "site": {
+    "name": "Kartal Konutları — B Blok",
+    "projectCode": "KK-1203",
+    "timezone": "Europe/Istanbul",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-09",
+  "reportLanguage": "tr",
+  "units": "metric",
+  "reporterLocale": "tr-TR",
+  "channel": "call",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Emre",
+  "companies": [
+    {
+      "id": "d1000000-0000-4000-8000-00000000c001",
+      "name": "Usta Beton",
+      "trade": "Beton",
+      "aliases": []
+    },
+    {
+      "id": "d1000000-0000-4000-8000-00000000c002",
+      "name": "Volt Elektrik",
+      "trade": "Elektrik",
+      "aliases": []
+    },
+    {
+      "id": "d1000000-0000-4000-8000-00000000c003",
+      "name": "Akış Mekanik",
+      "trade": "Mekanik",
+      "aliases": []
+    },
+    {
+      "id": "d1000000-0000-4000-8000-00000000c004",
+      "name": "Demir Yapı öz ekip",
+      "trade": "Genel işçilik",
+      "aliases": [],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    {
+      "heard": "döküm",
+      "official": "Beton dökümü",
+      "kind": "term"
+    },
+    {
+      "heard": "kalıp söktük",
+      "official": "Kalıp sökümü yapıldı",
+      "kind": "term"
+    },
+    {
+      "heard": "demirci ekibi",
+      "official": "Donatı ekibi",
+      "kind": "company"
+    },
+    {
+      "heard": "TBM",
+      "official": "İş güvenliği bilgilendirmesi",
+      "kind": "term"
+    },
+    {
+      "heard": "tool box",
+      "official": "İş güvenliği bilgilendirmesi",
+      "kind": "term"
+    }
+  ],
+  "rejectedMappings": [],
+  "observedWeather": {
+    "date": "2026-10-09",
+    "provider": "Open-Meteo",
+    "fetchedAt": "2026-10-09T15:30:00Z",
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
+    "hours": [
+      {
+        "time": "07:00",
+        "precipIn": 0,
+        "tempF": 57,
+        "windMph": 7,
+        "gustMph": 12
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0.02,
+        "tempF": 58,
+        "windMph": 9,
+        "gustMph": 16
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0.09,
+        "tempF": 58,
+        "windMph": 10,
+        "gustMph": 18
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0.06,
+        "tempF": 59,
+        "windMph": 9,
+        "gustMph": 17
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 63,
+        "windMph": 8,
+        "gustMph": 14
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 64,
+        "windMph": 7,
+        "gustMph": 12
+      },
+      {
+        "time": "17:00",
+        "precipIn": 0,
+        "tempF": 61,
+        "windMph": 6,
+        "gustMph": 10
+      }
+    ],
+    "summary": {
+      "precipIn": 0.17,
+      "tempMinF": 57,
+      "tempMaxF": 64,
+      "windMph": 8,
+      "gustMph": 18,
+      "provider": "Open-Meteo",
+      "precipWorkingHoursIn": 0.17,
+      "maxGustWorkingHoursMph": 18
+    }
+  },
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [],
+  "segments": [
+    {
+      "callId": "c0470000-0000-4000-8000-000000000001",
+      "start": 6,
+      "end": 11.5,
+      "text": "Merhaba, ben Emre, Kartal B Blok için bugünün raporu."
+    },
+    {
+      "callId": "c0470000-0000-4000-8000-000000000001",
+      "start": 11.5,
+      "end": 19,
+      "text": "Sabah saat ondan on bir buçuğa kadar yağmur yağdı, dış cephede sıva durdu, bir buçuk saat kaybettik."
+    },
+    {
+      "callId": "c0470000-0000-4000-8000-000000000001",
+      "start": 19,
+      "end": 27.5,
+      "text": "Usta Beton beş kişiyle bütün gün üçüncü kattaydı, döşeme dökümünü saat ikide bitirdik, yaklaşık kırk beş metreküp."
+    },
+    {
+      "callId": "c0470000-0000-4000-8000-000000000001",
+      "start": 27.5,
+      "end": 33,
+      "text": "Volt Elektrik üç kişi, tam gün, ikinci katta tesisat çekti."
+    },
+    {
+      "callId": "c0470000-0000-4000-8000-000000000001",
+      "start": 33,
+      "end": 40,
+      "text": "Bizim öz ekip dört kişi, altı buçuk saat çalıştı, birinci katta kalıp söktük."
+    },
+    {
+      "callId": "c0470000-0000-4000-8000-000000000001",
+      "start": 40,
+      "end": 46.5,
+      "text": "Öğlen Kaya Demir'den iki tır inşaat demiri geldi."
+    },
+    {
+      "callId": "c0470000-0000-4000-8000-000000000001",
+      "start": 46.5,
+      "end": 52,
+      "text": "Sabah TBM yaptık, iskele güvenliğini konuştuk. Kaza yok."
+    },
+    {
+      "callId": "c0470000-0000-4000-8000-000000000001",
+      "start": 52,
+      "end": 55,
+      "text": "Bu kadar."
+    }
+  ]
+}

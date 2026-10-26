@@ -1,13 +1,17 @@
 {
+  "schemaVersion": 2,
+  "reportDate": "2026-10-07",
+  "reportLanguage": "en",
+  "units": "imperial",
   "languageDetected": ["es"],
   "summary": "Elevator core walls poured by Apex Concrete (approx. 24 yd³), finished at about 13:00. Level 3 electrical conduit approximately 50% complete; Level 2 ductwork continued in the west wing; rebar tying for the Level 4 slab continued. Scaffold for the north elevation delivered at 09:00. Dry all day. Toolbox talk on scaffold and harness safety; no incidents.",
   "weather": {
     "observed": {
-      "precipIn": 0,
-      "tempMinF": 58,
-      "tempMaxF": 71,
-      "windMph": 7,
-      "gustMph": 14,
+      "precip": 0,
+      "tempMin": 58,
+      "tempMax": 71,
+      "wind": 7,
+      "gust": 14,
       "provider": "Open-Meteo"
     },
     "conditionsText": "Dry all day",
@@ -27,8 +31,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "type": "voice_note",
+          "uploadId": "e0000004-0000-4000-8000-000000000401",
           "start": 14.9,
           "end": 21.6
         }
@@ -47,8 +51,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "type": "voice_note",
+          "uploadId": "e0000004-0000-4000-8000-000000000401",
           "start": 21.6,
           "end": 29
         }
@@ -67,8 +71,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "type": "voice_note",
+          "uploadId": "e0000004-0000-4000-8000-000000000401",
           "start": 29,
           "end": 35.2
         }
@@ -87,8 +91,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "type": "voice_note",
+          "uploadId": "e0000004-0000-4000-8000-000000000401",
           "start": 35.2,
           "end": 41.7
         }
@@ -107,8 +111,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "type": "voice_note",
+          "uploadId": "e0000004-0000-4000-8000-000000000401",
           "start": 41.7,
           "end": 48
         }
@@ -120,11 +124,15 @@
       "area": "Elevator core",
       "activity": "Wall pour",
       "status": "complete",
-      "quantity": { "value": 24, "unit": "yd³", "heardAs": "veinticuatro yardas" },
+      "quantity": {
+        "value": 24,
+        "unit": "yd³",
+        "heardAs": "veinticuatro yardas"
+      },
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "type": "voice_note",
+          "uploadId": "e0000004-0000-4000-8000-000000000401",
           "start": 6.8,
           "end": 21.6
         }
@@ -137,8 +145,8 @@
       "percentComplete": 50,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "type": "voice_note",
+          "uploadId": "e0000004-0000-4000-8000-000000000401",
           "start": 21.6,
           "end": 29
         }
@@ -150,8 +158,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "type": "voice_note",
+          "uploadId": "e0000004-0000-4000-8000-000000000401",
           "start": 29,
           "end": 35.2
         }
@@ -163,8 +171,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "type": "voice_note",
+          "uploadId": "e0000004-0000-4000-8000-000000000401",
           "start": 35.2,
           "end": 41.7
         }
@@ -177,8 +185,8 @@
       "time": "09:00",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "type": "voice_note",
+          "uploadId": "e0000004-0000-4000-8000-000000000401",
           "start": 48,
           "end": 55.5
         }
@@ -193,8 +201,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000004-0000-4000-8000-000000000401",
+        "type": "voice_note",
+        "uploadId": "e0000004-0000-4000-8000-000000000401",
         "start": 55.5,
         "end": 62
       }
@@ -206,27 +214,31 @@
       "item": "Erect the scaffold on the north elevation",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "type": "voice_note",
+          "uploadId": "e0000004-0000-4000-8000-000000000401",
           "start": 48,
           "end": 55.5
         }
       ]
     }
   ],
-  "newTerms": [
-    { "heard": "colado", "proposedOfficial": "Concrete pour", "kind": "term", "confidence": 0.85 }
-  ],
-  "missingRequired": [],
-  "lowConfidence": [],
-  "proposedQuestions": [],
-  "schemaVersion": 1,
-  "reportDate": "2026-10-07",
   "photos": [
     {
-      "messageId": "e0000004-0000-4000-8000-000000000405",
+      "uploadId": "e0000004-0000-4000-8000-000000000405",
       "caption": "Muros del elevador",
       "takenAt": "2026-10-07T22:18:40Z"
     }
-  ]
+  ],
+  "newTerms": [
+    {
+      "heard": "colado",
+      "heardLanguage": "es",
+      "proposedOfficial": "Concrete pour",
+      "kind": "term",
+      "confidence": 0.85
+    }
+  ],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": []
 }

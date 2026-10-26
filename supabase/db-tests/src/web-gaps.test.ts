@@ -32,7 +32,7 @@ async function siteIn(org: string, name: string, code: string): Promise<string> 
 async function reporterIn(org: string, name: string, phone: string, role: string) {
   const r = await asService(db, (q) =>
     q<{ id: string }>(
-      `insert into reporters (org_id, name, phone_e164, role, status) values ($1, $2, $3, $4, 'verified') returning id`,
+      `insert into reporters (org_id, name, phone_e164, role, status) values ($1, $2, $3, $4, 'active') returning id`,
       [org, name, phone, role],
     ),
   );

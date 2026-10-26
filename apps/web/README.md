@@ -23,9 +23,8 @@ Root: `pnpm lint`, `pnpm format`, `pnpm check`.
 | `VITE_SUPABASE_URL`      | Supabase project URL. Missing → demo mode.                                                            |
 | `VITE_SUPABASE_ANON_KEY` | Anon key (RLS does the rest; never the service key).                                                  |
 | `VITE_APP_URL`           | Public URL used for the magic-link redirect (`/auth/callback`). Defaults to `window.location.origin`. |
-| `VITE_WA_DISPLAY_NUMBER` | The SiteLog WhatsApp number shown in the sidebar footer (E.164).                                      |
 | `VITE_DEMO`              | `true` → in-memory §18 Kestrel data, no Supabase.                                                     |
-| `VITE_SENTRY_DSN`        | Enables Sentry; the inline error card shows the event id.                                             |
+| `VITE_SENTRY_DSN`        | Enables Sentry: the inline error card and the error boundary report there and show the event id.      |
 
 Copy `../../.env.example` to `.env.local` (Vite reads `.env*` files in this folder).
 
@@ -72,7 +71,13 @@ Server calls used: RPCs `create_org`, `sign_off_report`, `undo_sign_off`, `creat
 
 `src/styles/tokens.css` is Tailwind v4 CSS-first: `@theme` defines every §14.1 colour (core, functional, chip, heatmap ramp), the fonts (Archivo / IBM Plex Mono), radii (chip 4 · btn 6 · card 8) and type sizes; the default Tailwind palette is removed so only tokens can be used (`bg-signal`, `text-dust`, `border-rebar`, `bg-heat-4`…). Utilities: `font-display` (Archivo Expanded 800 via `font-stretch: 125%`), `font-h2`, `eyebrow` (mono, uppercase, 0.08em), `tabular`, `hazard-stripe`. Focus ring: 2 px Asphalt + 2 px offset. Rules: orange is a signal (≈10 % of a screen), borders over shadows, no gradients, no emoji, no left-border accent cards, buttons 44 px (40 px dense), lucide icons 24 px / 2 px stroke.
 
-UI primitives live in `src/components/ui` (shadcn-style, restyled), SiteLog components in `src/components/sitelog` (StatusChip, KpiTile, StreakBar, CalendarMonth, VoicePlayer, SourceLink, TranscriptExcerpt, DataTable, HeatmapGrid, EvidenceChips, PageHeader, EmptyState/ErrorState/NoAccess/OfflineBanner/ReviewReasonsBanner, skeletons). All copy comes from `src/copy/en.ts`.
+UI primitives live in `src/components/ui` (shadcn-style, restyled), TalkOlog components in `src/components/sitelog` (StatusChip, KpiTile, StreakBar, CalendarMonth, VoicePlayer, SourceLink, TranscriptExcerpt, DataTable, HeatmapGrid, EvidenceChips, PageHeader, EmptyState/ErrorState/NoAccess/OfflineBanner/ReviewReasonsBanner, skeletons). All copy comes from `src/copy/en.ts`.
+
+## Languages (D9)
+
+i18next with two namespaces (`src/i18n`): `panel` is `src/copy/en.ts` in English and `UI_RESOURCES.tr.panel` from `@sitelog/shared` in Turkish (keyed by the `en.ts` paths, checked by `src/copy/tr-keys.test.ts`); `common` is the shared UI copy. Components read it through `useCopy().t('path', vars)`, typed from `en.ts` (keys, `{{name}}` variables, `key_one`/`key_other` pairs read with `{ count }`); a key without Turkish falls back to English. The shell, `/login`, `/auth/callback`, the global states and the placeholders speak EN and TR; every other page still imports `copy` and renders in English inside `<EnglishOnly>` (`src/app/routes.tsx`) until a ticket gives it its Turkish.
+
+The language: the viewer's choice (the switch on `/login` and the Language item in the account menu, saved in `localStorage['sitelog.language']` by `rememberLanguage`), else the org's locale once it is known (spec §6.3: `ui_locale` null → org locale; applied by `AuthProvider` before the shell mounts), else, before sign-in, the browser's language when it is EN or TR, else English. Switching keeps the route; `<html lang>` follows. An `<EnglishOnly>` page carries `lang="en"` into what it portals to `<body>` (the UI kit's Dialog, Select, Popover, DropdownMenu and Tooltip contents read `PinnedLanguage`).
 
 ## Tests
 

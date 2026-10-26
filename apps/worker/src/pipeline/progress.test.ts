@@ -1,27 +1,20 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   deadlineInstant,
-  emptyReportData,
-  type DailyReportData,
+  emptyReportDataV1,
+  type DailyReportDataV1,
   type ExtractionOutput,
-  type ManpowerEntry,
+  type ManpowerEntryV1,
   type ReportRow,
 } from '@sitelog/shared';
 import type { MessagesClient } from '../ai/claude';
-import type { ExtractionInput } from '../ai/extract';
 import { contextOf } from '../router/context';
 import { createHarness, scriptedClaude, SITE_RIVERSIDE, type Harness } from '../test/harness';
+import { legacyInput, legacyRecorded } from '../test/legacy-fixtures';
 import { PROGRESS_AFTER_MS, progressSteps } from './progress';
 
-const FIXTURES = join(__dirname, '..', '..', '..', '..', 'fixtures');
-const riversideInput = JSON.parse(
-  readFileSync(join(FIXTURES, 'transcripts', 'riverside-2026-10-09.json'), 'utf8'),
-) as ExtractionInput;
-const riversideOutput = JSON.parse(
-  readFileSync(join(FIXTURES, 'tool-outputs', 'riverside-2026-10-09.json'), 'utf8'),
-) as ExtractionOutput;
+const riversideInput = legacyInput('riverside-2026-10-09');
+const riversideOutput = legacyRecorded('riverside-2026-10-09');
 
 /** The riverside extraction with the Delta headcount answered (5 × 8 h), so the crew is known. */
 function riversideComplete(): ExtractionOutput {
@@ -126,8 +119,8 @@ async function convoContext(h: Harness) {
 
 describe('progress bubble (§F5 step 3)', () => {
   it('lists transcribed · crew · weather delay · checking hours, and only what is known', () => {
-    const draft: DailyReportData = {
-      ...emptyReportData('2026-10-09'),
+    const draft: DailyReportDataV1 = {
+      ...emptyReportDataV1('2026-10-09'),
       manpower: [
         manpower('Apex Concrete', 'd001', 6),
         manpower('Kestrel self-perform', 'd007', 4),
@@ -148,7 +141,7 @@ describe('progress bubble (§F5 step 3)', () => {
       'Checking subcontractor hours…',
     ]);
     // Unknown headcount → no crew line (it would be wrong); no stoppage → no delay line.
-    const partial: DailyReportData = {
+    const partial: DailyReportDataV1 = {
       ...draft,
       manpower: [...draft.manpower, { ...manpower('Summit Drywall', 'd006', 1), workers: null }],
       weather: {
@@ -275,7 +268,7 @@ describe('progress bubble (§F5 step 3)', () => {
   });
 });
 
-function manpower(name: string, idSuffix: string, workers: number): ManpowerEntry {
+function manpower(name: string, idSuffix: string, workers: number): ManpowerEntryV1 {
   return {
     companyId: `00000000-0000-4000-8000-00000000${idSuffix}`,
     companyNameHeard: name,

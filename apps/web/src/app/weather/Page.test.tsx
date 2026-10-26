@@ -1,9 +1,10 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
 import { PACK_START_GRACE_MS } from '@/data/assemble';
 import { DemoStore } from '@/data/demo/store';
+import { i18n } from '@/i18n/i18n';
 import { renderWithProviders } from '@/test/render';
 import WeatherPage from './Page';
 
@@ -81,7 +82,7 @@ function noSites(): DemoStore {
     conversations: [],
     messages: [],
     transcripts: [],
-    unknownSenders: [],
+    unknownContacts: [],
     siteDays: [],
     reports: [],
     versions: [],
@@ -170,7 +171,7 @@ describe('WeatherPage edge cases', () => {
     const history = await screen.findByTestId('pack-history');
     expect(within(history).getAllByTestId('pack-not-started')).toHaveLength(1);
     expect(within(history).getByTestId('pack-not-started')).toHaveTextContent(
-      'Not started after 10 minutes. Evidence packs aren’t being built for your company right now. Contact SiteLog support.',
+      'Not started after 10 minutes. Evidence packs aren’t being built for your company right now. Contact TalkOlog support.',
     );
   });
 
@@ -185,5 +186,89 @@ describe('WeatherPage edge cases', () => {
     expect(within(dialog).getByTestId('pack-summary')).toHaveTextContent(
       'October 2026 only: 3 site-days · 17 h lost',
     );
+  });
+});
+
+// W3-07: Weather & delays on v1.2 — Turkish, call chips, units, spec §19 Q134.
+describe('WeatherPage on v1.2 (W3-07)', () => {
+  it('reads in Turkish: dates, hours in "sa", the chips and the pack dialog', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    try {
+      renderWithProviders(<WeatherPage />, { route: '/weather' });
+      expect(
+        await screen.findByRole('heading', { name: 'Hava durumu ve gecikmeler' }),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId('kpi-hours')).toHaveTextContent('36,5');
+      expect(screen.getByText('ses + fotoğraf + hava verisi')).toBeInTheDocument();
+      const heat = screen.getByRole('table', { name: 'Şantiye ve güne göre duruş saatleri' });
+      expect(
+        within(heat).getByLabelText('Riverside Lofts — Block B, 9 Eki: 3,5 sa kayıp'),
+      ).toHaveTextContent('3,5');
+      const log = screen.getByTestId('delay-log');
+      // Dates in the panel's language; site names in their own (the org's locale).
+      expect(log).toHaveTextContent('CUMA, 9 EKİ · HILLCREST');
+      expect(log).toHaveTextContent('Arama 0:41');
+      expect(within(log).getAllByText('Fotoğraf istendi').length).toBeGreaterThan(0);
+      expect(within(log).getAllByText(/^Sesli not \d+:\d\d$/).length).toBeGreaterThan(0);
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Süre uzatımı kanıt dosyası oluştur' }),
+      );
+      const dialog = await screen.findByRole('dialog');
+      expect(within(dialog).getByTestId('pack-summary')).toHaveTextContent(
+        '3 şantiye günü · 17 sa kayıp',
+      );
+      expect(within(dialog).getByRole('checkbox', { name: 'Döküm alıntıları' })).toBeChecked();
+    } finally {
+      await act(() => i18n.changeLanguage('en'));
+    }
+  });
+
+  it('shows a call second as a Call chip that opens the report’s player there', async () => {
+    const store = new DemoStore();
+    // Hillcrest's Oct 9 rain came in on the R1 call-back (§18.1): its period cites the call.
+    const hillcrest = store.data.sites.find((s) => s.project_code === 'HS-0418')!;
+    const call = store.data.calls.find(
+      (c) => c.site_id === hillcrest.id && c.report_id !== null && c.status === 'completed',
+    )!;
+    renderWithProviders(<WeatherPage />, { route: '/weather', store });
+    const log = await screen.findByTestId('delay-log');
+    const chip = within(log).getByRole('link', { name: /^Open report HS-0418-\d+ at call 0:41$/ });
+    expect(chip).toHaveTextContent('Call 0:41');
+    expect(chip.getAttribute('href')).toBe(`/reports/${call.report_id}?clip=${call.id}&at=41`);
+    const voice = within(log).getAllByRole('link', { name: /at voice note 0:41$/ })[0]!;
+    expect(voice.getAttribute('href')).toMatch(/\?clip=[^&]+&at=41$/);
+  });
+
+  it('counts a day filed without confirmation as claim-ready only once signed off (Q134)', async () => {
+    const store = new DemoStore();
+    const ready = store.data.weatherEvents.find(
+      (w) => w.claim_ready && w.date.startsWith('2026-10'),
+    )!;
+    const report = store.data.reports.find((r) => r.id === ready.report_id)!;
+    report.confirmed_at = null;
+    report.confirmed_via = null;
+    report.review_reasons = ['unconfirmed'];
+    report.status = 'filed';
+    const { unmount } = renderWithProviders(<WeatherPage />, { route: '/weather', store });
+    expect(await screen.findByTestId('kpi-claim-ready')).toHaveTextContent('6 / 10');
+    await userEvent.click(screen.getByRole('button', { name: 'Show more' }));
+    expect(screen.getAllByTestId('awaiting-sign-off')).toHaveLength(1);
+    expect(screen.getByTestId('awaiting-sign-off')).toHaveTextContent(
+      'Not confirmed by the site manager: claim-ready once signed off',
+    );
+    unmount();
+    report.status = 'signed_off';
+    renderWithProviders(<WeatherPage />, { route: '/weather', store });
+    expect(await screen.findByTestId('kpi-claim-ready')).toHaveTextContent('7 / 10');
+    expect(screen.queryByTestId('awaiting-sign-off')).not.toBeInTheDocument();
+  });
+
+  it('shows observed precipitation in the org’s units', async () => {
+    const store = new DemoStore();
+    store.data.org.units = 'metric';
+    renderWithProviders(<WeatherPage />, { route: '/weather', store });
+    const log = await screen.findByTestId('delay-log');
+    expect(within(log).getAllByText(/Observed precip \d+(\.\d)? mm/).length).toBeGreaterThan(0);
+    expect(within(log).queryByText(/\d in\b/)).not.toBeInTheDocument();
   });
 });

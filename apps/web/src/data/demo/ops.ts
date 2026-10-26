@@ -18,6 +18,13 @@ export interface DemoOpsAuditRow {
 const minutesBefore = (now: Date, min: number) =>
   new Date(now.getTime() - min * 60_000).toISOString();
 
+/** The Monday of a date's ISO week (YYYY-MM-DD). */
+function isoMonday(date: string): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  const back = (d.getUTCDay() + 6) % 7;
+  return new Date(d.getTime() - back * 86_400_000).toISOString().slice(0, 10);
+}
+
 export class DemoOps {
   readonly audit: DemoOpsAuditRow[] = [];
   private queue: OpsQueueRow[];
@@ -96,7 +103,38 @@ export class DemoOps {
       queue: this.queue,
       deadJobs: this.deadJobs,
       costOutliers: this.outliers,
+      outboundCalls: this.outboundCalls(),
     });
+  }
+
+  /**
+   * W3-17 (M8): the seeded org's outbound calls per ISO week, as `ops_outbound_call_share()`
+   * counts them: site-days with an outbound reminder or callback, and those filed on such a call.
+   */
+  private outboundCalls(): OpsData['outboundCalls'] {
+    const rows = this.store.rows();
+    const dayOf = new Map(rows.siteDays.map((d) => [d.id, d.date]));
+    const weeks = new Map<string, Map<string, boolean>>();
+    for (const c of rows.calls ?? []) {
+      if (c.direction !== 'outbound' || !c.site_day_id) continue;
+      if (c.purpose !== 'reminder' && c.purpose !== 'callback') continue;
+      const date = dayOf.get(c.site_day_id);
+      if (!date) continue;
+      const week = isoMonday(date);
+      const days = weeks.get(week) ?? new Map<string, boolean>();
+      days.set(c.site_day_id, (days.get(c.site_day_id) ?? false) || c.outcome === 'filed');
+      weeks.set(week, days);
+    }
+    return [...weeks.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([weekStart, days]) => ({
+        orgId: rows.org.id,
+        orgName: rows.org.name,
+        isDemo: rows.org.is_demo,
+        weekStart,
+        callDays: days.size,
+        filedByCall: [...days.values()].filter(Boolean).length,
+      }));
   }
 
   retry(jobId: number, actorId: string): void {

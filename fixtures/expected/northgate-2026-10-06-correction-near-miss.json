@@ -1,13 +1,17 @@
 {
+  "schemaVersion": 2,
+  "reportDate": "2026-10-06",
+  "reportLanguage": "en",
+  "units": "imperial",
   "languageDetected": ["en"],
   "summary": "Stair tower topped out with the last precast pieces set by the Kestrel crew. Apex Concrete formed the Level 3 shear walls; Ironclad Steel built column cages on Level 2. Near miss: a rebar bundle slipped off the telehandler forks onto the deck; no one was beneath it. Toolbox talk on rigging and securing loads held afterwards. Dry and cool; no weather impact.",
   "weather": {
     "observed": {
-      "precipIn": 0,
-      "tempMinF": 49,
-      "tempMaxF": 60,
-      "windMph": 8,
-      "gustMph": 14,
+      "precip": 0,
+      "tempMin": 49,
+      "tempMax": 60,
+      "wind": 8,
+      "gust": 14,
       "provider": "Open-Meteo"
     },
     "conditionsText": "Dry and cool, no impact",
@@ -27,8 +31,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000012-0000-4000-8000-000000001201",
+          "type": "voice_note",
+          "uploadId": "e0000012-0000-4000-8000-000000001201",
           "start": 5.2,
           "end": 12.6
         }
@@ -47,8 +51,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000012-0000-4000-8000-000000001201",
+          "type": "voice_note",
+          "uploadId": "e0000012-0000-4000-8000-000000001201",
           "start": 12.6,
           "end": 19
         }
@@ -67,8 +71,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000012-0000-4000-8000-000000001201",
+          "type": "voice_note",
+          "uploadId": "e0000012-0000-4000-8000-000000001201",
           "start": 19,
           "end": 26
         }
@@ -82,8 +86,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000012-0000-4000-8000-000000001201",
+          "type": "voice_note",
+          "uploadId": "e0000012-0000-4000-8000-000000001201",
           "start": 5.2,
           "end": 12.6
         }
@@ -95,8 +99,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000012-0000-4000-8000-000000001201",
+          "type": "voice_note",
+          "uploadId": "e0000012-0000-4000-8000-000000001201",
           "start": 12.6,
           "end": 19
         }
@@ -108,8 +112,8 @@
       "status": "complete",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000012-0000-4000-8000-000000001201",
+          "type": "voice_note",
+          "uploadId": "e0000012-0000-4000-8000-000000001201",
           "start": 19,
           "end": 26
         }
@@ -123,8 +127,8 @@
       "note": "Rebar bundle slipped off the forks (near miss)",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000012-0000-4000-8000-000000001201",
+          "type": "voice_note",
+          "uploadId": "e0000012-0000-4000-8000-000000001201",
           "start": 26,
           "end": 32.4
         }
@@ -139,8 +143,8 @@
         "severity": "near_miss",
         "source": [
           {
-            "type": "audio",
-            "messageId": "e0000012-0000-4000-8000-000000001201",
+            "type": "voice_note",
+            "uploadId": "e0000012-0000-4000-8000-000000001201",
             "start": 26,
             "end": 32.4
           }
@@ -151,8 +155,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000012-0000-4000-8000-000000001201",
+        "type": "voice_note",
+        "uploadId": "e0000012-0000-4000-8000-000000001201",
         "start": 26,
         "end": 38
       }
@@ -160,13 +164,14 @@
   },
   "issues": [],
   "nextWorkday": [],
+  "photos": [
+    {
+      "uploadId": "e0000012-0000-4000-8000-000000001205",
+      "takenAt": "2026-10-06T22:09:00Z"
+    }
+  ],
   "newTerms": [],
   "missingRequired": [],
   "lowConfidence": [],
-  "proposedQuestions": [],
-  "schemaVersion": 1,
-  "reportDate": "2026-10-06",
-  "photos": [
-    { "messageId": "e0000012-0000-4000-8000-000000001205", "takenAt": "2026-10-06T22:09:00Z" }
-  ]
+  "proposedQuestions": []
 }

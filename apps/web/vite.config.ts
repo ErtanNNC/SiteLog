@@ -22,8 +22,12 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
+    // §19 Q378: the tests run with Turkish on; `*LanguagesFor(false)` covers the deployed builds.
+    env: { VITE_TURKISH: 'true' },
     include: ['src/**/*.test.{ts,tsx}'],
     css: false,
     restoreMocks: true,
+    // Long user-event flows (the setup wizard types a dozen fields) on a loaded CI runner.
+    testTimeout: 20_000,
   },
 });

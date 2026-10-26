@@ -1,21 +1,24 @@
-import { waCopy, type ConversationRow } from '@sitelog/shared';
+import { jobKeys, noticeData, waCopy, type ConversationRow } from '@sitelog/shared';
 import type { Ctx } from '../context';
 import { sendFreeForm } from '../wa/send';
+import {
+  ANSWER_TIMEOUT_MS,
+  CONFIRM_NUDGE_MS,
+  PROCESSING_DELAYED_MS,
+  dueConfirmationStep,
+} from '../pipeline/timeouts';
 import { contextOf } from './context';
 
 /**
- * §7.2 timeouts, run by the 60-second sweep:
+ * §7.2 timeouts of the v1.0 WhatsApp conversations, run by the 60-second sweep (until step 22). The
+ * decisions are the channel-neutral module's (`pipeline/timeouts.ts`, W2-07), which the web
+ * recorder's clock uses too:
  * - awaiting_answer > 60 min → the open question is recorded as unanswered and the draft goes out
  *   (decide_next flags `unanswered:<field>` for the office).
  * - awaiting_confirmation → nudge at +30 min, file at +2 h with `unconfirmed`;
  *   with filing_mode = 'auto_15min' file at +15 min.
  * - processing > 10 min without a draft → "taking a little longer" once.
  */
-export const ANSWER_TIMEOUT_MS = 60 * 60_000;
-export const CONFIRM_NUDGE_MS = 30 * 60_000;
-export const CONFIRM_FILE_MS = 2 * 60 * 60_000;
-export const AUTO_FILE_MS = 15 * 60_000;
-export const PROCESSING_DELAYED_MS = 10 * 60_000;
 
 export interface SweepResult {
   answered: number;
@@ -80,7 +83,8 @@ async function answerTimedOut(ctx: Ctx, convo: ConversationRow): Promise<boolean
   await ctx.db.enqueueJob(
     'decide_next',
     { reportId: c.active_report_id },
-    { dedupeKey: `decide:${c.active_report_id}:timeout:${q?.id ?? 'none'}` },
+    // D16: one per pending question (a later question's timeout is a new occurrence).
+    { dedupeKey: `decide:${c.active_report_id}:timeout:${c.pending_question_id}` },
   );
   return true;
 }
@@ -98,32 +102,23 @@ async function confirmationTimedOut(
   const sentAt = c.draft_sent_at
     ? new Date(c.draft_sent_at).getTime()
     : new Date(convo.state_changed_at).getTime();
-  const sinceDraft = ctx.now().getTime() - sentAt;
-  const auto = settings?.filing_mode === 'auto_15min';
-  if (auto && sinceDraft >= AUTO_FILE_MS) {
+  const step = dueConfirmationStep({
+    shownAt: new Date(sentAt),
+    now: ctx.now(),
+    filingMode: settings?.filing_mode,
+    nudged: c.nudged_for === report.id,
+  });
+  if (step?.kind === 'file') {
     await ctx.db.enqueueJob(
       'file_report',
-      { reportId: report.id, trigger: 'auto' },
-      { dedupeKey: `file:${report.id}` },
+      { reportId: report.id, trigger: step.trigger },
+      // D16: one filing per draft sent (a later draft's timeout is a new occurrence).
+      { dedupeKey: jobKeys.fileReportOn(report.id, report.current_version, `t${sentAt}`) },
     );
     await ctx.db.updateConversation(convo.id, { state: 'processing', context: c });
     return 'filed';
   }
-  if (!auto && sinceDraft >= CONFIRM_FILE_MS) {
-    await ctx.db.enqueueJob(
-      'file_report',
-      { reportId: report.id, trigger: 'timeout' },
-      { dedupeKey: `file:${report.id}` },
-    );
-    await ctx.db.updateConversation(convo.id, { state: 'processing', context: c });
-    return 'filed';
-  }
-  if (
-    !auto &&
-    sinceDraft >= CONFIRM_NUDGE_MS &&
-    c.nudged_for !== report.id &&
-    age >= CONFIRM_NUDGE_MS
-  ) {
+  if (step?.kind === 'nudge' && age >= CONFIRM_NUDGE_MS) {
     await sendFreeForm(ctx, convo, waCopy.draftNudge(), undefined, {
       kind: 'draft_nudge',
       reportId: report.id,
@@ -162,6 +157,8 @@ async function processingDelayed(ctx: Ctx, convo: ConversationRow): Promise<bool
     `${report.report_no} is taking longer than usual`,
     null,
     `/reports/${report.id}`,
+    null,
+    noticeData('processing_delayed', { reportNo: report.report_no }),
   );
   return true;
 }

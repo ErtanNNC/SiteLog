@@ -1,15 +1,22 @@
 /**
- * Every UI string of the web panel (§15 i18n readiness). Components import from here and never
- * hard-code copy. Interpolations are functions so word order can change per language later.
- * Tone: short, lead with the result, no blame, no emoji.
+ * Every UI string of the web panel. Components never hard-code copy. Tone: short, lead with the
+ * result, no blame, no emoji.
+ *
+ * D9: this file is the panel's English and the i18next `panel` EN resource (`src/i18n`). Its Turkish
+ * lives in `@sitelog/shared` (`UI_RESOURCES.tr.panel`), keyed by the paths here. Converted
+ * components read it through `useCopy().t('path')`, so the panel's language applies:
+ * - only plain strings are i18next resources: interpolations there use `{{name}}`, and counted
+ *   phrases are `key_one` / `key_other` pairs read as `t('key', { count })`;
+ * - pages not converted yet still import `copy` and call its functions (they render in English
+ *   under `<EnglishOnly>`, see `src/app/routes.tsx`).
  */
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export const copy = {
   app: {
-    name: 'SiteLog',
-    tagline: "Talk. It's logged.",
+    name: 'TalkOlog',
+    tagline: 'Talk. It’s logged.',
     skipToContent: 'Skip to content',
   },
 
@@ -25,10 +32,15 @@ export const copy = {
     settings: 'Settings',
     billing: 'Billing',
     try: 'Try it on WhatsApp',
+    /** v1.2 `/dev/phone` (§11.1): texts from the `console` SMS driver (§5.2). */
+    devPhone: 'Demo phone',
     badges: {
-      reportsToReview: (n: number) => `${plural(n, 'report')} to review`,
-      unknownSenders: (n: number) => `${plural(n, 'unknown number')}`,
-      termsToReview: (n: number) => `${plural(n, 'term')} to review`,
+      reportsToReview_one: '{{count}} report to review',
+      reportsToReview_other: '{{count}} reports to review',
+      unknownSenders_one: '{{count}} unknown number',
+      unknownSenders_other: '{{count}} unknown numbers',
+      termsToReview_one: '{{count}} term to review',
+      termsToReview_other: '{{count}} terms to review',
     },
     openMenu: 'Open menu',
     closeMenu: 'Close menu',
@@ -38,14 +50,17 @@ export const copy = {
   shell: {
     orgSwitcher: {
       label: 'Switch company',
-      activeSites: (n: number) => `${plural(n, 'active site')}`,
+      activeSites_one: '{{count}} active site',
+      activeSites_other: '{{count}} active sites',
       currentOrg: 'Current company',
       otherOrgs: 'Your companies',
     },
     search: {
-      placeholder: 'Search reports, sites, companies, transcripts…',
+      /** Web-Overview artboard, verbatim. */
+      placeholder: 'Search reports, sites, subcontractors',
       label: 'Search',
-      noResults: (q: string) => `Nothing found for “${q}”.`,
+      clear: 'Clear search',
+      noResults: 'Nothing found for “{{query}}”.',
       hint: 'Type at least 2 characters',
       groups: {
         report: 'Reports',
@@ -58,14 +73,151 @@ export const copy = {
     },
     notifications: {
       label: 'Notifications',
-      unread: (n: number) => `${plural(n, 'unread notification')}`,
+      /** Joined to `label` as "Notifications, 3 new" (Web-Overview artboard). */
+      unread_one: '{{count}} new',
+      unread_other: '{{count}} new',
       title: 'Notifications',
       empty: 'Nothing new. Reports and alerts will show up here.',
       markAllRead: 'Mark all read',
-      showing: (n: number) => `Last ${n}`,
+      /**
+       * A notice's wording by its data key (`notifications.data`, packages/shared notifications.ts
+       * `noticeDataSchema`), in the reader's language. A key without `body` shows the stored body
+       * (a change note, a heard snippet, terms, a provider's error). Rows without data show their
+       * stored English title and body.
+       */
+      notices: {
+        late_upload: {
+          titleAudio: '{{site}} — late voice note for {{date}}',
+          titlePhoto: '{{site}} — late photo for {{date}}',
+          body: '{{reporter}} recorded it on that day, and it arrived after the day’s reporting window had closed. It is on report {{reportNo}}, marked late.',
+          bodyUnnamed:
+            'The site manager recorded it on that day, and it arrived after the day’s reporting window had closed. It is on report {{reportNo}}, marked late.',
+        },
+        missing_report: {
+          title: '{{site}} — no report',
+          body: '{{first}} hasn’t sent today’s report, and the deadline has passed.',
+          bodyUnnamed: 'The site manager hasn’t sent today’s report, and the deadline has passed.',
+          bodyReminders_one: '{{first}} didn’t answer {{count}} reminder.',
+          bodyReminders_other: '{{first}} didn’t answer {{count}} reminders.',
+        },
+        report_edited: { title: '{{reportNo}} was edited after sign-off' },
+        needs_review: { title: '{{reportNo}} needs review' },
+        glossary_review: {
+          title_one: '{{count}} new term to review',
+          title_other: '{{count}} new terms to review',
+        },
+        pack_ready: {
+          title: 'EOT evidence pack ready: {{site}}',
+          titleAllSites: 'EOT evidence pack ready: all sites',
+          body: '{{from}} – {{to}}',
+        },
+        processing_delayed: { title: '{{reportNo}} is taking longer than usual' },
+        processing_failed: {
+          title: '{{reportNo}}: processing stopped',
+          body: 'TalkOlog tried {{tries}} times over about three hours and has stopped ({{job}}). The reporter may be waiting for their draft. TalkOlog has been alerted; open the report to check its sources.',
+        },
+        message_not_sent: {
+          title: '{{name}}: a message to them was not sent',
+          body: 'TalkOlog tried {{tries}} times over about three hours and has stopped ({{job}}). They may be waiting for an answer; contact them directly if it matters today. TalkOlog has been alerted.',
+        },
+        message_not_handled: {
+          title: '{{name}}: a message from them was not handled',
+          body: 'TalkOlog tried {{tries}} times over about three hours and has stopped ({{job}}). They may be waiting for an answer; contact them directly if it matters today. TalkOlog has been alerted.',
+        },
+        message_opted_out: {
+          title: '{{name}}: a message to them was not sent',
+          body: 'Their number is on the SMS provider’s opt-out list, so TalkOlog texts them nothing until they reply START.',
+        },
+        message_refused: {
+          title: '{{name}}: a message to them was not sent',
+          body: 'The SMS provider refused their number ({{error}}). Check the number in Team & numbers.',
+        },
+        message_channels_failed: {
+          title: '{{name}}: a message to them was not sent',
+          body: 'TalkOlog tried every message channel it has for them ({{channels}}) and none could deliver the message ({{error}}). Check their number and channels in Team & numbers.',
+        },
+        message_account_fault: {
+          title: '{{name}}: a text to them failed at the SMS provider',
+          titleUnnamed: 'A text failed at the SMS provider',
+          body: 'Texts are failing for this account ({{error}}). The SMS provider accepted the text and then refused it for the account or the sender, not for the reporter’s number. TalkOlog tries their other message channels, if they have any. Other texts that fail this way in the next hour are not notified again.',
+        },
+        message_no_sender: {
+          title: '{{name}}: a message to them was not sent',
+          body: 'No SMS or WhatsApp sender is set for this organisation’s country in this environment, so the message reached no phone.',
+        },
+        welcome_undeliverable: { title: '{{name}}: the welcome text could not be delivered' },
+        welcome_provider_fault: {
+          title: '{{name}}: the welcome text failed at the SMS provider',
+          body: 'Texts are failing for this account ({{error}}). TalkOlog has been alerted; the reporter was not marked as invited. Re-send the welcome from Team & numbers once the provider is back.',
+        },
+        welcome_not_sent: {
+          title: '{{name}}: the welcome text was not sent',
+          bodies: {
+            opted_out:
+              'They opted out of texts, so TalkOlog texts them nothing until they opt in again (START, on packs that take replies).',
+            no_consent:
+              'They declined messages when asked for consent, so TalkOlog sends them nothing by text or WhatsApp.',
+            no_channel:
+              'No message channel of their country can carry the welcome and its link. Contact them another way.',
+            console_real_org:
+              'Messages to this country are not live in this environment yet: no SMS or WhatsApp sender is set for its country pack, so the reporter got nothing. Once a sender is set, re-send the welcome from Team & numbers.',
+          },
+        },
+        welcome_carrier_undelivered: {
+          title: '{{name}}: the welcome text could not be delivered',
+          body: 'The carrier could not deliver the welcome text ({{error}}): the number may be a landline, blocked or out of service. Check it on Team & numbers, or contact them another way.',
+        },
+        welcome_account_fault: {
+          title: '{{name}}: the welcome text failed at the SMS provider',
+          titleUnnamed: 'A welcome text failed at the SMS provider',
+          body: 'Texts are failing for this account ({{error}}). The SMS provider accepted the welcome text and then refused it for the account or the sender, not for the reporter’s number. Re-send the welcome from Team & numbers once the provider account is fixed. Other texts that fail this way in the next hour are not notified again.',
+        },
+        reporter_opted_out: {
+          title: '{{name}} opted out of texts',
+          body: '{{phone}} is on the SMS provider’s opt-out list (they replied STOP to this sender before), so TalkOlog texts them nothing until they reply START. Call them if you need their reports.',
+        },
+        reporter_stop: {
+          title: '{{name}} opted out of texts (STOP)',
+          body: '{{phone}} replied STOP, so TalkOlog texts them nothing until they reply START. Call them if you need their reports.',
+        },
+        unknown_contact: { title: 'Unknown number tried to report' },
+        reporter_consent_revoked: {
+          titles: {
+            recording: '{{name}} turned off consent to the recording of their reports',
+            data_processing: '{{name}} turned off consent to the processing of their reports',
+          },
+          body: 'They turned it off in Settings on their phone, so TalkOlog takes no reports from them until they consent again on their phone. Contact them if that is unexpected.',
+        },
+        device_verify_locked: {
+          title: '{{name}}’s phone check is locked for an hour',
+          body: 'Someone entered 5 wrong codes on their link within an hour, so TalkOlog refuses new codes for an hour. If it was not them, their link may be in the wrong hands: contact them.',
+        },
+        reporter_wrong_site: {
+          title: '{{name}} says the site is wrong',
+          body: 'Check the site assignment on the Team page.',
+        },
+        payment_failed: {
+          title: 'Payment failed',
+          body: 'Stripe could not charge your card. Update the payment method in Billing to keep reports and reminders flowing.',
+        },
+        subscription_canceled: {
+          title: 'Subscription canceled',
+          body: 'Reminders and new site-days stop until the subscription is restarted from Billing.',
+        },
+        late_report: {
+          title: '{{site}} — late report in',
+          body: '{{reportNo}} · {{crew}} on site · {{hours}}',
+        },
+        invoice_gap: {
+          title: 'Invoice gap: {{company}} {{sign}}{{gap}}',
+          body: '{{invoiceNo}} invoices {{invoiced}} · reports show {{reported}}',
+        },
+      },
     },
     footer: {
-      listening: 'Agent listening on WhatsApp',
+      /** §11.2: the status line, then the org's TalkOlog number(s) when it has one. */
+      agentReady: 'Agent ready · texts & calls',
+      sitelogNumbers: 'TalkOlog numbers',
       profile: 'Profile',
       signOut: 'Sign out',
       userMenu: 'Account menu',
@@ -144,12 +296,31 @@ export const copy = {
     unsavedChanges: 'You have unsaved changes. Leave without saving?',
     perMonth: '/ month',
     noSetupFee: 'no setup fee',
-    pricePerSite: '$399 / site / month',
     hours: (n: string) => `${n} h`,
     chooseFile: 'Choose file',
     noFile: 'No file chosen',
     emailInvalid: 'Enter a valid email.',
     demoOnly: 'Demo mode: simulated in memory.',
+  },
+
+  /**
+   * §11.3 `ChannelIcon` (W1-16): how a site reports. The visible label is short; the screen reader
+   * hears what it means (spec: "Reported by text link" / "Reported by call").
+   */
+  channel: {
+    link: 'Link',
+    call: 'Call',
+    office: 'Typed',
+    reported: {
+      link: 'Reported by text link',
+      call: 'Reported by call',
+      office: 'Typed in the panel',
+    },
+    prefers: {
+      link: 'Reports by text link',
+      call: 'Reports by call',
+      office: 'Typed in the panel',
+    },
   },
 
   chips: {
@@ -163,6 +334,7 @@ export const copy = {
     pending: 'Awaiting',
     late: 'Late',
     lateAt: (time: string) => `Late ${time}`,
+    lateAtTime: 'Late {{time}}',
     paused: 'Paused',
     active: 'Active',
     archived: 'Archived',
@@ -171,9 +343,9 @@ export const copy = {
     edited: (v: number) => `Edited v${v}`,
     asked: (time: string) => `Asked ${time}`,
     confirmedByReply: 'Confirmed by reply',
-    verified: 'Verified',
     inviteSent: 'Invite sent',
-    notOnWhatsApp: 'Not on WhatsApp',
+    /** §11 "Opted out of texts": a STOP, or the SMS provider's own opt-out list (Twilio 21610). */
+    optedOut: 'Opted out of texts',
     disabled: 'Disabled',
     open: 'Open',
     queried: 'Queried',
@@ -190,6 +362,7 @@ export const copy = {
     inDelayLog: (hours: string) => `In delay log · ${hours}`,
   },
 
+  /** P4 streak bar (W1-18: read through `t()`, Turkish in `UI_RESOURCES.tr.panel.streak`). */
   streak: {
     legend: {
       on_time: 'On time',
@@ -198,26 +371,43 @@ export const copy = {
       missing: 'Missing',
       pending: 'Pending',
     },
-    summary: (onTime: number, total: number) => `${onTime} of ${total} on time`,
-    cellLabel: (date: string, status: string) => `${date}: ${status}`,
-    lastWorkdays: (n: number, onTime: number) => `Last ${n} workdays · ${onTime} on time`,
+    summary: '{{onTime}} of {{total}} on time',
+    cellLabel: '{{date}}: {{status}}',
   },
 
+  /** P5 calendar (W1-18). Weekday and month names come from `@sitelog/shared/format.ts`. */
   calendar: {
-    weekdays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
     previousMonth: 'Previous month',
     nextMonth: 'Next month',
     weekend: 'Weekend',
     today: 'Today',
     noReport: 'No report',
-    crew: (n: number) => `${n} crew`,
-    openReport: (date: string) => `Open report for ${date}`,
+    crew: '{{count}} crew',
+    /** The unit after a day's crew count (Web-Site: "22 crew"); hidden on narrow cells. */
+    crewUnit: 'crew',
+    late: 'Late',
+    openReport: 'Open report for {{date}}',
     weatherAffected: 'Weather affected',
+    /** Web-Site, verbatim. */
+    legend: 'Weekends greyed · tap a day to open its report · cloud = weather delay logged',
+    /** P5 "channel dot per day": how that day's report came in. */
+    channel: {
+      link: 'Text link',
+      call: 'Call',
+      office: 'Typed',
+    },
+    channelLegend: 'How each report came in',
   },
 
+  /** P9 / F20 evidence chips (W3-07): *Voice note ts* or *Call ts* · Photos n · Weather data. */
   evidence: {
-    audio: (ts: string) => `Audio ${ts}`,
-    photos: (n: number) => `${plural(n, 'photo')}`,
+    voiceNote: 'Voice note {{ts}}',
+    call: 'Call {{ts}}',
+    /** The chip opens the report's player at that second (P7). */
+    openVoiceNote: 'Open report {{no}} at voice note {{ts}}',
+    openCall: 'Open report {{no}} at call {{ts}}',
+    photos_one: '{{count}} photo',
+    photos_other: '{{count}} photos',
     weatherData: 'Weather data',
     photoRequested: 'Photo requested',
     photoMissing: 'No photo',
@@ -229,21 +419,58 @@ export const copy = {
   source: {
     audio: (ts: string) => `audio ${ts}`,
     reply: (time: string) => `reply ${time}`,
-    text: (time: string) => `text ${time}`,
+    call: (ts: string) => `call ${ts}`,
     editedBy: (name: string) => `edited by ${name}`,
     weatherApi: 'weather data',
     seekTo: (ts: string) => `Play voice note from ${ts}`,
     openMessage: 'Open message',
     openHistory: 'Open version history',
+    /** §11.3 `SourceLink` (P7): "audio 0:41" · "call 2:15" · "answer 17:41" · "edited by Lena". */
+    links: {
+      audio: 'audio {{ts}}',
+      call: 'call {{ts}}',
+      answer: 'answer {{time}}',
+      reply: 'reply {{time}}',
+      editedBy: 'edited by {{name}}',
+      editedByOffice: 'edited by the office',
+      /** Spec §19 Q80 (W2-10): the reporter changed the value on the phone (a stepper, typed). */
+      reporterEdit: 'changed on the phone {{time}}',
+      weather: 'weather data',
+      playVoiceNote: 'Play voice note from {{ts}}',
+      playCall: 'Play call from {{ts}}',
+      showAnswer: 'Show the answer in Activity',
+      /** §19 Q93 (W3-05): an answer said on the recorder plays its clip from the answer. */
+      playAnswer: 'Play the spoken answer and show it in Activity',
+      openHistory: 'Open version history',
+    },
   },
 
+  /** §11.3 `MediaPlayer`: a voice note or a call recording. */
   player: {
     play: 'Play voice note',
     pause: 'Pause voice note',
+    playCall: 'Play call recording',
+    pauseCall: 'Pause call recording',
     label: 'Voice note',
-    languages: (from: string, to: string) => `${from} → ${to}`,
+    labelCall: 'Call recording',
+    languages: '{{from}} → {{to}}',
     noAudio: 'Audio not available',
     demoAudio: 'Demo playback (silent)',
+    /** W3-05: the demo's synthetic call recordings. */
+    demoTones: 'Demo recording: tones, no speech',
+    speed: 'Playback speed',
+    speedValue: '{{rate}}×',
+    /** §11.3 (W3-05): a call's two lanes and the speaker filter. */
+    laneReporter: 'Site manager',
+    laneAgent: 'TalkOlog assistant',
+    speakerFilter: 'Speaker',
+    filter: {
+      both: 'Both',
+      reporter: 'Site manager',
+      agent: 'Assistant',
+    },
+    /** §19 Q93: a spoken answer's clip in Activity. */
+    answerClip: 'Spoken answer',
   },
 
   table: {
@@ -254,17 +481,17 @@ export const copy = {
 
   states: {
     loading: (thing: string) => `Loading ${thing}…`,
-    error: (thing: string) => `Couldn’t load ${thing}.`,
-    errorId: (id: string) => `Error id ${id}`,
+    error: 'Couldn’t load {{thing}}.',
+    errorId: 'Error ID {{id}}',
     retry: 'Retry',
     noAccessTitle: 'No access',
-    noAccess: (page: string) => `You don’t have access to ${page}. Ask an admin.`,
+    noAccess: 'You don’t have access to {{page}}. Ask an admin.',
     goToHours: 'Go to crew hours',
     goHome: 'Go to overview',
     notFoundTitle: 'Page not found',
     notFound: 'That page doesn’t exist, or the link was mistyped.',
     comingNextTitle: 'Coming next',
-    comingNext: 'This page is being built. The shell, data layer and navigation already work.',
+    comingNext: 'This page is being built and will be ready soon.',
     offline: 'You’re offline — changes will retry.',
     reviewReasons: {
       title: (n: number) => `${plural(n, 'reason')} to review`,
@@ -280,16 +507,16 @@ export const copy = {
   },
 
   login: {
-    eyebrow: 'Office sign-in',
+    /** P1 and the Web-Login artboard. */
     headline: 'End-of-day reports, spoken in three minutes.',
-    bullets: [
-      'Site managers send a WhatsApp voice note. No app, no login.',
-      'Crew, hours, weather and progress are extracted and checked, not guessed.',
-      'A paper-ready PDF is filed and emailed — every number traces back to the second of audio.',
-    ],
-    tagline: "Talk. It's logged.",
-    title: 'Sign in',
-    subtitle: 'We’ll email you a link. No passwords.',
+    bullets: {
+      link: 'Site managers tap a text link or take a call — nothing to install.',
+      pdf: 'A formatted PDF daily report lands here, ready to file.',
+      trace: 'Sub hours and weather delays, each traceable to the recording.',
+    },
+    tagline: 'Talk. It’s logged.',
+    title: 'Sign in to the office panel',
+    subtitle: 'We’ll email you a one-time link. No password to remember.',
     emailLabel: 'Work email',
     emailPlaceholder: 'you@company.com',
     emailInvalid: 'Enter a valid work email.',
@@ -298,36 +525,136 @@ export const copy = {
     or: 'or',
     sso: 'Continue with company SSO',
     ssoSoon: 'Coming soon',
-    managersNote: 'Site managers don’t sign in. They report by WhatsApp.',
+    managersNoteLead: 'Site managers don’t sign in.',
+    managersNote: 'They report by text link or phone call.',
     footer: 'New here?',
     footerCta: 'Set up your company',
     footerSuffix: '— no setup fee.',
     sentTitle: 'Check your inbox',
-    sent: (email: string) => `We sent a sign-in link to ${email}. It’s valid for 1 hour.`,
+    sent: 'We sent a sign-in link to {{email}}. It’s valid for 1 hour.',
     resend: 'Resend link',
-    resendIn: (s: number) => `Resend in ${s} s`,
+    resendIn: 'Resend in {{seconds}} s',
     useAnother: 'Use a different email',
     expired: 'That link has expired. Request a new one below.',
     authError: 'Sign-in didn’t work. Try again.',
+    rateLimited: 'Too many sign-in emails. Wait a minute and try again.',
     demoHint: 'Demo mode: any email signs you in as Lena Ortiz (admin).',
-    demoHintAs: (name: string) => `Demo mode: you’ll sign in as ${name}.`,
+    demoHintAs: 'Demo mode: you’ll sign in as {{name}}.',
     callbackTitle: 'Signing you in…',
     callbackBody: 'One moment while we check your link.',
     accountThing: 'your companies',
     signOut: 'Sign out',
   },
 
+  /** The error boundary around the whole panel (`src/app/AppErrorBoundary.tsx`). */
+  errorBoundary: {
+    title: 'Something went wrong',
+    body: 'TalkOlog hit an unexpected error. Try again, or sign out and sign back in.',
+    retry: 'Try again',
+    signOut: 'Sign out',
+    reported: 'The TalkOlog team has been told about it.',
+    errorId: 'Error ID {{id}}',
+  },
+
+  /**
+   * `/dev/phone` · Demo phone (§11.1, W1-08): the texts of the `console` SMS driver, one thread
+   * per reporter, and the emails of the console email provider.
+   */
+  devPhone: {
+    subtitle: 'Every text TalkOlog sends through the console driver, one thread per reporter.',
+    tabsLabel: 'Demo phone views',
+    tabTexts: 'Texts',
+    tabEmail: 'Email',
+    reportersLabel: 'Reporters',
+    textsCount_one: '{{count}} text',
+    textsCount_other: '{{count}} texts',
+    noTexts: 'No texts yet',
+    pickReporter: 'Pick a reporter to see their texts.',
+    back: 'All reporters',
+    threadLabel: 'Texts with {{name}}',
+    threadEmpty: 'No texts with {{name}} yet.',
+    fromTalkOlog: 'TalkOlog',
+    opensInNewTab: '(opens in a new tab)',
+    copyKey: 'Message',
+    /** W2-14: the channel of each message (a push to the installed app, or a text). */
+    channelLabel: 'Channel',
+    channels: {
+      sms: 'Text',
+      push: 'Push notification',
+      whatsapp: 'WhatsApp',
+      /** W3-17: a demo org's outbound call rings here (console telephony, spec §19 Q132). */
+      call: 'Call',
+    },
+    /** W3-17: what an outbound call of TalkOlog's did on the Demo phone. */
+    call: {
+      ringing: 'TalkOlog is calling: ringing',
+      answered: 'On a call with TalkOlog',
+      ended: 'Call with TalkOlog ended',
+      missed: 'Missed call from TalkOlog',
+      busy: 'Call from TalkOlog: busy',
+      voicemail: 'Call from TalkOlog reached voicemail: no message left',
+      failed: 'Call from TalkOlog could not be placed',
+    },
+    callPurpose: {
+      reminder: 'Reminder call',
+      callback: 'Callback',
+      daily_report: 'Call from the office',
+    },
+    statusLabel: 'Status',
+    status: {
+      queued: 'Sending',
+      sent: 'Sent',
+      delivered: 'Delivered',
+      read: 'Read',
+      received: 'Received',
+      failed: 'Failed',
+      undeliverable: 'Not delivered',
+    },
+    replyLabel: 'Reply as {{name}}',
+    /** W2-16: a WhatsApp reply (the pack lists WhatsApp). */
+    replyLabelWhatsapp: 'Reply on WhatsApp as {{name}}',
+    replyChannel: 'Reply by',
+    replyPlaceholder: 'Type a text, e.g. HELP or STOP',
+    send: 'Send',
+    replyFailed: 'The reply was not sent.',
+    oneWay:
+      'Replies are off: the {{code}} country pack has one-way SMS, so a reporter cannot text TalkOlog.',
+    oneWayWhatsapp:
+      'The {{code}} country pack has one-way SMS: a reporter replies to TalkOlog on WhatsApp.',
+    maskedNote: 'This is not a demo organisation: link codes are masked and nothing can be typed.',
+    notDemoTitle: 'The Demo phone is for demo organisations',
+    notDemoBody:
+      'This organisation’s texts go to real phones. Switch to a demo organisation to use the Demo phone.',
+    emptyTitle: 'No reporters yet',
+    emptyBody: 'Invite a reporter on Team & numbers: the welcome text appears here.',
+    emailLabel: 'Emails',
+    emailEmpty:
+      'No emails yet. While the worker uses the console email provider, every email it would send appears here.',
+    emailTo: 'To {{to}}',
+    attachments: 'Attachments',
+    attachmentSize: '{{name}} · {{size}} KB',
+    thing: 'the Demo phone',
+    threadThing: 'the texts',
+    emailThing: 'the emails',
+  },
+
+  /**
+   * P3 Overview and the Web-Overview artboard (W1-16): plain strings for `t()` (EN and TR), so the
+   * page speaks the panel's language. `noSites`, `noSitesAskAdmin` and `connectFirstSite` are also
+   * read by Sites, Reports and Settings.
+   */
   overview: {
-    title: (n: number) => `Today across ${plural(n, 'site')}`,
+    title_one: 'Today across {{count}} site',
+    title_other: 'Today across {{count}} sites',
     pdfs: 'Today’s PDFs',
     pdfsDemo: 'Demo mode: PDFs are rendered by the worker from each filed report.',
     pdfsNone: 'No PDFs yet today.',
+    kpisLabel: 'Today in numbers',
     kpis: {
       reportsIn: 'Reports in',
       crew: 'Crew on site',
       crewUnit: 'workers',
       hours: 'Labor hours logged',
-      hoursUnit: 'h',
       weather: 'Weather-affected sites',
       weatherLink: 'Added to delay log',
       segments: {
@@ -338,28 +665,32 @@ export const copy = {
       },
     },
     sitesToday: 'Sites today',
+    allSites: 'All sites',
     columns: {
       site: 'Site',
       status: 'Status',
+      channel: 'Channel',
       inAt: 'In at',
       crew: 'Crew',
       hours: 'Hours',
       weather: 'Weather',
     },
     weatherNone: 'Dry, no impact',
-    lostHours: (h: string) => `${h} lost`,
+    weatherFrom: 'from {{time}}',
+    lostHours: '{{hours}} lost',
+    remindersSent_one: '{{count}} reminder sent',
+    remindersSent_other: '{{count}} reminders sent',
     needsAttention: 'Needs attention',
     allClear: 'All clear',
     allClearBody: 'Every site has reported and nothing is waiting on you.',
     nothingYet: 'Nothing needs you yet',
-    nothingYetBody: (awaiting: number) => `${plural(awaiting, 'site')} still to report today.`,
-    emptyBeforeReports: (deadline: string, r1: string) =>
-      `Reports usually arrive after ${deadline}. Reminders go out at ${r1}.`,
-    emptyBeforeReportsNoReminders: (deadline: string) =>
-      `Reports usually arrive after ${deadline}.`,
-    emptyNoReporter: 'No site manager reports by WhatsApp yet',
+    nothingYetBody_one: '{{count}} site still to report today.',
+    nothingYetBody_other: '{{count}} sites still to report today.',
+    emptyBeforeReports: 'Reports usually arrive after {{deadline}}. Reminders go out at {{r1}}.',
+    emptyBeforeReportsNoReminders: 'Reports usually arrive after {{deadline}}.',
+    emptyNoReporter: 'No site manager reports yet',
     emptyNoReporterBody:
-      'Type today’s report in the panel until a site manager is linked to report by WhatsApp.',
+      'Type today’s report in the panel until a site manager is invited to report by text link or call.',
     noSitesTitle: 'No sites yet',
     noSites: 'Connect your first site, then file its daily reports from Reports → New report.',
     noSitesAskAdmin: 'An admin connects sites. Ask an admin to connect the first one.',
@@ -369,68 +700,152 @@ export const copy = {
     allPausedAskAdmin:
       'An admin resumes sites. Ask an admin to resume one and daily reports start again.',
     openSites: 'Open sites',
+    /** D29: a demo organisation's texts all land on the Demo phone (§4.5, §11.1). */
+    demoPhoneCard: {
+      eyebrow: 'Demo',
+      title: 'Every text lands on the Demo phone',
+      body: 'This is a demo organisation: welcome texts, today’s links and reminders go to the Demo phone, not to real phones. Open a link there to report as a site manager, then come back and watch this page update.',
+      cta: 'Open the Demo phone',
+    },
     attention: {
+      /** The kind tag on each card (Web-Overview: MISSING · NEEDS REVIEW · INVOICE CHECK). */
+      labels: {
+        missing: 'Missing',
+        needs_review: 'Needs review',
+        invoice_gap: 'Invoice check',
+        unknown_contact: 'Unknown contact',
+        glossary_review: 'Glossary',
+        undeliverable: 'Not delivered',
+      },
       missing: {
-        title: (site: string) => `${site} — no report`,
-        body: (first: string, reminders: number) =>
-          `${first} didn’t answer ${plural(reminders, 'reminder')}.`,
-        call: (first: string) => `Call ${first}`,
+        title: '{{site}} — no report',
+        body_one: '{{first}} didn’t answer {{count}} reminder.',
+        body_other: '{{first}} didn’t answer {{count}} reminders.',
+        bodyNoReminders: 'No report from {{first}} by the deadline.',
+        /** Web-Overview: the §19 Q55 `missing_report` notice of that day. */
+        alerted: 'Office alerted at {{time}}.',
+        call: 'Call {{first}}',
+        textLink: 'Text today’s link',
         markNoWork: 'Mark no work',
       },
       needs_review: {
-        title: (site: string) => `${site} needs review`,
-        unknownCompany: (name: string, workers: number) =>
-          `Unknown subcontractor “${name}” · ${plural(workers, 'worker')}`,
+        title: '{{site}} needs review',
+        titleUnknownCompany: '{{site}} — unknown sub “{{name}}”',
+        unknownCompany_one: '{{count}} worker mentioned, not in your subcontractor list.',
+        unknownCompany_other: '{{count}} workers mentioned, not in your subcontractor list.',
         review: 'Review report',
       },
+      /** reports.review_reasons (§10.5, §10.9) as the Overview lists them. */
+      reasons: {
+        unknown_company: 'Unknown subcontractor “{{name}}”',
+        low_confidence: 'Low confidence: {{field}}',
+        unanswered: 'Unanswered question: {{field}}',
+        unconfirmed: 'Filed without confirmation from the site manager',
+        missing: 'Missing: {{field}}',
+        no_photo: 'No photo arrived after the call',
+        call_mismatch: 'The call recording differs from the confirmed report: {{field}}',
+        /** §19 Q123, Q153 (W3-11): the post-call reconcile could not run. */
+        call_unreconciled: 'The call recording could not be checked against the report',
+        other: '{{reason}}',
+      },
       invoice_gap: {
-        title: (company: string, gap: string) => `Invoice gap: ${company} ${gap}`,
-        body: (no: string, invoiced: string, reported: string) =>
-          `${no} invoices ${invoiced} · reports show ${reported}`,
+        title: '{{company}}: {{invoiced}} billed',
+        bodyOver: 'Daily reports this week show {{reported}} — {{gap}} gap.',
+        bodyUnder: 'Daily reports this week show {{reported}} — {{gap}} more than billed.',
         compare: 'Compare hours',
       },
-      unknown_sender: {
-        title: 'Unknown number tried to report',
-        body: (phone: string, snippet: string) => `${phone} · “${snippet}”`,
+      unknown_contact: {
+        titleCall: 'Unknown caller',
+        titleText: 'Unknown number texted',
+        titleWhatsapp: 'Unknown number tried to report',
+        body: '{{phone}} · “{{snippet}}”',
+        bodyNoSnippet: '{{phone}}',
         link: 'Link number',
       },
       glossary_review: {
-        title: (n: number) => `${plural(n, 'glossary term')} to review`,
-        body: (terms: string[]) => terms.map((t) => `“${t}”`).join(', '),
+        title_one: '{{count}} glossary term to review',
+        title_other: '{{count}} glossary terms to review',
+        body: '{{terms}}',
         review: 'Review terms',
+      },
+      undeliverable: {
+        title: 'Text to {{name}} not delivered',
+        body: 'The text sent at {{time}} did not reach their phone.',
+        call: 'Call {{first}}',
+        checkNumber: 'Check the number',
+      },
+    },
+    textLink: {
+      sent: 'Today’s link texted to {{first}}.',
+      notSent: {
+        no_consent: '{{first}} has not agreed to texts, so nothing was sent.',
+        opted_out: '{{first}} opted out of texts, so nothing was sent.',
+        no_channel: 'No message channel can reach {{first}}, so nothing was sent.',
+        console_real_org:
+          'Texts are not live for this organisation’s country yet, so nothing reached {{first}}.',
+      },
+      /** api-text-daily-link's 409 `details.code`: the site has no one to text. */
+      failed: {
+        no_reporter: 'No site manager is linked to this site. Add one on Team & numbers.',
+        no_active_reporter:
+          'No active site manager on this site: the linked ones are disabled, opted out or have not accepted their invite yet.',
+        /** W4-03: Team's row menu names the reporter. */
+        reporter_not_linked: 'This reporter is no longer linked to that site.',
+        reporter_not_active:
+          'This reporter is not active yet: disabled, opted out of texts or still to accept the invite.',
       },
     },
     markNoWorkDialog: {
-      title: (site: string) => `Mark no work at ${site}?`,
-      body: (date: string) =>
-        `${date} will be recorded as a day with no work. The site manager can still send a late report, which replaces this.`,
+      title: 'Mark no work at {{site}}?',
+      body: '{{date}} will be recorded as a day with no work. The site manager can still send a late report, which replaces this.',
       confirm: 'Mark no work',
-      done: (site: string) => `${site} marked as no work.`,
+      done: '{{site}} marked as no work.',
     },
     liveUpdates: 'Live updates on',
   },
 
+  /** P4 Sites (W1-18): read through `t()`, Turkish in `UI_RESOURCES.tr.panel.sites`. */
   sites: {
     title: 'Sites',
-    subtitle: (n: number) => `${n} active · each reports daily by WhatsApp`,
+    /** Web-Sites, verbatim (spec P4). */
+    subtitle: '{{count}} active · each reports daily by text link or call',
     addSite: 'Add site',
     tabs: { all: 'All', attention: 'Attention', paused: 'Paused' },
     legend: 'Last 14 workdays',
-    lastWorkdays: (onTime: number) => `Last 14 workdays · ${onTime} on time`,
-    crewToday: 'Crew today',
-    weatherDaysMonth: 'Weather days this month',
+    lastWorkdays: 'Last 14 workdays · {{onTime}} on time',
+    crewToday: '{{count}} crew',
+    /** No report filed today, so no crew count yet. */
+    crewTodayNone: '— crew',
+    weatherDays_one: '{{count}} weather day in {{month}}',
+    weatherDays_other: '{{count}} weather days in {{month}}',
+    weatherDaysNone: 'No weather days in {{month}}',
     connectAnother: 'Connect another site',
-    connectAnotherPrice: '$399 / month · no setup fee',
+    /** Web-Sites (US): "$399 / month · no setup fee"; the price comes from the org's country. */
+    connectAnotherPrice: '{{price}} / month · no setup fee',
     emptyAttention: 'No site needs attention right now.',
     emptyPaused: 'No paused sites.',
     empty: 'No sites yet',
-    openSite: (name: string) => `Open ${name}`,
-    pausedSince: (date: string) => `Paused since ${date}`,
+    emptyBody: 'Connect your first site, then file its daily reports from Reports → New report.',
+    emptyBodyAskAdmin: 'An admin connects sites. Ask an admin to connect the first one.',
+    connectFirstSite: 'Connect your first site',
+    openSite: 'Open {{name}}',
+    cardLabel: 'Site card: {{name}}',
+    pausedSince: 'Paused since {{date}}',
+    paused: 'Paused',
     reporter: 'Site manager',
+    /** §2.3 `contact_pref`, beside the site manager (P4 "preference icon", P5 "Prefers text link"). */
+    prefers: {
+      link: 'Prefers text link',
+      call: 'Prefers call',
+    },
+    filterLabel: 'Filter sites',
   },
 
+  /** P5 Site detail (W1-18): read through `t()`, Turkish in `UI_RESOURCES.tr.panel.siteDetail`. */
   siteDetail: {
     breadcrumb: 'Sites',
+    breadcrumbLabel: 'Breadcrumb',
+    sectionsLabel: 'Site sections',
     tabs: {
       reports: 'Daily reports',
       crew: 'Crew & subs',
@@ -438,58 +853,82 @@ export const copy = {
       photos: 'Photos',
     },
     siteSettings: 'Site settings',
-    message: (first: string) => `Message ${first}`,
-    latest: (date: string) => `Latest · ${date}`,
+    /** P5 header actions (Web-Site: "Call Marco"). */
+    call: 'Call {{first}}',
+    callHint: 'Calls {{phone}} from your phone',
+    textLink: 'Text today’s link',
+    newReport: 'New report',
+    latest: 'Latest · {{date}}',
     openReport: 'Open report',
     thisMonth: 'This month so far',
     crewToday: 'Crew today, by company',
     stats: {
       reports: 'Reports',
-      reportsOf: (n: number, workdays: number) => `${n} of ${workdays} workdays`,
+      reportsOf: '{{count}} of {{workdays}} workdays',
       onTime: 'On time',
       weatherHours: 'Weather hours',
       laborHours: 'Labor hours',
       avgCrew: 'Avg crew',
     },
     columns: { company: 'Company', trade: 'Trade · area', workers: 'Workers', hours: 'Hours' },
-    deadline: (time: string, tz: string) => `Deadline ${time} · ${tz}`,
+    total: 'Total',
+    viewAll: 'View all',
+    /** Web-Site: "Report deadline 17:30 CT". */
+    deadline: 'Report deadline {{time}} {{zone}}',
     pauseSite: 'Pause site',
     resumeSite: 'Resume site',
-    speaks: (langs: string) => `Speaks ${langs}`,
+    /** Web-Site: "Prefers text link · speaks ES & EN". */
+    speaks: 'speaks {{languages}}',
+    languagesAnd: '{{first}} & {{last}}',
     backup: 'Backup',
     primary: 'Site manager',
     latestEmpty: 'No report filed yet.',
+    summaryEmpty: 'No summary.',
     latestWeatherDay: 'Weather day',
     trio: { crew: 'Crew', hours: 'Hours', weatherHours: 'Weather hours' },
     crewTodayEmpty: 'No crew reported today.',
+    /** P5 crew-by-company badges ("CONFIRMED BY ANSWER", "EDITED V2"). */
+    badges: {
+      edited: 'Edited v{{version}}',
+      asked: 'Asked {{time}}',
+      confirmedByAnswer: 'Confirmed by answer',
+      unconfirmed: 'Unconfirmed',
+    },
     crewTab: {
       title: 'Crew & subs this week',
-      subtitle: (week: string) => `Hours reported at this site · ${week}`,
+      subtitle: 'Hours reported at this site · {{week}}',
       openHours: 'Open crew hours',
       previousWeek: 'Previous week',
       nextWeek: 'Next week',
       empty: 'No hours reported at this site this week.',
       columns: { company: 'Company', reported: 'Reported' },
+      thing: 'crew hours',
     },
     weatherTab: {
       title: 'Delay log',
-      subtitle: (month: string) => `Lost hours at this site · ${month}`,
+      subtitle: 'Lost hours at this site · {{month}}',
       openWeather: 'Open weather & delays',
       empty: 'No weather delays this month.',
-      lost: (h: string) => `${h} lost`,
       lostLabel: 'Lost',
       fullDay: 'Full day',
+      period: '{{start}}–{{end}}',
+      periodFrom: 'from {{start}}',
+      periodUntil: 'until {{end}}',
+      observed: 'Observed precip {{precip}}',
+      thing: 'weather & delays',
     },
     photosTab: {
-      title: (n: number) => `${plural(n, 'photo')}`,
+      title_one: '{{count}} photo',
+      title_other: '{{count}} photos',
       dateFilter: 'Date',
       allDates: 'All dates',
       empty:
         'No photos yet. Site managers send them with the voice note; the office adds them to a report with Edit.',
-      open: (caption: string) => `Open photo: ${caption}`,
+      open: 'Open photo: {{caption}}',
       noPreview: 'Preview not available',
-      openReport: (no: string) => `Open report ${no}`,
-      caption: (date: string, time: string) => `${date} · ${time}`,
+      openReport: 'Open report {{no}}',
+      caption: '{{date}} · {{time}}',
+      taken: 'Taken {{time}}',
     },
     settings: {
       title: 'Site settings',
@@ -501,29 +940,31 @@ export const copy = {
       lng: 'Longitude',
       timezone: 'Time zone',
       deadline: 'Deadline override',
-      deadlineHint: (org: string) => `Leave empty to use the company default (${org}).`,
+      deadlineHint: 'Leave empty to use the company default ({{org}}).',
       workingHours: 'Working hours',
       workingHoursHint: 'e.g. 07:00–15:30',
       reporters: 'Reporters',
       reportersHint: 'Reporters are managed in Team & numbers.',
       noReporters: 'No reporter linked yet.',
+      inviteSent: 'Invite sent',
       recipients: 'PDF recipients',
       recipientsHint: 'One email per line or separated by commas.',
-      recipientsInvalid: (email: string) => `“${email}” is not a valid email.`,
+      recipientsInvalid: '“{{email}}” is not a valid email.',
       nameRequired: 'Site name is required.',
       codeRequired: 'Project code is required.',
       timeInvalid: 'Use HH:MM (24 h).',
       latLngInvalid: 'Enter a number.',
-      pauseTitle: (site: string) => `Pause ${site}?`,
+      pauseTitle: 'Pause {{site}}?',
       pauseBody:
         'Reports from this site stop and it won’t be billed from the next cycle. You can resume any time.',
       pauseConfirm: 'Pause site',
-      resumeTitle: (site: string) => `Resume ${site}?`,
+      resumeTitle: 'Resume {{site}}?',
       resumeBody: 'Daily reports and reminders start again from the next working day.',
       resumeConfirm: 'Resume site',
-      pausedNote: (date: string) => `Paused since ${date}`,
+      pausedNote: 'Paused since {{date}}',
+      cancel: 'Cancel',
+      save: 'Save changes',
     },
-    whatsAppHint: 'Opens WhatsApp from your own number',
   },
 
   reports: {
@@ -539,12 +980,19 @@ export const copy = {
       to: 'To',
       status: 'Status',
       anyStatus: 'Any status',
+      channel: 'Channel',
       weatherDelay: 'Has weather delay',
       edited: 'Edited',
       late: 'Late',
       incident: 'Incident',
       search: 'Search report text and transcripts',
       clear: 'Clear filters',
+    },
+    /** P6 Channel filter (Any · Link · Call). */
+    channels: {
+      any: 'Any',
+      link: 'Link',
+      call: 'Call',
     },
     columns: {
       date: 'Date',
@@ -556,21 +1004,25 @@ export const copy = {
       status: 'Status',
       pdf: 'PDF',
     },
+    /** P6 flags, worded from `ReportFlag` (assemble.ts `reportFlags`). */
     flags: {
-      rain: (h: string) => `Rain ${h}`,
-      version: (v: number) => `v${v}`,
+      rain: 'Rain {{hours}}',
+      version: 'v{{version}}',
       unknownSub: 'Unknown sub',
-      late: (time: string) => `Late ${time}`,
+      late: 'Late {{time}}',
       incident: 'Incident',
       weatherDay: 'Weather day',
+      noPhoto: 'No photo',
     },
-    downloadPdf: (no: string) => `Download PDF ${no}`,
-    selectRow: (no: string) => `Select ${no}`,
+    downloadPdf: 'Download PDF {{no}}',
+    selectRow: 'Select {{no}}',
     selectAll: 'Select all on this page',
-    count: (n: number) => `${plural(n, 'report')}`,
-    countSelected: (n: number, selected: number) => `${plural(n, 'report')} · ${selected} selected`,
+    count_one: '{{count}} report',
+    count_other: '{{count}} reports',
+    countSelected_one: '{{count}} report · {{selected}} selected',
+    countSelected_other: '{{count}} reports · {{selected}} selected',
     buildPack: 'Build EOT evidence pack from these',
-    buildPackHint: (h: string) => `${h} lost to weather in this set`,
+    buildPackHint: '{{hours}} lost to weather in this set',
     empty: 'No reports match these filters.',
     emptyHint: 'Try widening the dates or clearing a toggle.',
     emptyNone: 'No reports yet',
@@ -578,8 +1030,11 @@ export const copy = {
     emptyNoSitesBody: 'Add your first site, then file its daily reports here.',
     emptyNoSitesAskAdmin:
       'An admin adds sites. Ask an admin to add the first one, then file its daily reports here.',
-    exportDemo: (n: number) =>
-      `Demo mode: a zip with ${plural(n, 'PDF')} would download here. PDFs are rendered by the worker.`,
+    connectFirstSite: 'Connect your first site',
+    exportDemo_one:
+      'Demo mode: a zip with {{count}} PDF would download here. PDFs are rendered by the worker.',
+    exportDemo_other:
+      'Demo mode: a zip with {{count}} PDFs would download here. PDFs are rendered by the worker.',
     exportNone: 'No reports to export. Widen the filters or select rows.',
     statuses: {
       all: 'Any status',
@@ -590,11 +1045,15 @@ export const copy = {
     },
     filterBar: 'Filters',
     toggles: 'Quick filters',
-    manager: (name: string) => `by ${name}`,
+    manager: 'by {{name}}',
     pdfNotReady: 'PDF not ready yet',
     pdfNotStored: 'No PDF stored yet. It is made when you open it.',
     pagination: 'Pagination',
-    showing: (from: number, to: number, total: number) => `${from}–${to} of ${total}`,
+    showing: '{{from}}–{{to}} of {{total}}',
+    page: 'Page {{page}} of {{total}}',
+    previousPage: 'Previous page',
+    nextPage: 'Next page',
+    thing: 'reports',
   },
 
   newReport: {
@@ -609,10 +1068,10 @@ export const copy = {
     empty: 'Write a summary or add at least one row before filing.',
     submit: 'File report',
     cancel: 'Cancel',
-    filed: (no: string) => `${no} filed.`,
-    exists: (no: string) =>
-      `${no} already covers this site and date, so this report was not filed. What you typed is still here: open ${no} and use Edit to add to it, or pick another site or date.`,
-    openExisting: (no: string) => `Open ${no}`,
+    filed: '{{no}} filed.',
+    exists:
+      '{{no}} already covers this site and date, so this report was not filed. What you typed is still here: open {{no}} and use Edit to add to it, or pick another site or date.',
+    openExisting: 'Open {{no}}',
     restored:
       'Restored the report you were typing in this tab. Photos are not kept: add them again.',
     startOver: 'Start over',
@@ -621,36 +1080,59 @@ export const copy = {
 
   report: {
     breadcrumb: 'Reports',
-    eyebrow: (no: string) => `Daily report · ${no}`,
-    version: (v: number, current: boolean) => `v${v}${current ? ' · current' : ''}`,
+    eyebrow: 'Daily report · {{no}}',
+    version: 'v{{version}}',
+    versionCurrent: 'v{{version}} · current',
     versionSwitcher: 'Version',
     previous: 'Previous report',
     next: 'Next report',
+    thing: 'report',
+    /**
+     * P7 provenance line, joined with " · ": "Reported by Marco Ruiz · voice note via text link at
+     * 17:38 · confirmed on the recorder 17:43 · edited 20:10" / "Reported by Aisha Bello · phone
+     * call 18:41 (2 min 05 s) · confirmed by voice". WhatsApp-era reports keep their wording.
+     */
     provenance: {
-      reportedBy: (name: string, time: string) =>
-        `Reported by ${name} by WhatsApp voice at ${time}`,
-      confirmed: (time: string) => `confirmed ${time}`,
-      editedByReply: (time: string) => `edited by reply ${time}`,
-      editedBy: (name: string, time: string) => `edited by ${name} ${time}`,
-      signedOff: (name: string, time: string) => `signed off by ${name} ${time}`,
+      reportedBy: 'Reported by {{name}}',
+      viaLink: 'voice note via text link at {{time}}',
+      viaCall: 'phone call {{time}} ({{duration}})',
+      viaCallNoLength: 'phone call {{time}}',
+      /** W3-05: TalkOlog called the site manager (a reminder or call-back call, M8). */
+      viaCallOut: 'call from TalkOlog {{time}} ({{duration}})',
+      viaCallOutNoLength: 'call from TalkOlog {{time}}',
+      /** W3-05: Talk now in the recorder (`calls.transport 'web'`). */
+      viaBrowserCall: 'browser call {{time}} ({{duration}})',
+      viaBrowserCallNoLength: 'browser call {{time}}',
+      /** §9.4 rule 9: the call switched to the simple recording (outcome `fallback_recording`). */
+      fallbackRecording: 'simple recording mode',
+      viaText: 'by text at {{time}}',
+      viaWhatsApp: 'Reported by {{name}} by WhatsApp voice at {{time}}',
+      confirmed: 'confirmed {{time}}',
+      confirmedOnRecorder: 'confirmed on the recorder {{time}}',
+      confirmedByVoice: 'confirmed by voice',
+      confirmedByText: 'confirmed by text {{time}}',
+      edited: 'edited {{time}}',
+      editedOnCall: 'edited on a call {{time}}',
+      editedByReply: 'edited by reply {{time}}',
+      editedBy: 'edited by {{name}} {{time}}',
+      signedOff: 'signed off by {{name}} {{time}}',
       filedWithoutConfirmation: 'filed without confirmation',
-      enteredBy: (name: string, time: string) => `Entered by ${name} in SiteLog at ${time}`,
+      enteredBy: 'Entered by {{name}} in TalkOlog at {{time}}',
     },
     actions: {
       edit: 'Edit',
       pdf: 'PDF',
       signOff: 'Sign off',
-      signedOffBy: (name: string) => `Signed off by ${name}`,
+      signedOffBy: 'Signed off by {{name}}',
       undo: 'Undo',
       save: 'Save new version',
       cancel: 'Cancel',
     },
     signOffDialog: {
-      title: (no: string, v: number) => `Sign off ${no} v${v}?`,
+      title: 'Sign off {{no}} v{{version}}?',
       body: 'Sign-off is recorded in the audit log with your name and the time. You can undo within 10 minutes.',
       confirm: 'Sign off',
-      done: (no: string) => `${no} signed off.`,
-      undone: (no: string) => `Sign-off on ${no} undone.`,
+      cancel: 'Cancel',
     },
     sections: {
       summary: 'Summary',
@@ -673,6 +1155,7 @@ export const copy = {
       impact: 'Impact on work',
       attribution: 'Weather data: Open-Meteo',
       none: 'No weather impact reported.',
+      fullDay: 'Full day',
     },
     manpower: {
       company: 'Company',
@@ -685,12 +1168,13 @@ export const copy = {
       removeRow: 'Remove row',
       addNewCompany: 'Add new…',
       hoursPerWorker: 'h / worker',
+      editorTotal: 'Total: {{workers}} workers · {{hours}}',
     },
     work: {
       area: 'Area',
       activity: 'Activity',
       status: 'Status',
-      heardAs: (s: string) => `heard “${s}”`,
+      heardAs: 'heard “{{words}}”',
     },
     workStatus: {
       complete: 'Complete',
@@ -700,44 +1184,65 @@ export const copy = {
       planned: 'Planned',
     },
     safety: {
-      toolboxTalk: (topic: string) => `Toolbox talk: ${topic}`,
+      toolboxTalk: 'Toolbox talk: {{topic}}',
       noIncidents: 'No incidents',
-      incidents: (n: number) => `${plural(n, 'incident')}`,
+      incidents_one: '{{count}} incident',
+      incidents_other: '{{count}} incidents',
       notStated: 'Not stated',
-      visitors: (names: string) => `Visitors: ${names}`,
+      visitors: 'Visitors: {{names}}',
+    },
+    /**
+     * The words of a transcript excerpt's mapped facts ("Apex Concrete · 6 workers × 8 = 48 h"):
+     * report content, so in the report's language whatever the panel's (assemble.ts `factWords`).
+     */
+    facts: {
+      workers: '{{count}} workers',
+      lost: '{{hours}} lost',
+      toolboxTalk: 'Toolbox talk: {{topic}}',
+      noIncidents: 'No incidents',
+      notStated: 'Not stated',
     },
     aside: {
       source: 'Source',
       voiceNote: 'Voice note',
-      typed: 'Typed in SiteLog',
-      typedBy: (name: string) => `${name} typed this report in SiteLog; there is no voice note.`,
+      voiceNotes: '{{count}} voice notes',
+      call: 'Call',
+      recordings: '{{count}} recordings',
+      typed: 'Typed in TalkOlog',
+      typedBy: '{{name}} typed this report in TalkOlog; there is no voice note.',
       fullTranscript: 'Full transcript',
       activity: 'Activity',
       excerpts: 'Transcript excerpts',
+      clipVoiceNote: 'Voice note · {{time}}',
+      clipCall: 'Call · {{time}}',
+      noRecording: 'No recording with this report.',
+      /** W3-05: the speaker filter hides every excerpt line of this call. */
+      noExcerptsForSpeaker: 'No excerpt lines from this speaker.',
     },
     edit: {
       changeNote: 'Change note',
       changeNotePlaceholder: 'What changed and why (goes in the audit log and the email)',
       changeNoteRequired: 'A change note is required.',
-      saved: (v: number) => `Version ${v} saved. New PDF on its way.`,
     },
-    diff: { edited: (v: number) => `Edited v${v}`, was: (old: string) => `was ${old}` },
-    questionAsked: (time: string) => `Asked ${time}`,
+    diff: { edited: 'Edited v{{version}}', was: 'was {{value}}' },
+    questionAsked: 'Asked {{time}}',
     confirmedByReply: 'Confirmed by reply',
+    confirmedByAnswer: 'Confirmed by answer',
     photoCaption: (time: string) => `Taken ${time}`,
-    photoAlt: (time: string | null) => (time ? `Site photo taken ${time}` : 'Site photo'),
-    title: (weekday: string, site: string) => `${weekday} — ${site}`,
-    versionLine: (author: string, time: string, note: string | null) =>
-      `${author} · ${time}${note ? ` · ${note}` : ''}`,
-    versionAuthor: { agent: 'SiteLog agent', reporter_reply: 'Reply', office_user: 'Office' },
-    viewingOld: (v: number, current: number) =>
-      `You’re viewing version ${v}. Version ${current} is current.`,
+    photoTaken: 'Taken {{when}}',
+    photoAlt: 'Site photo taken {{when}}',
+    photoAltNoTime: 'Site photo',
+    title: '{{weekday}} — {{site}}',
+    versionLine: '{{author}} · {{time}}',
+    versionLineNote: '{{author}} · {{time}} · {{note}}',
+    versionAuthor: { agent: 'TalkOlog agent', reporter: 'Reply', office_user: 'Office' },
+    viewingOld: 'You’re viewing version {{version}}. Version {{current}} is current.',
     viewCurrent: 'View current',
     signOffHidden: 'Sign-off is for admins and project managers.',
     undoWindow: 'Undo within 10 minutes',
     pdfPreparing: 'Preparing the PDF…',
     pdfFailed: 'The PDF could not be made. Try again.',
-    pdfNotSaved: 'PDF opened, but it could not be saved to SiteLog yet.',
+    pdfNotSaved: 'PDF opened, but it could not be saved to TalkOlog yet.',
     weatherDayNote: 'Weather day — no work performed.',
     summaryEmpty: 'No summary.',
     manpowerEmpty: 'No manpower reported.',
@@ -748,34 +1253,176 @@ export const copy = {
     photosEmpty: 'No photos with this report.',
     photoPreview: 'Preview not available in demo mode',
     conditions: 'Conditions',
-    lostHours: (h: string) => `${h} lost`,
+    lostHours: '{{hours}} lost',
+    inDelayLog: 'In delay log · {{hours}}',
     period: (start: string | undefined, end: string | undefined) =>
       start && end ? `${start}–${end}` : start ? `from ${start}` : end ? `until ${end}` : '',
-    quantity: (value: string, unit: string) => `${value} ${unit}`,
-    percent: (n: number) => `${n}%`,
-    manpowerSummary: (crew: number, companies: number, hours: string) =>
-      `${plural(crew, 'worker')} · ${plural(companies, 'company', 'companies')} · ${hours}`,
+    periodRange: '{{start}}–{{end}}',
+    periodFrom: 'from {{start}}',
+    periodUntil: 'until {{end}}',
+    quantity: '{{value}} {{unit}}',
+    percent: '{{value}}%',
+    manpowerSummary: '{{workers}} · {{companies}} · {{hours}}',
+    workers_one: '{{count}} worker',
+    workers_other: '{{count}} workers',
+    companies_one: '{{count}} company',
+    companies_other: '{{count}} companies',
     hoursUnknown: 'hours unknown',
     unconfirmedHint: 'Company not yet confirmed — resolve in the banner above.',
+    /** Review reasons (P7 banner) of the report's `review_reasons` codes. */
+    reasons: {
+      title_one: '{{count}} reason to review',
+      title_other: '{{count}} reasons to review',
+      unknown_company: 'Unknown subcontractor “{{name}}”',
+      low_confidence: 'Low confidence: {{path}}',
+      unanswered: 'Unanswered question: {{field}}',
+      unconfirmed: 'Filed without confirmation from the site manager',
+      call_mismatch: 'The call recording and the confirmed report differ on {{path}} — check',
+      /** §19 Q74 / Q123 (W3-05): `call_mismatch:<path>:<heard>:<confirmed>`, by the value's kind. */
+      call_mismatch_workers_one:
+        'The call recording says {{heard}} worker, the confirmed report says {{confirmed}} — check',
+      call_mismatch_workers_other:
+        'The call recording says {{heard}} workers, the confirmed report says {{confirmed}} — check',
+      call_mismatch_hours:
+        'The call recording says {{heard}} h per worker, the confirmed report says {{confirmed}} — check',
+      call_mismatch_lostHours:
+        'The call recording says {{heard}} h lost, the confirmed report says {{confirmed}} — check',
+      call_mismatch_value:
+        'The call recording says {{heard}} for {{path}}, the confirmed report says {{confirmed}} — check',
+      /** The crew or weather period the values are of, before the line. */
+      call_mismatch_of: '{{what}}: {{line}}',
+      no_photo: 'No photo came in for this report',
+      /** §19 Q123, Q153 (W3-11): the post-call reconcile could not run. */
+      call_unreconciled:
+        'The call recording could not be checked against the report; its seconds are live timestamps.',
+      playAt: 'Play at {{ts}}',
+      addAsSub: 'Add as subcontractor',
+      mapTo: 'Map to existing',
+    },
     activity: {
       empty: 'No activity yet.',
-      in: 'WhatsApp in',
-      out: 'WhatsApp out',
-      voiceNote: (duration: string) => `Voice note · ${duration}`,
-      photo: 'Photo',
-      document: (name: string) => `Document · ${name}`,
-      showMessages: 'Show WhatsApp messages',
-      hideMessages: 'Hide WhatsApp messages',
+      agent: 'TalkOlog',
+      office: 'Office',
+      system: 'System',
+      /** P7 Activity entries (`ActivityKind`); `{{…}}` values from the entry's params. */
+      events: {
+        link_opened: 'Link opened',
+        clip_received: 'Voice note received · {{duration}}',
+        clip_received_photos_one: 'Voice note + {{count}} photo received',
+        clip_received_photos_other: 'Voice note + {{count}} photos received',
+        photos_received_one: '{{count}} photo received',
+        photos_received_other: '{{count}} photos received',
+        report_started: 'Report started',
+        extracted: 'Transcribed and fields extracted',
+        question_asked: 'Question asked',
+        question_answered: 'Question answered',
+        question_timeout: 'Question not answered in time',
+        draft_shown: 'Draft shown',
+        draft_corrected: 'Draft corrected',
+        confirmed: 'Confirmed',
+        confirmed_web: 'Confirmed on the recorder',
+        confirmed_voice: 'Confirmed by voice',
+        confirmed_sms: 'Confirmed by text',
+        filed: 'v{{version}} filed',
+        version: 'v{{version}} saved',
+        pdf_rendered: 'PDF created',
+        pdf_emailed: 'PDF emailed',
+        text_sent: 'Text sent · {{message}}',
+        text_received: 'Text received',
+        call_in: 'Call received · {{duration}}',
+        call_out: 'Call placed · {{duration}}',
+        call_missed: 'Call not answered',
+        /** W3-05: Talk now in the recorder. */
+        call_web: 'Browser call · {{duration}}',
+        whatsapp_in: 'WhatsApp in · {{type}}',
+        whatsapp_out: 'WhatsApp out · {{type}}',
+        signed_off: 'Signed off',
+        signoff_undone: 'Sign-off undone',
+        signoff_reverted: 'Sign-off reverted by edit',
+        needs_review: 'Flagged for review',
+        company_resolved: 'Unknown company resolved',
+        no_work: 'Marked no work',
+        missing: 'Missing — office alerted',
+        voided: 'Report voided',
+        other: '{{action}}',
+      },
+      /** A call's outcome, after its kind ("Call received · 2 min 41 s · filed"), §6.3 `call_outcome`. */
+      callOutcomes: {
+        filed: 'filed',
+        draft_saved: 'draft saved',
+        no_work: 'no work',
+        weather_day: 'weather day',
+        edit_applied: 'edit applied',
+        callback_requested: 'call-back requested',
+        fallback_recording: 'simple recording',
+        abandoned: 'ended without a report',
+        not_reached: 'not reached',
+      },
+      /** A text's delivery, after its kind ("Text sent · Daily link · delivered"). */
+      status: {
+        queued: 'queued',
+        sent: 'sent',
+        delivered: 'delivered',
+        read: 'read',
+        received: 'received',
+        failed: 'failed',
+        undeliverable: 'undeliverable',
+      },
+      /** The SMS copy keys (§9.2) as the office reads them. */
+      messages: {
+        welcome: 'Welcome',
+        verify_code: 'Device code',
+        daily_link: 'Daily link',
+        call_coming: 'Call coming',
+        weather_headsup: 'Weather heads-up',
+        reminder_1: 'Reminder',
+        reminder_2: 'Second reminder',
+        missed_call: 'Missed call',
+        question_ready: 'Question',
+        draft_ready: 'Draft ready',
+        filed: 'Filed with PDF link',
+        photos_link: 'Photos link',
+        edit_applied: 'Edit applied',
+        finish_report: 'Finish report',
+        site_paused: 'Site paused',
+        unknown_number: 'Unknown number',
+        help: 'Help',
+        stop_confirm: 'Opt-out confirmed',
+        pref_call_ok: 'Prefers calls',
+        pref_text_ok: 'Prefers texts',
+        other: 'Message',
+      },
+      whatsappTypes: {
+        text: 'text',
+        audio: 'voice note',
+        image: 'photo',
+        document: 'document',
+        interactive: 'reply',
+        template: 'template',
+        reaction: 'reaction',
+        unsupported: 'message',
+      },
     },
     transcript: {
       title: 'Full transcript',
-      language: (lang: string) => `Language: ${lang}`,
+      language: 'Language: {{language}}',
       none: 'No transcript for this report.',
-      segments: (n: number) => `${plural(n, 'segment')}`,
+      segments_one: '{{count}} segment',
+      segments_other: '{{count}} segments',
+      reporter: 'Reporter',
+      agent: 'TalkOlog',
+    },
+    /** Lengths of clips and calls: "48 s", "2 min", "2 min 05 s". */
+    duration: {
+      seconds: '{{s}} s',
+      minutes: '{{m}} min',
+      minutesSeconds: '{{m}} min {{s}} s',
     },
     editMode: {
       title: 'Editing',
       hint: 'Edits create a new version. The original stays in history, and a new PDF goes out.',
+      /** W2-11 review (§19 Q106): the report has a newer version than the one being edited. */
+      versionChanged: 'This report changed. Reload to see the latest version.',
       summary: 'Summary',
       conditions: 'Conditions',
       weatherPeriods: 'Weather periods',
@@ -793,7 +1440,8 @@ export const copy = {
       workers: 'Workers',
       hoursPerWorker: 'Hours / worker',
       addRow: 'Add company',
-      removeRow: (name: string) => `Remove ${name || 'row'}`,
+      removeRow: 'Remove {{name}}',
+      removeRowUnnamed: 'Remove row',
       workItems: 'Work performed',
       addWork: 'Add work item',
       removeWork: 'Remove work item',
@@ -826,10 +1474,11 @@ export const copy = {
       removeNext: 'Remove item',
       required: 'Required.',
       number: 'Enter a number.',
+      timeInvalid: 'Use HH:MM (24 h).',
       companyRequired: 'Pick a company or type a new name.',
       noChanges: 'Nothing changed.',
-      saveTitle: (no: string) => `Save ${no} as a new version?`,
-      saveBody: (v: number) => `This becomes version ${v}. The previous version stays in history.`,
+      saveTitle: 'Save {{no}} as a new version?',
+      saveBody: 'This becomes version {{version}}. The previous version stays in history.',
       cancelTitle: 'Discard changes?',
       cancelBody: 'Your edits will be lost.',
       discard: 'Discard',
@@ -837,97 +1486,110 @@ export const copy = {
       photos: {
         title: 'Photos',
         hint: 'Photos from your phone or computer. They are resized and uploaded when you save.',
-        pdfHint: (n: number) =>
-          n === 1
-            ? 'The PDF prints the first photo; move the one it should show to the front.'
-            : `The PDF prints the first ${n}; move the ones it should show to the front.`,
+        pdfHint_one: 'The PDF prints the first photo; move the one it should show to the front.',
+        pdfHint_other:
+          'The PDF prints the first {{count}}; move the ones it should show to the front.',
         inPdf: 'In PDF',
-        moveEarlier: (i: number) => `Move photo ${i} earlier`,
-        moveLater: (i: number) => `Move photo ${i} later`,
+        moveEarlier: 'Move photo {{n}} earlier',
+        moveLater: 'Move photo {{n}} later',
         add: 'Add photos',
-        count: (n: number, max: number) => `${n} of ${max}`,
-        countLabel: (n: number, max: number) => `${plural(n, 'photo')} of ${max}`,
-        full: (max: number) => `A report holds up to ${max} photos. Remove one to add another.`,
+        count: '{{n}} of {{max}}',
+        countLabel_one: '{{count}} photo of {{max}}',
+        countLabel_other: '{{count}} photos of {{max}}',
+        full: 'A report holds up to {{max}} photos. Remove one to add another.',
         empty: 'No photos yet.',
-        alt: (i: number) => `Photo ${i}`,
-        caption: (i: number) => `Caption for photo ${i}`,
+        alt: 'Photo {{n}}',
+        caption: 'Caption for photo {{n}}',
         captionPlaceholder: 'Caption (optional)',
-        remove: (i: number) => `Remove photo ${i}`,
+        remove: 'Remove photo {{n}}',
         preparing: 'Preparing…',
-        taken: (when: string) => `Taken ${when}`,
+        noPreview: 'Preview not available',
+        taken: 'Taken {{when}}',
         dismiss: 'Dismiss',
-        notImage: (name: string) => `${name} is not an image.`,
-        tooLarge: (name: string) => `${name} is larger than 25 MB.`,
-        tooManyPixels: (name: string, megapixels: number) =>
-          `${name} is a ${megapixels}-megapixel photo, too large to prepare here. Use a copy under 50 megapixels.`,
-        heic: (name: string) =>
-          `${name} is a HEIC photo this browser can’t open. Use Safari, or save it as JPEG first.`,
-        unreadable: (name: string) => `${name} couldn’t be opened. Try a JPEG or PNG.`,
-        limit: (max: number, skipped: number) =>
-          `A report holds up to ${max} photos; ${plural(skipped, 'photo was', 'photos were')} not added.`,
+        notImage: '{{name}} is not an image.',
+        tooLarge: '{{name}} is larger than 25 MB.',
+        tooManyPixels:
+          '{{name}} is a {{megapixels}}-megapixel photo, too large to prepare here. Use a copy under 50 megapixels.',
+        heic: '{{name}} is a HEIC photo this browser can’t open. Use Safari, or save it as JPEG first.',
+        unreadable: '{{name}} couldn’t be opened. Try a JPEG or PNG.',
+        limit_one: 'A report holds up to {{max}} photos; {{count}} photo was not added.',
+        limit_other: 'A report holds up to {{max}} photos; {{count}} photos were not added.',
         notReady: 'A photo couldn’t be prepared. Check the Photos section and save again.',
         uploading: (i: number, n: number) => `Uploading photos ${i} of ${n}`,
+        uploadingProgress: 'Uploading photos {{i}} of {{n}}',
         uploadFailed: 'A photo couldn’t be uploaded. Nothing was saved; try again.',
       },
     },
   },
 
+  /** P8 · Crew hours (F19). EN/TR since W3-06; the Turkish is in packages/shared/src/copy/ui/tr.ts. */
   hours: {
     title: 'Crew hours',
     subtitle: 'Subcontractor hours by company, checked against invoices',
+    /** The page named inside the error state ("Couldn't load crew hours"). */
+    thing: 'crew hours',
     payrollCsv: 'Payroll CSV',
     weekPicker: 'Week',
     previousWeek: 'Previous week',
     nextWeek: 'Next week',
     siteSelect: 'Site',
     allSites: 'All sites',
+    kpisLabel: 'Key figures',
     kpis: {
       subHours: 'Subcontractor hours',
       companies: 'Companies on site',
       gaps: 'Invoice gaps found',
-      gapsDetail: (hours: string, subs: number) => `${hours} · ${plural(subs, 'sub')}`,
+      gapsDetail_one: '{{hours}} · {{count}} sub',
+      gapsDetail_other: '{{hours}} · {{count}} subs',
     },
     columns: {
       company: 'Company',
       reported: 'Reported',
       invoiced: 'Invoiced',
       gap: 'Gap',
-      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
     },
     gap: { match: 'match', awaiting: 'awaiting', confirm: 'Confirm', unconfirmed: 'Unconfirmed' },
     addInvoice: 'Add invoice',
     invoiceCheck: 'Invoice check',
-    invoice: (no: string, period: string) => `${no} · ${period}`,
+    invoice: '{{no}} · {{period}}',
     compare: { day: 'Day', invoice: 'Invoice', reports: 'Reports', gap: 'Gap' },
     evidence: 'Evidence',
     sendQuery: 'Send query with evidence',
     markResolved: 'Mark resolved',
     queried: 'Query sent',
     resolved: 'Marked resolved',
-    csvReady: 'Payroll CSV ready.',
     empty: 'No hours reported this week.',
     selectRow: 'Select a row with a gap to compare it with the invoice.',
     selectRowTitle: 'Invoice check',
     perCompanyHint: 'Invoices are checked per company. Choose All sites to compare them.',
-    sitesLabel: (sites: string) => sites,
     unconfirmedHint: 'Heard in a report but not yet a known subcontractor.',
-    openRow: (company: string) => `Compare ${company} with its invoice`,
+    /** §2.2: an accounts user cannot open reports or the glossary to confirm a company. */
+    unconfirmedAsk:
+      'Heard in a report but not yet a known subcontractor. Ask an ops user to confirm it.',
+    openRow: 'Compare {{company}} with its invoice',
     totalRow: 'Total',
-    status: 'Status',
-    evidenceFor: (date: string, site: string) => `${date} · ${site}`,
-    audioLink: (ts: string) => `audio ${ts}`,
-    openReport: (no: string) => `Open report ${no}`,
+    evidenceFor: '{{date}} · {{site}}',
+    /** Evidence chips (P8): "audio 0:41" and "call 2:15" are `source.links`; these have no second. */
+    evidenceKinds: {
+      voiceNote: 'voice note',
+      answer: 'answer',
+      report: 'report',
+    },
+    openReport: 'Open report {{no}}',
+    openReportAt: 'Open report {{no}} at {{source}}',
+    /** A gap day without words to quote (typed report, or no transcript to read): the crew lines. */
+    crewQuote: '{{company}} · {{lines}} = {{total}}',
+    crewLine: '{{workers}} × {{hours}}',
     noEvidence: 'No gap days to show evidence for.',
     noReportEvidence: 'No site report recorded hours for this company on the gap days.',
     queryMail: {
-      subject: (company: string, no: string) => `Invoice ${no} — hours query from SiteLog`,
-      intro: (company: string, no: string, period: string) =>
-        `Hello ${company},\n\nInvoice ${no} (${period}) shows more hours than our daily site reports. Day by day:`,
-      row: (date: string, invoiced: string, reported: string, gap: string) =>
-        `${date}: invoiced ${invoiced}, reported ${reported}, gap ${gap}`,
-      total: (invoiced: string, reported: string, gap: string) =>
-        `Total: invoiced ${invoiced}, reported ${reported}, gap ${gap}`,
+      subject: 'Invoice {{no}} — hours query from TalkOlog',
+      intro:
+        'Hello {{company}},\n\nInvoice {{no}} ({{period}}) shows more hours than our daily site reports. Day by day:',
+      row: '{{date}}: invoiced {{invoiced}}, reported {{reported}}, gap {{gap}}',
+      total: 'Total: invoiced {{invoiced}}, reported {{reported}}, gap {{gap}}',
       evidence: 'Site report evidence:',
+      evidenceLine: '- {{date}} · {{site}} · {{reportNo}} · {{source}}: “{{quote}}”',
       outro:
         'Could you check these days and send a corrected invoice or the timesheets behind the difference?\n\nThanks,',
     },
@@ -957,20 +1619,24 @@ export const copy = {
 
   weather: {
     title: 'Weather & delays',
-    subtitle: 'Every lost hour, with the voice note, photos and weather data behind it',
+    subtitle: 'Every lost hour, with the voice note or call, photos and weather data behind it',
+    /** The page named inside the error state ("Couldn't load weather & delays"). */
+    thing: 'weather & delays',
     buildPack: 'Build EOT evidence pack',
+    kpisLabel: 'Key figures',
     kpis: {
       siteDays: 'Weather-affected site-days',
       hours: 'Hours of stoppage',
       claimReady: 'Claim-ready entries',
-      claimReadyOf: (x: number, y: number) => `${x} of ${y}`,
       claimReadyHint: 'audio + photo + weather data',
     },
     heatmap: 'Stoppage hours by site and day',
-    heatmapCell: (site: string, date: string, hours: string) => `${site}, ${date}: ${hours} lost`,
+    heatmapCell: '{{site}}, {{date}}: {{hours}} lost',
     log: 'Delay log',
     fullDay: 'Full day',
-    observed: (precip: string) => `Observed precip ${precip}`,
+    observed: 'Observed precip {{precip}}',
+    /** Spec §19 Q134: a report filed without the site manager's confirmation. */
+    notConfirmed: 'Not confirmed by the site manager: claim-ready once signed off',
     pack: {
       title: 'EOT evidence pack',
       site: 'Site',
@@ -997,130 +1663,295 @@ export const copy = {
     allSites: 'All sites',
     previousMonth: 'Previous month',
     nextMonth: 'Next month',
-    lostHours: (h: string) => `${h} lost`,
-    entries: (n: number) => `${plural(n, 'entry', 'entries')}`,
-    showingOf: (shown: number, total: number) => `Showing ${shown} of ${total}`,
-    openReport: (no: string) => `Open report ${no}`,
-    stoppedBetween: (start: string, end: string) => `Stopped ${start}–${end}`,
-    stoppedFrom: (start: string) => `Stopped from ${start}`,
+    lostLabel: 'lost',
+    entries_one: '{{count}} entry',
+    entries_other: '{{count}} entries',
+    showingOf: 'Showing {{shown}} of {{total}}',
+    openReport: 'Open report {{no}}',
+    stoppedBetween: 'Stopped {{start}}–{{end}}',
+    stoppedFrom: 'Stopped from {{start}}',
     packDialog: {
       description:
-        'The pack has a cover, a delay summary by day, each day’s signed report, transcript excerpts with timestamps, photos and the observed weather table.',
+        'The pack has a cover, a delay summary by day, each day’s report with how it was confirmed, transcript excerpts with timestamps, photos and the observed weather table, in your company’s report language.',
       from: 'From',
       to: 'To',
       siteRequired: 'Pick the site the claim is for.',
       periodInvalid: 'The end must be on or after the start.',
       sectionsRequired: 'Pick at least one section.',
       sitePlaceholder: 'Choose a site',
-      summary: (days: number, hours: string) => `${plural(days, 'site-day')} · ${hours} lost`,
-      summaryMonthOnly: (month: string, days: number, hours: string) =>
-        `${month} only: ${plural(days, 'site-day')} · ${hours} lost`,
+      summary_one: '{{count}} site-day · {{hours}} lost',
+      summary_other: '{{count}} site-days · {{hours}} lost',
+      summaryMonthOnly_one: '{{month}} only: {{count}} site-day · {{hours}} lost',
+      summaryMonthOnly_other: '{{month}} only: {{count}} site-days · {{hours}} lost',
     },
     packs: {
       empty: 'No packs yet. Build one from the delay log.',
       allSites: 'All sites',
-      requestedBy: (when: string) => `Requested ${when}`,
-      sections: (n: number) => `${plural(n, 'section')}`,
+      requestedBy: 'Requested {{when}}',
+      period: '{{from}} – {{to}}',
+      sections_one: '{{count}} section',
+      sections_other: '{{count}} sections',
       demoDownload: 'Demo mode: the worker renders the PDF; nothing to download here.',
       notStarted:
-        'Not started after 10 minutes. Evidence packs aren’t being built for your company right now. Contact SiteLog support.',
+        'Not started after 10 minutes. Evidence packs aren’t being built for your company right now. Contact TalkOlog support.',
     },
   },
 
+  /**
+   * `PhoneInput` (W4-01): the country-code picker (libphonenumber's regions, named by the browser
+   * in the panel's language) and the number field, in Setup and Team's invite.
+   */
+  phone: {
+    countryCode: 'Country code',
+    /** The picker button's accessible name: the region's name, then its visible "US +1" (2.5.3). */
+    countryButton: 'Country code: {{country}}, {{region}} +{{code}}',
+    search: 'Search countries',
+    searchPlaceholder: 'Country or +code',
+    noMatch: 'No country matches “{{query}}”.',
+    hint: 'Stored in international format, e.g. {{example}}',
+    invalid: 'Enter a valid mobile number for the chosen country.',
+    /** Spec §19 Q23: the org's pack applies to every reporter; a warning, never a block. */
+    foreign: 'This is a {{country}} number. TalkOlog texts it from your {{pack}} number.',
+  },
+
+  /**
+   * P10 Team & numbers (W4-03: EN/TR through `t()`; the v1.2 statuses, preference and message
+   * channel, devices, today's link and office users' UI language).
+   */
   team: {
     title: 'Team & numbers',
     subtitle:
-      'SiteLog matches every WhatsApp message to a site by the sender’s number. No match, no report.',
+      'TalkOlog matches every call and text to a site by the phone number. Personal links are tied to one person.',
+    thing: 'team',
     inviteReporter: 'Invite reporter',
     unknown: {
       title: 'Unknown number tried to report',
-      body: (phone: string, time: string) => `${phone} · ${time}`,
-      link: (site: string) => `Link to ${site}`,
+      body: '{{phone}} · {{time}}',
+      link: 'Link to {{site}}',
       linkOther: 'Link to a site…',
       ignore: 'Ignore',
-      linked: 'Number linked. The message is being processed.',
-      ignored: 'Number ignored.',
-      snippet: (text: string) => `“${text}”`,
-      guessed: (site: string) => `Mentions ${site}`,
+      snippet: '“{{text}}”',
+      guessed: 'Mentions {{site}}',
     },
     link: {
-      title: (phone: string) => `Link ${phone} to a site`,
+      title: 'Link {{phone}} to a site',
       description: 'The held message is processed as soon as the number is linked.',
+      /** A caller or texter (W1-16): invited until they consent (F3, F13 step 4). */
+      descriptionConsent:
+        'TalkOlog texts them a welcome with their link. They can report once they agree to texts and recording.',
       name: 'Name',
       namePlaceholder: 'Who is this?',
       role: 'Role',
       site: 'Site',
+      sitePlaceholder: 'Choose a site',
       confirm: 'Link number',
       nameRequired: 'Enter a name.',
       siteRequired: 'Choose a site.',
     },
-    reportsCount: (n: number) => `${plural(n, 'report')}`,
+    reportsCount_one: '{{count}} report in 30 days',
+    reportsCount_other: '{{count}} reports in 30 days',
+    /** P10 "Prefers": the report mode (§2.3), with the message channel when one is set (Q21). */
+    prefers: {
+      link: 'Text link',
+      call: 'Call',
+      withChannel: '{{pref}} · {{channel}}',
+    },
+    /** §4.5 message channels, as Team and Edit name them. */
+    channels: {
+      sms: 'SMS',
+      whatsapp: 'WhatsApp',
+      push: 'Notifications',
+    },
+    /** §19 Q243: a channel saved without its consent stays unreachable until they consent. */
+    channelNotAgreed: '{{channel}} not agreed yet',
+    /** The language TalkOlog uses with the reporter (`reporters.locale`). */
+    locales: {
+      'en-US': 'English',
+      'es-US': 'Spanish',
+      'tr-TR': 'Turkish',
+    },
+    speaks: 'Speaks {{languages}}',
     primary: 'Primary',
     noSites: 'No sites',
     empty: 'No reporters yet. Invite the first site manager.',
-    resent: (name: string) => `New invite queued for ${name}.`,
-    disabledToast: (name: string) => `${name} disabled.`,
+    /** P10 statuses: never by colour alone (each chip has its word). */
+    status: {
+      active: 'Active',
+      invite_sent: 'Invite sent',
+      opted_out: 'Opted out of texts',
+      undeliverable: 'Can’t text this number',
+      disabled: 'Disabled',
+    },
+    /** Under a status: who stopped texts (§19 Q242), the automatic re-send (Q241), devices. */
+    statusNotes: {
+      byPerson: 'Stopped by them (STOP)',
+      byProvider: 'Stopped by the phone company',
+      autoResent: 'Re-sent automatically',
+      devices_one: '{{count}} phone signed in',
+      devices_other: '{{count}} phones signed in',
+    },
     edit: {
-      title: (name: string) => `Edit ${name}`,
-      description: 'Changes apply from the next message this number sends.',
-      phone: 'WhatsApp number',
+      title: 'Edit {{name}}',
+      description: 'Changes apply to the next text or call.',
+      phone: 'Mobile number',
       phoneHint:
         'The number can’t be changed. To use a new number, disable this reporter and invite the new number.',
+      preference: 'Prefers',
+      messageChannel: 'Messages go by',
+      channelDefault: 'Your country’s order ({{order}})',
+      language: 'Language TalkOlog uses',
+      languageHint: 'Texts, the recorder and calls are in this language.',
+      /** §19 Q243: required to change the preference or the channel. */
+      attest: '{{first}} asked for this change',
+      attestHint: 'Saved in the log with your name.',
+      attestRequired: 'Tick the box: change how TalkOlog reaches {{first}} only when they asked.',
+      channelNotAgreed:
+        '{{first}} has not agreed to {{channel}} yet. Messages go another way until they turn it on in the recorder.',
       save: 'Save changes',
-      saved: (name: string) => `${name} updated.`,
     },
     officeEmpty: 'No office users.',
     changeRole: 'Change role',
     removeUser: 'Remove',
     you: 'you',
     disableDialog: {
-      title: (name: string) => `Disable ${name}?`,
-      body: 'Their messages are no longer matched to a site. Re-send the invite to enable them again.',
+      title: 'Disable {{name}}?',
+      body: 'TalkOlog stops texting and calling them, and their link stops working. Re-send the welcome to enable them again.',
     },
     removeDialog: {
-      title: (name: string) => `Remove ${name}?`,
+      title: 'Remove {{name}}?',
       body: 'They lose access to this company right away. You can invite them again later.',
       confirm: 'Remove user',
     },
+    /** F16 lost phone (§19 Q244). */
+    revokeDialog: {
+      title: 'Revoke devices for {{name}}?',
+      body: 'Every phone that opened {{first}}’s link is signed out. Their next open asks for a code sent to {{phone}}. Their consents and personal link stay.',
+      count_one: 'Signed in now: {{count}} phone.',
+      count_other: 'Signed in now: {{count}} phones.',
+      confirm: 'Revoke devices',
+    },
+    /** §19 Q242: one-way packs only, an opt-out the phone company recorded. */
+    optOutDialog: {
+      title: 'Turn texts back on for {{name}}?',
+      body: 'The phone company stopped texts to this number. Do this only if {{first}} asked to get texts again. The phone company may still refuse them.',
+      attest: '{{first}} asked to get texts again',
+      confirm: 'Turn texts back on',
+    },
+    /**
+     * W4-04 (F3, §19 Q230): Call now. The attestation sentence is Q230's, stored with its
+     * version (`team.call_now.v1`) as an `auto_call` consent `office_attested`.
+     */
+    callNow: {
+      title: 'Call {{name}} now?',
+      body: 'TalkOlog’s assistant calls {{first}} now about today’s report at {{site}}. {{first}} first hears that the call is recorded.',
+      attest: '{{first}} agreed to get calls from TalkOlog for the daily report',
+      attestHint:
+        'Saved in the log with your name. It allows this call only: reminder calls still need {{first}}’s own agreement in the recorder.',
+      noText: 'If {{first}} doesn’t answer, TalkOlog sends no text. You see how it went here.',
+      confirm: 'Call now',
+      /** office_call_start()'s refusals (`OFFICE_CALL_REFUSALS`). */
+      refused: {
+        attestation_required: 'Tick the box first: the person must have agreed to get calls.',
+        no_trunk: 'TalkOlog can’t place calls for your company yet.',
+        reporter_inactive:
+          'This reporter is disabled or opted out of texts. TalkOlog doesn’t call them.',
+        calls_turned_off:
+          'They turned automated calls off in the recorder. Only they can turn them back on.',
+        no_calls_today: 'They asked not to be called today.',
+        site_not_active: 'The site is paused or archived.',
+        outside_window: 'It is outside the hours TalkOlog calls at this site.',
+        day_filed: 'Today’s report for this site is already filed.',
+        call_live: 'A call to them is already under way.',
+        limit_reached: 'The office has called them as often as allowed today.',
+      },
+    },
+    /** W4-04: the latest outbound call today, under the status (never by colour alone). */
+    callToday: {
+      office: 'Office call',
+      reminder: 'Reminder call',
+      line: '{{kind}} · {{progress}} · {{time}}',
+    },
+    /** A call's progress from `calls.status` (`callProgress`). */
+    callProgress: {
+      requested: 'Requested',
+      ringing: 'Ringing',
+      answered: 'Answered',
+      not_reached: 'Not reached',
+      failed: 'Couldn’t be placed',
+    },
+    /** Why Team offers no way back on a two-way pack (START by the person only). */
+    optOutStartOnly:
+      'Only {{first}} can turn texts back on, by replying START to one of our texts.',
     reporters: 'Field reporters',
     columns: {
       name: 'Name',
-      whatsapp: 'WhatsApp',
+      mobile: 'Mobile',
+      prefers: 'Prefers',
       sites: 'Sites',
-      speaks: 'Speaks',
+      language: 'Language',
       onTime: 'On time · 30 d',
       status: 'Status',
     },
     roles: { site_manager: 'Site manager', backup: 'Backup' },
-    rowMenu: { edit: 'Edit', resendInvite: 'Re-send invite', disable: 'Disable' },
+    rowMenu: {
+      edit: 'Edit',
+      resendWelcome: 'Re-send welcome',
+      textLink: 'Text today’s link',
+      textLinkAt: 'Text today’s link · {{site}}',
+      revokeDevices: 'Revoke devices',
+      clearOptOut: 'Turn texts back on',
+      callNow: 'Call now',
+      callNowAt: 'Call now · {{site}}',
+      enable: 'Enable',
+      disable: 'Disable',
+    },
     office: 'Office users',
     addOfficeUser: 'Add office user',
     officeRoles: { admin: 'Admin', pm: 'Project manager', ops: 'Operations', accounts: 'Accounts' },
+    /** F24: an office user's panel language (`org_members.ui_locale`). */
+    uiLocales: {
+      'en-US': 'English',
+      'tr-TR': 'Turkish',
+    },
+    officeLanguage: 'Panel in {{language}}',
     howMatching: 'How matching works',
     howMatchingBody:
-      'Each reporter’s WhatsApp number is linked to one or more sites. A message from a linked number files to that site; an unknown number is held here until you link or ignore it.',
+      'Each reporter’s phone number and personal link are tied to their sites. A call or text from a linked number goes to those sites; an unknown number never creates a report. It is held here until you link or ignore it.',
     invite: {
       title: 'Invite reporter',
       name: 'Name',
-      phone: 'WhatsApp number',
+      phone: 'Mobile number',
       role: 'Role',
       sites: 'Sites',
       languages: 'Speaks',
-      send: 'Send WhatsApp welcome',
-      sent: (name: string) => `Welcome queued for ${name}.`,
+      language: 'Language TalkOlog uses',
+      preference: 'Preferred channel',
+      preferenceHint: 'They can always use the other one.',
+      /** §19 Q33: a call preference where the pack has no voice number. */
+      callTalkNow: 'They will use Talk now in the recorder.',
+      send: 'Send welcome text',
+      /**
+       * Owner decision 2026-10-20 (Twilio toll-free verification, opt-in "Verbal"): required to add
+       * a person, kept with its version (`team.invite_sms.v2`) in the `reporter.invited` log entry.
+       * Also the setup wizard's, for the site manager and the backup.
+       */
+      smsAttest: '{{first}} agreed to get daily report messages from TalkOlog by text or WhatsApp',
+      /** The same before a name is typed. */
+      smsAttestNoName:
+        'This person agreed to get daily report messages from TalkOlog by text or WhatsApp',
+      smsAttestHint: 'Saved in the log with your name.',
+      attestation_required:
+        'Tick the box first: the person must have agreed to get daily report messages.',
       description:
-        'Sends the WhatsApp welcome template. The reporter replies to verify the number.',
+        'Texts the reporter their personal link. They open it on their phone, confirm the number with a code and agree to recording.',
       namePlaceholder: 'Full name',
-      country: 'Country',
-      phonePlaceholder: '555 014 3378',
-      phoneHint: (example: string) => `Stored in international format, e.g. ${example}`,
-      phoneInvalid: 'Enter a valid WhatsApp number for the chosen country.',
       nameRequired: 'Enter a name.',
       sitesRequired: 'Pick at least one site.',
       noSites: 'Add a site first. Each reporter reports for a site.',
       noSitesAskAdmin: 'Ask an admin to add a site first. Each reporter reports for a site.',
       addSite: 'Add a site',
-      languagesHint: 'Reports always come out in English.',
+      /** The org's report language (§9.6, `orgs.locale`), named as the chips name it. */
+      languagesHint: 'Reports always come out in {{language}}.',
       languageNames: {
         en: 'English',
         es: 'Spanish',
@@ -1128,6 +1959,7 @@ export const copy = {
         pt: 'Portuguese',
         hi: 'Hindi',
         fr: 'French',
+        tr: 'Turkish',
       },
     },
     addUser: {
@@ -1137,8 +1969,9 @@ export const copy = {
       emailPlaceholder: 'name@company.com',
       emailInvalid: 'Enter a valid email.',
       role: 'Role',
+      uiLanguage: 'Panel language',
+      uiLanguageOrg: 'The company’s language ({{language}})',
       send: 'Send invite',
-      sent: (email: string) => `Invite sent to ${email}.`,
       lastAdmin: 'You can’t remove the last admin.',
       roleHelp: {
         admin: 'Everything, including settings and billing',
@@ -1147,32 +1980,60 @@ export const copy = {
         accounts: 'Crew hours and payroll only',
       },
     },
+    toasts: {
+      invited: 'Welcome text queued for {{name}}.',
+      /** api-invite-reporter answered `opted_out`: the number sent STOP, so nothing is texted. */
+      invitedOptedOut: '{{name}} opted out of texts (STOP); no welcome text was sent.',
+      linked: 'Number linked.',
+      ignored: 'Number ignored.',
+      resent: 'Welcome text re-sent to {{name}}.',
+      disabled: '{{name}} disabled.',
+      enabled: '{{name}} enabled. A new welcome text is on its way.',
+      updated: '{{name}} updated.',
+      devicesRevoked: '{{name}} is signed out on every phone. The next open asks for a code.',
+      optOutCleared: 'Texts turned back on for {{name}}.',
+      callRequested: 'Calling {{name}} now. The progress shows in their row.',
+      memberAdded: 'Invite sent to {{email}}.',
+      memberUpdated: 'Role updated.',
+      memberRemoved: 'User removed.',
+    },
+    /** The RPCs' refusals (CodedError codes), in the panel's language. */
+    errors: {
+      attestation_required: 'Tick the box first: the person must have asked for this.',
+      channel_not_offered: 'That channel is not offered in your country.',
+      locale_not_offered: 'That language is not offered in your country.',
+      two_way_pack: 'Only the person can turn texts back on, by replying START.',
+      opted_out_by_person: 'They stopped texts themselves. Only they can turn them back on.',
+      not_opted_out: 'Texts are not stopped for this number.',
+    },
   },
 
+  /** P11 Site glossary (W3-08: EN/TR). */
   glossary: {
     title: 'Site glossary',
     subtitle: 'What the field says, written the way reports should read',
+    thing: 'site glossary',
     addTerm: 'Add term',
-    reviewTitle: (n: number) => `New this week · review ${n}`,
-    heard: (times: number, site: string | null) =>
-      `Heard ${times}× ${site ? `· ${site}` : ''}`.trim(),
+    reviewTitle: 'New this week · review {{n}}',
+    heard: 'Heard {{times}}×',
+    heardAt: 'Heard {{times}}× · {{site}}',
     approve: 'Approve',
     change: 'Change',
     reject: 'Reject',
     addAsSub: 'Add as subcontractor',
     mapTo: 'Map to…',
     all: 'All terms',
-    tabs: { all: 'All', companies: 'Companies', spanish: 'Spanish' },
+    tabs: { all: 'All', companies: 'Companies', spanish: 'Spanish', turkish: 'Turkish' },
     columns: {
       heard: 'Heard in the field',
       official: 'Written in reports as',
       scope: 'Scope',
       times: 'Times',
       source: 'Source',
+      actions: 'Actions',
     },
-    scope: { org: 'All sites', site: (name: string) => name },
+    scope: { org: 'All sites' },
     search: 'Search terms',
-    reviewed: 'Term updated.',
     empty: 'No terms yet. The agent learns them from voice notes.',
     emptyReview: 'Nothing to review.',
     emptyReviewBody: 'New phrases from voice notes land here once a week’s reports are in.',
@@ -1192,7 +2053,14 @@ export const copy = {
       officialRequired: 'Enter the official term.',
     },
     kinds: { term: 'Term', company: 'Company', area: 'Area', unit: 'Unit' },
-    languages: { en: 'English', es: 'Spanish', pl: 'Polish', hi: 'Hindi', pt: 'Portuguese' },
+    languages: {
+      en: 'English',
+      es: 'Spanish',
+      tr: 'Turkish',
+      pl: 'Polish',
+      hi: 'Hindi',
+      pt: 'Portuguese',
+    },
     arrow: 'written as',
     unknownCompany: 'Unknown company',
     changeLabel: 'Official term',
@@ -1200,17 +2068,33 @@ export const copy = {
     mapToLabel: 'Map to existing company',
     mapToPlaceholder: 'Choose a company',
     mapConfirm: 'Map',
-    noResults: (q: string) => `No terms match “${q}”.`,
-    timesHeard: (n: number) => `${n}×`,
+    noResults: 'No terms match “{{q}}”.',
+    /** W4-08 (§19 Q238): TalkOlog's starter terms. */
+    builtIn: {
+      changeTitle: 'Change built-in term',
+      changeDescription:
+        'How should reports write “{{heard}}”? Saving makes it your company’s confirmed term.',
+      changeTerm: 'Change “{{heard}}”',
+      rejectTerm: 'Reject “{{heard}}”',
+    },
   },
 
+  /**
+   * P12 · Settings (W4-05, EN/TR): Reports & reminders on v1.2, Field channels (the country pack
+   * read-only, the daily link, calls, new reporters, the recording notice, the test message), PDF
+   * template with the report language and units (§19 Q233), Recipients, Payroll export.
+   */
   settings: {
     title: 'Settings',
+    /** The error state's "Couldn’t load {{thing}}." */
+    thing: 'settings',
     tabs: {
       reports: 'Reports & reminders',
       pdf: 'PDF template',
       recipients: 'Recipients',
       payroll: 'Payroll export',
+      /** v1.2 `/settings/channels` (§11.1, P12; W4-05). */
+      fieldChannels: 'Field channels',
     },
     save: 'Save changes',
     saved: 'Settings saved.',
@@ -1218,22 +2102,28 @@ export const copy = {
     workingDays: 'Working days',
     ladder: 'Reminder ladder',
     stages: {
+      dailyLink: 'Daily link',
       headsUp: 'Weather heads-up',
       reminder1: 'Reminder 1',
       reminder2: 'Reminder 2',
       missing: 'Missing · office alerted',
     },
     offset: 'Offset (minutes)',
-    offsetHint: (deadline: string) => `Minutes relative to the ${deadline} deadline`,
-    stageTime: (time: string) => `at ${time}`,
+    offsetHint: 'Minutes relative to the {{deadline}} deadline',
+    offsetMinutes: '{{offset}} min',
+    stageTime: 'at {{time}}',
     stageHints: {
+      dailyLink: 'Every reporter gets today’s link by text.',
       headsUp: 'Only on days with rain or wind in the forecast',
-      reminder1: 'Quick replies: Recording now · No work today · Site closed: weather',
-      reminder2: 'Second nudge to the reporter',
+      reminder1: 'Text or call — per person',
+      reminder2: 'A second text; a second call for people who prefer calls, when it is on',
       missing: 'Office is notified and the site-day is marked missing',
     },
+    /** The daily link card's link to the tab where its time is set. */
+    dailyLinkChange: 'Change on Field channels',
     required: 'Every report must include',
-    requiredHint: 'Missing items trigger one question on WhatsApp before the draft.',
+    requiredHint:
+      'Missing items trigger one question on the recorder or the call before the draft.',
     requiredFields: {
       manpower: 'Crew by company',
       hours: 'Hours',
@@ -1243,8 +2133,9 @@ export const copy = {
       photo: 'At least one photo',
     },
     filing: 'Filing',
-    filingConfirm: 'Site manager confirms on WhatsApp',
-    filingConfirmHint: 'The draft is filed after “Confirm”. Unanswered drafts file after 2 hours.',
+    filingConfirm: 'Reporter confirms — on the recorder or by voice on the call',
+    filingConfirmHint:
+      'The draft is filed after the reporter confirms. Unanswered drafts file after 2 hours.',
     filingAuto: 'File automatically after 15 minutes',
     filingAutoHint: 'Fastest paperwork; corrections create a new version.',
     signoffRequired: 'Sign-off required',
@@ -1252,8 +2143,105 @@ export const copy = {
     emailPdf: 'Email PDF when filed',
     emailPdfHint: 'Recipients get the PDF the moment a report is filed.',
     deadlineHint: 'Default for new sites · each site can override it',
-    workingDayNames: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    /** ISO weekdays 1–7 (`org_settings.working_days`). */
+    weekdays: {
+      d1: 'Mon',
+      d2: 'Tue',
+      d3: 'Wed',
+      d4: 'Thu',
+      d5: 'Fri',
+      d6: 'Sat',
+      d7: 'Sun',
+    },
     workingDaysHint: 'Reminders and “missing” only count working days.',
+    /** Field channels (P12, F22; W4-05). */
+    channels: {
+      pack: 'Your country pack',
+      packHint: 'Set by TalkOlog per country. Ask TalkOlog to change it.',
+      country: 'Country',
+      sender: 'Text sender',
+      senderTypes: {
+        toll_free: 'Toll-free number',
+        long_code: 'Long code',
+        short_code: 'Short code',
+        alphanumeric: 'Sender name',
+      },
+      senderNotSet: 'Not set up in this environment',
+      voiceNumber: 'Number to call TalkOlog',
+      talkNowOnly: 'Talk now only',
+      channelOrder: 'Message order',
+      twoWay: 'Replies to texts',
+      twoWayYes: 'Two-way: STOP, HELP and replies reach TalkOlog',
+      twoWayNo: 'One-way: texts cannot be answered',
+      links: 'Links in texts',
+      linksYes: 'Allowed',
+      linksNo: 'Not allowed',
+      packMissing: 'Your country pack could not be loaded.',
+      dailyLink: 'Daily link',
+      dailyLinkTime: 'Daily link time',
+      dailyLinkTimeHint: 'Every reporter gets today’s link by text at this time, site time.',
+      ttl: 'Daily link expiry (hours)',
+      ttlHint: 'Empty: TalkOlog’s default. Whole hours, 1–168.',
+      ttlInvalid: 'Enter whole hours from 1 to 168, or leave it empty.',
+      calls: 'Calls',
+      autoCall: 'Call people who prefer calls',
+      autoCallHint: 'At reminder 1, inside the call window, when they agreed to calls.',
+      secondCall: 'Second call at reminder 2',
+      secondCallHint: 'A second call, with the reminder text.',
+      callWindow: 'Call window',
+      callWindowHint: 'Site time. Calls and reminder texts go out only inside it.',
+      callWindowFrom: 'From',
+      callWindowTo: 'To',
+      noCalls:
+        'TalkOlog does not place calls in {{country}} yet. People who prefer calls use Talk now in the recorder; reminder texts keep to the call window.',
+      newReporters: 'New reporters',
+      defaultPref: 'Default preference',
+      defaultPrefHint: 'Setup and Invite start with it. They can always use the other one.',
+      notice: 'Recording notice',
+      noticeHint: 'Said at the start of every call. TalkOlog sets and versions it per country.',
+      noticeVersion: 'Version {{version}}',
+      test: 'Test',
+      testHint: 'See what your site managers receive.',
+      testMessage: 'Send me a test message',
+      testDialog: {
+        title: 'Send me a test message',
+        body: 'TalkOlog texts a test message to this number from your country’s sender. The number is not saved.',
+        phone: 'Your mobile number',
+        language: 'Language of the text',
+        attest: 'This is my own number.',
+        attestRequired: 'Tick the box to confirm it is your own number.',
+        send: 'Send test message',
+      },
+      testResults: {
+        sent: 'Test message sent. It should arrive within a minute.',
+        demo: 'Demo company: nothing was sent. Real companies get it from the country’s sender.',
+        noSender:
+          'No text sender is set up for {{country}} in this environment, so nothing was sent.',
+        smsOff:
+          'Texts are off for {{country}}: TalkOlog reaches site managers by WhatsApp and app notifications, so nothing was sent.',
+        failed: 'The text provider refused the test message. TalkOlog has logged it.',
+        rateLimited: 'Five test messages an hour. Try again later.',
+        invalidPhone: 'Enter a valid mobile number.',
+      },
+      callMeNow: 'Call me now',
+      callDialog: {
+        title: 'Call me now',
+        body: 'TalkOlog calls this number with a short test call: who is calling, one sentence and goodbye. Nothing is recorded and the number is not saved.',
+        phone: 'Your mobile number',
+        language: 'Language of the call',
+        attest: 'This is my own number.',
+        attestRequired: 'Tick the box to confirm it is your own number.',
+        call: 'Call me now',
+      },
+      callResults: {
+        requested: 'Calling you now. Your phone should ring within a minute.',
+        demo: 'Demo company: the call was placed on TalkOlog’s console, so no real phone rings.',
+        rateLimited: 'Five test calls an hour. Try again later.',
+        callLive: 'A test call is still on its way. Wait for it to end.',
+        noTrunk: 'TalkOlog does not place calls in {{country}} yet.',
+        invalidPhone: 'Enter a valid mobile number.',
+      },
+    },
     pdf: {
       logo: 'Logo',
       logoHint: 'PNG or SVG up to 2 MB · shown on every PDF',
@@ -1262,14 +2250,18 @@ export const copy = {
       removeLogo: 'Remove logo',
       logoDemo: 'Demo mode: the logo is kept in this browser tab only.',
       logoUploading: 'Uploading…',
+      logoWrongType: 'Use a PNG or SVG file.',
+      logoTooLarge: 'The logo must be 2 MB or smaller.',
       letterhead: 'Letterhead lines',
       letterheadHint: 'Address, licence number — one per line, under the company name.',
       letterheadPlaceholder: 'Line',
+      letterheadLine: 'Line {{n}}',
       addLine: 'Add line',
       removeLine: 'Remove line',
+      removeLineN: 'Remove line {{n}}',
       footer: 'Footer',
-      footerText: 'Generated by SiteLog from the site manager’s voice report',
-      footerToggle: 'Show “Generated by SiteLog…” footer',
+      footerText: 'Generated by TalkOlog from the site manager’s voice report',
+      footerToggle: 'Show “Generated by TalkOlog…” footer',
       paper: 'Paper size',
       letter: 'Letter',
       a4: 'A4',
@@ -1279,16 +2271,38 @@ export const copy = {
       previewReport: 'Daily report',
       previewNo: 'RL-2041-0187 · v2',
       previewLogo: 'LOGO',
+      /** §19 Q233 (W4-05): `update_org` p_locale / p_units, admin, audited. */
+      reportLocale: 'Report language and units',
+      reportLocaleHint: 'New report versions use them. Filed versions keep their own.',
+      reportLanguage: 'Report language',
+      reportLanguages: { en: 'English', tr: 'Turkish' },
+      units: 'Units',
+      unitNames: {
+        imperial: 'Imperial (°F, in, mph)',
+        metric: 'Metric (°C, mm, km/h)',
+      },
+      reportLocaleApply: 'Change language and units',
+      reportLocaleConfirmTitle: 'Change the report language and units?',
+      reportLocaleConfirmBody:
+        'New report versions will be in {{language}}, {{units}}. Filed versions keep their language and units.',
+      reportLocaleConfirm: 'Change',
+      reportLocaleSaved: 'Report language and units saved.',
     },
     recipients: {
       perSite: 'Per-site recipients',
       hint: 'Filed PDFs and the daily digest go to these addresses.',
       applyAll: 'Apply to all sites',
       applyAllHint: (site: string) => `Copies ${site}’s list to every other site.`,
+      /** W4-05: the same, as i18next strings (Settings; the setup wizard keeps the functions). */
+      applyAllFor: 'Copies {{site}}’s list to every other site.',
+      applyAllSite: 'Apply to all sites · {{site}}',
       applied: 'Recipients applied to all sites.',
       add: 'Add email',
+      addSite: 'Add email · {{site}}',
       placeholder: 'name@company.com',
       remove: (email: string) => `Remove ${email}`,
+      removeEmail: 'Remove {{email}}',
+      perSiteOf: 'Per-site recipients · {{site}}',
       invalid: 'Enter a valid email.',
       none: 'No recipients yet.',
       noSitesTitle: 'No sites yet',
@@ -1301,8 +2315,8 @@ export const copy = {
       columns: 'Columns',
       columnsHint: 'Column order of the payroll CSV, for everyone in the company.',
       reset: 'Reset to default order',
-      moveUp: (col: string) => `Move ${col} up`,
-      moveDown: (col: string) => `Move ${col} down`,
+      moveUpCol: 'Move {{column}} up',
+      moveDownCol: 'Move {{column}} down',
       includeUnconfirmed: 'Include unconfirmed companies',
       includeUnconfirmedHint: 'Rows heard in reports but not yet confirmed as subcontractors.',
     },
@@ -1313,48 +2327,66 @@ export const copy = {
     discard: 'Discard changes',
   },
 
+  /**
+   * P13 · Billing (W4-10, EN/TR): the org's own price (spec §19 Q234) in its currency and the
+   * panel's language, the provider (§19 Q236: `manual` → TalkOlog invoices directly), the admin
+   * banner on every page (F23, §19 Q235).
+   */
   billing: {
     title: 'Billing',
-    subtitle: '$399 per active site, per month. No setup fee.',
+    subtitle: 'Billed per active site, per month. No setup fee.',
+    subtitlePrice: '{{price}} per active site, per month. No setup fee.',
     plan: 'Current plan',
-    monthly: 'Monthly total',
-    sitesTimes: (n: number) => `${plural(n, 'active site')} × $399`,
+    perMonth: '/ month',
+    /** "6 × $399.00 = $2,394.00": active sites × the org's price = the monthly total. */
+    equation: '{{count}} × {{price}} = {{total}}',
+    noPrice: 'TalkOlog sets your price per site. Ask us if it is not shown here yet.',
     nextInvoice: 'Next invoice',
     paymentMethod: 'Payment method',
     updatePayment: 'Update payment method',
     whatCounts: 'What counts as active',
-    whatCountsBody:
-      'A site is active while it can receive reports. Paused sites are not billed from the next cycle.',
+    whatCountsActive: 'Active while it can receive reports.',
+    whatCountsPaused: 'Paused sites stop reminders and billing from the next cycle.',
+    whatCountsProrated: 'Added sites are prorated by Stripe.',
+    whatCountsManual: 'Added sites are on your next invoice from TalkOlog.',
     sitesOnPlan: 'Sites on this plan',
-    columns: { site: 'Site', since: 'Active since', status: 'Status', monthly: 'Monthly' },
+    thing: 'billing',
+    columns: {
+      site: 'Site',
+      since: 'Active since',
+      status: 'Status',
+      monthly: 'Monthly',
+      action: 'Action',
+    },
     pause: 'Pause',
     resume: 'Resume',
+    pauseSiteLabel: 'Pause {{site}}',
+    resumeSiteLabel: 'Resume {{site}}',
     pauseDialog: {
-      title: (site: string) => `Pause ${site}?`,
+      title: 'Pause {{site}}?',
       body: 'Reminders stop and it won’t be billed from next cycle.',
       confirm: 'Pause site',
     },
     resumeDialog: {
-      title: (site: string) => `Resume ${site}?`,
+      title: 'Resume {{site}}?',
       body: 'Reminders start again and the site is billed from today.',
       confirm: 'Resume site',
     },
-    perMonth: '/ month',
     activeSitesLabel: 'Active sites',
-    card: (brand: string, last4: string) => `${brand} ending ${last4}`,
+    card: '{{brand}} ending {{last4}}',
     noPaymentMethod: 'No payment method on file',
     trial: 'Free trial',
-    trialEnds: (date: string) => `Trial ends ${date}`,
+    trialEnds: 'Trial ends {{date}}',
+    trialEnded: 'Trial ended {{date}}',
     noSubscription: 'No subscription yet',
-    statusBanner: {
-      past_due:
-        'Payment past due. Reports keep flowing for 14 days; update the payment method to keep reminders on.',
+    status: 'Billing status',
+    statuses: {
+      trialing: 'Free trial',
+      active: 'Active',
+      past_due: 'Past due',
+      canceled: 'Canceled',
+      paused: 'Paused',
     },
-    whatCountsPoints: [
-      'Active while it can receive reports.',
-      'Paused sites stop reminders and billing from the next cycle.',
-      'Added sites are prorated by Stripe.',
-    ],
     portalDemo: 'Demo mode: the Stripe customer portal opens here in production.',
     portalOpening: 'Opening the Stripe customer portal…',
     checkoutDemo: 'Demo mode: Stripe Checkout opens here in production.',
@@ -1368,33 +2400,62 @@ export const copy = {
       'Resume a site below, or add one, before you add payment details. Billing is per active site.',
     addSite: 'Add a site',
     noSitesTitle: 'No sites on the plan',
-    noSitesBody: 'Each active site is billed $399 a month.',
+    noSitesBody: 'Each active site is billed monthly.',
+    noSitesBodyPrice: 'Each active site is billed {{price}} a month.',
     checkoutSuccess: 'Subscription started. It can take a minute to show here.',
     checkoutCanceled: 'Checkout canceled. No subscription was started.',
-    pausedSince: (date: string) => `since ${date}`,
+    pausedSince: 'since {{date}}',
     invoicesEmpty: 'No invoices yet.',
-    invoiceDownload: (date: string) => `Download invoice ${date}`,
-    siteRow: (site: string) => site,
+    invoiceDownload: 'Download invoice {{date}}',
     notBilled: '—',
     invoices: 'Invoices',
     invoiceColumns: { date: 'Date', sites: 'Sites', amount: 'Amount', status: 'Status' },
     download: 'Download',
-    paused: (site: string) => `${site} paused.`,
-    resumed: (site: string) => `${site} resumed.`,
+    /** §19 Q236: a `manual` org (a TR org until §19 Q8). */
+    manual: {
+      title: 'TalkOlog invoices you directly',
+      body: 'No card is needed here. TalkOlog sends your invoice for the active sites below each month; a paused site is not billed from the next cycle.',
+      invoices: 'Your invoices come from TalkOlog by email.',
+    },
+    /** The banner on every page for admins (F23, spec §19 Q235). */
+    banner: {
+      label: 'Billing',
+      past_due:
+        'Payment past due. Update the payment method by {{date}} to keep reminders and calls on.',
+      pastDueNoDate: 'Payment past due. Update the payment method to keep reminders and calls on.',
+      trial_ended:
+        'Your free trial ended on {{ended}}. Add payment details by {{date}} to keep reminders and calls on.',
+      manualPastDue:
+        'Your TalkOlog invoice is past due. Reminders and calls stop on {{date}} unless it is paid.',
+      blocked:
+        'Reminders and calls are paused: billing is past due. Update the payment method to restart them.',
+      manualBlocked:
+        'Reminders and calls are paused: your TalkOlog invoice is past due. Contact TalkOlog to restart them.',
+      canceled:
+        'Your subscription is canceled. Reminders and calls are off until it is restarted from Billing.',
+      action: 'Open Billing',
+    },
   },
 
+  /**
+   * P2 Setup wizard (F2; W4-02): read through `t()`, Turkish in `UI_RESOURCES.tr.panel.setup`.
+   * The site step reuses Team's invite fields (`team.invite.language`, `preference`, `team.locales`,
+   * `team.prefers`); the welcome preview is the §9.2 SMS itself (`renderSms`), not copy here.
+   */
   setup: {
     title: 'Set up your company',
-    header: (company: string) => `${company} · setup`,
+    header: '{{company}} · setup',
     saveLater: 'Save and finish later',
     steps: { company: 'Company', site: 'First site & manager', reports: 'Reports & reminders' },
-    stepOf: (n: number, total: number) => `Step ${n} of ${total}`,
+    stepOf: 'Step {{n}} of {{total}}',
     stepState: { done: 'Done', current: 'Current step', upcoming: 'Upcoming' },
     addSiteTitle: 'Add a site',
-    addSiteSubtitle: 'Each site reports daily by WhatsApp. $399 / month, no setup fee.',
+    addSiteSubtitle: 'Each site reports daily by text link or call. No setup fee.',
+    addSiteSubtitlePrice:
+      'Each site reports daily by text link or call. {{price}} / month, no setup fee.',
     company: {
       title: 'Your company',
-      subtitle: 'What goes on the PDFs and the WhatsApp welcome.',
+      subtitle: 'What goes on the PDFs and the welcome text.',
       name: 'Company name',
       namePlaceholder: 'e.g. Kestrel Build Group',
       nameRequired: 'Enter your company name.',
@@ -1413,6 +2474,26 @@ export const copy = {
       logoSaveFailed: 'The logo didn’t upload. Add it in Settings → PDF template.',
       timezone: 'Company time zone',
       next: 'Continue to first site',
+      /** Country packs (spec §4.6): one option per `countries` row, named by the browser. */
+      country: 'Country',
+      countryPlaceholder: 'Choose a country',
+      countryHint: 'Sets the report language, units, paper size, currency and time zone.',
+      countryLocked: 'The country can’t be changed after setup.',
+      countryRequired: 'Choose your company’s country.',
+      countryList: 'the country list',
+      noCountries: 'No country is set up in this TalkOlog database yet.',
+      presets: {
+        title: 'Set by {{country}}',
+        reportLanguage: 'Report language',
+        units: 'Units',
+        paper: 'Paper',
+        currency: 'Currency',
+      },
+      unitNames: { imperial: 'Imperial', metric: 'Metric' },
+      paperNames: { letter: 'Letter', a4: 'A4' },
+      errors: {
+        unknownCountry: 'That country isn’t available. Choose one from the list.',
+      },
     },
     site: {
       sectionSite: 'Site',
@@ -1428,7 +2509,7 @@ export const copy = {
       addressPlaceholder: 'Street, city, state',
       addressHint: 'Used to pull local weather data for every report and delay entry.',
       addressRequired: 'Enter the address or set the coordinates.',
-      geocoded: (lat: string, lng: string) => `Located · ${lat}, ${lng}`,
+      geocoded: 'Located · {{lat}}, {{lng}}',
       geocoding: 'Looking up the address…',
       notGeocoded:
         'Couldn’t locate that address. Enter the coordinates or weather data stays unavailable until the location is set.',
@@ -1442,40 +2523,50 @@ export const copy = {
       managerName: 'Name',
       managerNamePlaceholder: 'Full name',
       managerNameRequired: 'Enter the site manager’s name.',
-      phone: 'WhatsApp number',
+      phone: 'Mobile number',
       languages: 'Speaks',
       backup: 'Backup reporter',
       backupHint: 'Optional · gets the same welcome and can cover for the manager.',
       addBackup: 'Add a backup reporter',
       removeBackup: 'Remove backup',
       backupName: 'Backup name',
-      backupPhone: 'Backup WhatsApp number',
+      backupPhone: 'Backup mobile number',
+      /** The backup's own language and preference (W4-02), as the manager's. */
+      backupLanguage: 'Language TalkOlog uses with the backup',
+      backupPreference: 'Backup’s preferred channel',
       addAnother: 'Add another site',
-      send: 'Send WhatsApp welcome',
-      sent: (name: string) => `Site added. The WhatsApp welcome to ${name} is queued.`,
-      inviteFailed: (name: string, reason: string) =>
-        `The site was created, but the WhatsApp welcome to ${name} couldn’t be queued (${reason}). Invite them from Team & numbers.`,
+      send: 'Send welcome text',
+      sent: 'Site added. The welcome text to {{name}} is queued.',
+      inviteFailed:
+        'The site was created, but the welcome text to {{name}} couldn’t be queued ({{reason}}). Invite them from Team & numbers.',
       recipientsFailed:
         'The site was created, but its report recipients weren’t saved. Set them in Settings → Recipients.',
-      another: (n: number) => `${plural(n, 'site')} added so far`,
+      another_one: '{{count}} site added so far',
+      another_other: '{{count}} sites added so far',
+      /** F2 / §19 Q229 (W4-02): a number libphonenumber knows to be a landline. */
+      lineCheck: {
+        landline_text:
+          'This is a landline number, which can’t get texts. Choose Call, or enter a mobile number.',
+        landline_unreachable:
+          'This is a landline number. TalkOlog can’t text it, and Talk now needs the personal link and a code, both sent by text. Enter a mobile number.',
+      },
       preview: {
-        title: (name: string) => `Preview · what ${name} receives`,
-        from: 'SiteLog',
-        buttons: ['Got it', 'Wrong site'],
-        followUp:
-          'Speak Spanish or English — the report always comes out in English. Try a 20-second test note now; nothing gets filed.',
+        title: 'Preview · what {{name}} receives',
+        from: 'TalkOlog · text message',
+        /** §19 Q25: the welcome always goes by SMS; the link in the preview is not theirs. */
+        sampleLink: 'The link is a sample. Each person gets their own.',
+        callAnyTime: 'They can also call {{number}} any time.',
+        unavailable: 'No preview: texts in this country can’t carry a link.',
         placeholderName: 'your site manager',
         placeholderSite: 'the site',
       },
       pricing: {
-        price: '$399',
-        perMonth: '/ month',
-        setup: '$0 setup',
-        billed: 'billed per active site',
-        points: [
-          'Cancel or pause any site at any time',
-          'First invoice at the start of next month',
-        ],
+        perSiteMonth: '/ site / month',
+        setupBilled: '{{zero}} setup · billed per active site',
+        pointPause: 'Cancel or pause any site at any time',
+        pointInvoice: 'First invoice at the start of next month',
+        sitesTimes_one: '{{count}} active site × {{price}}',
+        sitesTimes_other: '{{count}} active sites × {{price}}',
       },
     },
     reports: {
@@ -1483,6 +2574,12 @@ export const copy = {
       subtitle: 'Defaults for every site. Change them later in Settings.',
       recipients: 'Report recipients',
       recipientsHint: 'Filed PDFs go to these addresses. You can set per-site lists later.',
+      /** The recipients' chips and add box (as Settings → Recipients words them). */
+      addEmail: 'Add email',
+      emailPlaceholder: 'name@company.com',
+      removeEmail: 'Remove {{email}}',
+      emailInvalid: 'Enter a valid email.',
+      noRecipients: 'No recipients yet.',
       finish: 'Finish',
       finished: 'All set. Reports arrive after the deadline.',
     },
@@ -1493,9 +2590,9 @@ export const copy = {
   },
 
   ops: {
-    eyebrow: 'SiteLog internal',
+    eyebrow: 'TalkOlog internal',
     title: 'Ops',
-    subtitle: 'Job queue, dead letters and report cost across every org. SiteLog staff only.',
+    subtitle: 'Job queue, dead letters and report cost across every org. TalkOlog staff only.',
     errorThing: 'ops data',
     refresh: 'Refresh',
     utc: (when: string) => `${when} UTC`,
@@ -1552,6 +2649,44 @@ export const copy = {
         confirm: 'Discard job',
       },
     },
+    /**
+     * W3-17 (M8, spec §16.2): per org and week, the share of called site-days filed on the call.
+     * Plain strings for `t()`: the card speaks the panel's language (EN, TR).
+     */
+    outboundCalls: {
+      title: 'Reminder calls (M8)',
+      hint: 'Per organisation and week: the site-days TalkOlog called a reporter about, and how many were filed on that call by the reporter’s yes, with no office help. M8’s target is 85%.',
+      columns: {
+        org: 'Organisation',
+        week: 'Week of',
+        called: 'Called',
+        filed: 'Filed on the call',
+        share: 'Share',
+      },
+      share: '{{pct}}%',
+      belowTarget: 'Below the 85% target',
+      demo: 'Demo',
+      empty: 'No reminder calls in the last 8 weeks.',
+    },
+    /** Spec §19 Q44 (W1-16): unknown contacts no org sees. */
+    orgless: {
+      title: 'Unknown contacts with no organisation',
+      hint: 'Texts from numbers with no history in exactly one organisation of their country. No customer sees them; give one to the organisation it belongs to, or ignore it.',
+      columns: {
+        contact: 'Number',
+        message: 'Message',
+        received: 'Received',
+        org: 'Organisation',
+      },
+      orgLabel: (phone: string) => `Organisation for ${phone}`,
+      orgPlaceholder: 'Choose an organisation',
+      assign: 'Assign',
+      ignore: 'Ignore',
+      assigned: 'Contact assigned. The organisation sees it on its Overview and Team page.',
+      ignored: 'Contact ignored.',
+      empty: 'No unknown contacts without an organisation.',
+      thing: 'unknown contacts',
+    },
     cost: {
       title: 'Cost outliers',
       hint: 'Filed reports that cost more than 3× the median of their kind over the previous 30 days (once 20 reports exist). AI plus WhatsApp templates, estimated.',
@@ -1569,6 +2704,46 @@ export const copy = {
       sample: (n: number) => `${plural(n, 'report')} in baseline`,
       otherOrg: 'Switch to this org to open the report',
       empty: 'No cost outliers in the last 30 days.',
+    },
+    /**
+     * W4-10 (spec §19 Q234, Q236): every org's billing; TalkOlog staff set an org's price and a
+     * manual org's status (both audited). /ops stays English (§19 Q240).
+     */
+    billing: {
+      title: 'Billing per organisation',
+      hint: 'The price per active site and month of each organisation (TalkOlog sets it; a new organisation gets its currency’s default) and the status of the ones TalkOlog invoices directly. A Stripe organisation’s status follows Stripe.',
+      columns: {
+        org: 'Organisation',
+        provider: 'Billed by',
+        status: 'Status',
+        price: 'Price per site',
+        sites: 'Active sites',
+      },
+      providers: { stripe: 'Stripe', manual: 'TalkOlog (manual)' },
+      demo: 'Demo',
+      noPrice: 'Not set',
+      edit: 'Edit',
+      editLabel: (org: string) => `Edit the billing of ${org}`,
+      dialogTitle: (org: string) => `Billing of ${org}`,
+      dialogBody:
+        'The price shows on the organisation’s Billing page and is what Checkout bills; a different price needs a matching Stripe price. Leave the amount empty to clear it.',
+      amount: 'Price per site and month',
+      amountHint: 'In the currency’s main unit, e.g. 399 or 399.00.',
+      amountInvalid: 'Enter an amount above zero with at most two decimals, or leave it empty.',
+      currency: 'Currency',
+      currencyInvalid: 'Enter a three-letter ISO currency code, e.g. USD or TRY.',
+      status: 'Billing status (manual organisations only)',
+      statuses: {
+        trialing: 'Free trial',
+        active: 'Active',
+        past_due: 'Past due',
+        canceled: 'Canceled',
+        paused: 'Paused',
+      },
+      save: 'Save',
+      saved: 'Billing saved. The change is audited.',
+      empty: 'No organisations.',
+      thing: 'billing',
     },
     toasts: {
       retried: (id: number) => `Job ${id} is queued again.`,
@@ -1588,45 +2763,45 @@ export const copy = {
   toasts: {
     saved: 'Saved.',
     signedOff: (no: string) => `${no} signed off.`,
+    signedOffReport: '{{no}} signed off.',
     undone: 'Sign-off undone.',
     noWork: (site: string) => `${site} marked as no work.`,
     versionSaved: (v: number) => `Version ${v} saved.`,
+    versionSavedN: 'Version {{version}} saved.',
     invoiceAdded: 'Invoice added.',
     notificationsRead: 'Marked as read.',
-    reporterInvited: (name: string) => `Welcome queued for ${name}.`,
-    linked: 'Number linked.',
-    ignored: 'Number ignored.',
     termReviewed: 'Glossary updated.',
     termAdded: 'Term added.',
     settingsSaved: 'Settings saved.',
     sitePaused: (site: string) => `${site} paused.`,
     siteResumed: (site: string) => `${site} resumed.`,
-    siteCreated: (site: string) => `${site} connected.`,
+    /** W4-10: the same toasts in the panel's language (Billing, Site settings). */
+    sitePausedName: '{{site}} paused.',
+    siteResumedName: '{{site}} resumed.',
+    siteCreated: '{{site}} connected.',
     siteUpdated: 'Site updated.',
-    memberAdded: (email: string) => `Invite sent to ${email}.`,
-    memberUpdated: 'Role updated.',
-    memberRemoved: 'User removed.',
     packRequested: 'Evidence pack requested.',
     csvReady: 'Payroll CSV ready.',
     companyResolved: 'Company resolved. New version saved.',
-    orgCreated: (name: string) => `${name} created.`,
+    orgCreated: '{{name}} created.',
     orgUpdated: 'Company details saved.',
     logoUpdated: 'Logo updated.',
     logoRemoved: 'Logo removed.',
   },
 
+  /** Today's PDFs / Export PDFs (.zip) on the Overview and Reports: the panel's language (W4-09). */
   pdfZip: {
     preparing: 'Preparing PDFs…',
-    progress: (done: number, total: number) => `Downloading PDFs · ${done} of ${total}`,
-    making: (done: number, total: number) => `Making PDFs · ${done} of ${total}`,
-    ready: (n: number) => `${plural(n, 'PDF')} zipped.`,
-    partial: (zipped: number, skipped: number) =>
-      `${plural(zipped, 'PDF')} zipped · ${skipped} not ready or failed to download.`,
+    progress: 'Downloading PDFs · {{done}} of {{total}}',
+    making: 'Making PDFs · {{done}} of {{total}}',
+    ready_one: '{{count}} PDF zipped.',
+    ready_other: '{{count}} PDFs zipped.',
+    partial_one: '{{count}} PDF zipped · {{skipped}} not ready or failed to download.',
+    partial_other: '{{count}} PDFs zipped · {{skipped}} not ready or failed to download.',
     none: 'None of these reports has a PDF yet.',
     failed: 'Couldn’t build the zip. Try again.',
-    capped: (limit: number, total: number) =>
-      `Exporting the first ${limit} of ${total} reports. Narrow the filters for the rest.`,
-    fileName: (label: string, date: string) => `SiteLog_${label}_${date}.zip`,
+    capped: 'Exporting the first {{limit}} of {{total}} reports. Narrow the filters for the rest.',
+    fileName: (label: string, date: string) => `TalkOlog_${label}_${date}.zip`,
     labels: { today: 'daily-reports', archive: 'reports' },
   },
 
@@ -1647,12 +2822,12 @@ export const copy = {
     },
     phone: {
       region: (name: string) => `Simulated WhatsApp chat with ${name}`,
-      title: 'SiteLog',
+      title: 'TalkOlog',
       subtitle: (name: string, site: string) => `${name} · ${site}`,
       simulated: 'Simulated',
       log: 'Conversation',
-      typing: 'SiteLog is typing…',
-      fromAgent: 'SiteLog',
+      typing: 'TalkOlog is typing…',
+      fromAgent: 'TalkOlog',
       fromReporter: (first: string) => first,
       sentAt: (who: string, time: string) => `${who}, ${time}`,
       voiceNote: 'Voice note',
@@ -1673,13 +2848,13 @@ export const copy = {
       input: 'Type a reply',
       placeholder: 'Type a reply or a command…',
       send: 'Send',
-      busy: 'SiteLog is replying…',
+      busy: 'TalkOlog is replying…',
       suggestions: 'Try next',
     },
     sheet: {
       title: 'Send a voice note',
       description:
-        'Test cases from the SiteLog evaluation set, each from a Kestrel site and its site manager. The simulator uses the report the extraction is expected to produce from each transcript.',
+        'Test cases from the TalkOlog evaluation set, each from a Kestrel site and its site manager. The simulator uses the report the extraction is expected to produce from each transcript.',
       send: 'Send',
       sendLabel: (title: string) => `Send: ${title}`,
       typed: 'Typed report',
@@ -1832,20 +3007,18 @@ export const copy = {
       },
     },
     filedCallout: (no: string) => `Filed as ${no}. The office has it now.`,
-    overviewCard: {
-      eyebrow: 'Demo',
-      title: 'Try it on WhatsApp',
-      body: 'Be Marco on site: send his voice note, answer one question, file the report — then come back and watch this page update.',
-      cta: 'Open the field simulator',
-    },
   },
 
   a11y: {
     statusChip: (label: string) => `Status: ${label}`,
+    /** `t()` forms of the shared components (StatusChip, KpiTile), W1-16. */
+    statusChipLabel: 'Status: {{label}}',
     lateBadge: 'Filed after the deadline',
     kpiBar: (parts: string) => `Breakdown: ${parts}`,
+    kpiBreakdown: 'Breakdown: {{parts}}',
     siteCard: (name: string) => `Site card: ${name}`,
     menuFor: (name: string) => `Menu for ${name}`,
+    menuForName: 'Menu for {{name}}',
     required: 'required',
     searchResults: 'Search results',
     loadingPage: 'Loading page',

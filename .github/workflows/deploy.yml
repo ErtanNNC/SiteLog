@@ -4,9 +4,47 @@ name: Deploy
 # Each target is skipped (with a notice) until its secrets exist in the GitHub Environment, so this
 # workflow is safe to merge before the accounts are set up. Setup: docs/RUNBOOK.md §2 "Automated deploys".
 #
-#   push to main         → staging (all targets)
-#   workflow_dispatch    → staging or production, all or one target
-#   pull_request         → web preview only (Netlify deploy preview against staging Supabase)
+# Deploy guard (D40, docs/GAP_ANALYSIS.md §6): everything that changes staging or production (db push,
+# functions deploy, the Fly worker, the panel and the field app with --prod) runs only from the branch
+# claude/focused-newton-5v0u2q, the live staging branch (full refs are compared, so a tag with that
+# name does not pass). From any other ref those jobs are skipped and the `plan` job says why. The
+# guard lives in this file, and a dispatch runs the copy on the ref you pick: it stops mistakes, not an
+# edited workflow. A deploy to any Environment other than staging refuses to run if its project ref
+# is staging's (STAGING_PROJECT_REF below).
+#
+#   pull_request                          → panel and field app previews only (alias pr-<n> on each site),
+#                                           built against the `preview` Environment's Supabase project:
+#                                           the panel in demo mode and the field app with no /api rule
+#                                           while it has none; never against staging data (D41, D42)
+#   workflow_dispatch staging|production  → all targets or one (supabase, worker, web, field), from the
+#                                           live branch only
+#   workflow_dispatch preview             → the Supabase target only (migrations + functions to the
+#                                           preview project), from spec-v1.2 or the live branch (D41)
+#   workflow_dispatch, target inventory   → read-only staging inventory (W1-01 step 0), from any ref
+#                                           whose deploy.yml has it
+#   workflow_dispatch preview, target     → the worker in the runner against the preview project for
+#     preview-worker                        60 minutes (fake transcription and extraction, console
+#                                           texts and email), from spec-v1.2 only: the phone check
+#   workflow_dispatch preview, target     → the always-on worker for the preview project on Fly.io
+#     preview-worker-fly                    (its own app, FLY_APP; real transcription and extraction,
+#                                           Twilio texts for real orgs, console email), from spec-v1.2
+#                                           only
+#   workflow_dispatch preview, target     → LiveKit Cloud for the preview project: the voice secrets on
+#     voice-setup                           its functions and the Python agent deployed with the lk CLI
+#                                           (English voices only), from spec-v1.2 only
+#   workflow_dispatch preview, target     → Stripe test mode for the preview project: product, price,
+#     billing-setup                         webhook endpoint and the Stripe secrets on its functions,
+#                                           from spec-v1.2 only
+#   workflow_dispatch preview, target     → the WhatsApp templates in Twilio's Content API: create and
+#     whatsapp-templates                    submit the missing ones, or write the approved ids into the
+#                                           preview project's country packs, from spec-v1.2 only
+#   workflow_dispatch preview, target     → the Supabase Auth sign-in and invite emails (English only,
+#     auth-templates                        §19 Q378) on the preview project, from spec-v1.2 only
+#   push to main                          → skipped by the guard (there is no main yet, D40)
+#
+# Until the cut-over (W1-19) the live branch runs its own pre-W1-01 deploy.yml (no guard, no
+# `inventory` or `preview`): dispatch the inventory and preview targets from spec-v1.2, and create
+# `main` only from a commit that has this file.
 
 on:
   push:
@@ -15,27 +53,267 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: Target environment
+        description: Target environment (preview takes the supabase target only)
         type: choice
-        options: [staging, production]
+        options: [staging, production, preview]
         default: staging
       target:
-        description: What to deploy
+        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project; phone-setup = field-api secrets and a panel sign-in link on the preview project; preview-worker = the worker in the runner against the preview project for 60 minutes, fake transcription and extraction, console texts; preview-worker-fly = the always-on worker for the preview project on its own Fly.io app; voice-setup = the voice secrets on the preview project and the agent deployed to LiveKit Cloud; billing-setup = Stripe test mode for the preview project (product, price, webhook and secrets); countries-set = a country pack's SMS and WhatsApp sender and WhatsApp templates on the preview project (or, with pack_print, the template bodies to submit); whatsapp-templates = the WhatsApp templates created and submitted in Twilio (wa_mode submit), or the approved ids written into the preview project's packs (wa_mode sync); auth-templates = the sign-in and invite email templates (English) on the preview project's Supabase Auth; all nine owner-approved; eval = Claude models on the golden sets with the preview key, environment preview)
         type: choice
-        options: [all, supabase, worker, web]
+        options:
+          [
+            all,
+            supabase,
+            worker,
+            web,
+            field,
+            inventory,
+            seed,
+            phone-setup,
+            preview-worker,
+            preview-worker-fly,
+            voice-setup,
+            billing-setup,
+            countries-set,
+            whatsapp-templates,
+            auth-templates,
+            eval,
+          ]
         default: all
+      eval_models:
+        description: 'Target eval only: comma-separated Claude model ids (empty = sonnet, haiku and opus)'
+        type: string
+        default: ''
+      eval_sets:
+        description: 'Target eval only: extraction, answers, corrections, utterances, tr, or all (every set but tr)'
+        type: string
+        default: all
+      voice_logs_only:
+        description: "Target voice-setup only: read the running agent's logs, set no secret and deploy nothing (a redeploy loses the last calls' logs)"
+        type: boolean
+        default: false
+      pack_code:
+        description: 'Targets countries-set (one pack: US or TR) and whatsapp-templates (one or more: TR,US): the country pack'
+        type: string
+        default: ''
+      pack_sms_sender:
+        description: 'Target countries-set only: the SMS sender to set (E.164 number or alphanumeric title); empty = unchanged'
+        type: string
+        default: ''
+      pack_whatsapp_sender:
+        description: 'Target countries-set only: the WhatsApp sender number (E.164); empty = unchanged'
+        type: string
+        default: ''
+      pack_whatsapp_templates:
+        description: 'Target countries-set only: the approved templates as JSON {"daily_link":{"en":"HX…"},…}; empty = unchanged'
+        type: string
+        default: ''
+      pack_print:
+        description: 'Target countries-set only: print the WhatsApp template bodies to submit and write nothing'
+        type: boolean
+        default: false
+      wa_mode:
+        description: 'Target whatsapp-templates only: dry-run (print the templates, call nothing), submit (create and submit the missing ones in Twilio) or sync (approved ids into the packs)'
+        type: choice
+        options: [dry-run, submit, sync]
+        default: dry-run
+      wa_languages:
+        description: 'Target whatsapp-templates only: the template languages (en, es, tr), comma-separated'
+        type: string
+        default: tr,en
 
 concurrency:
-  group: deploy-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || inputs.environment || 'staging' }}
+  # preview-worker runs for an hour: its own group, so seed, phone-setup and supabase dispatches to the
+  # preview project are not held behind it. preview-worker-fly deploys and returns, so it shares the
+  # preview group (one change to the preview project at a time).
+  group: deploy-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || inputs.target == 'preview-worker' && 'preview-worker' || inputs.target == 'eval' && 'eval' || inputs.environment || 'staging' }}
   cancel-in-progress: false
 
 env:
   ENVIRONMENT: ${{ inputs.environment || 'staging' }}
+  # The job conditions below repeat these two names literally (expressions cannot read `env`).
+  LIVE_BRANCH: claude/focused-newton-5v0u2q
+  PREVIEW_BRANCH: spec-v1.2
+  # The hosted staging project (public). No other Environment may deploy to it or build against it.
+  STAGING_PROJECT_REF: abuanbyzttuqksdctqcp
 
 jobs:
+  plan:
+    name: Plan · deploy guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      supabase: ${{ steps.plan.outputs.supabase }}
+      worker: ${{ steps.plan.outputs.worker }}
+      web: ${{ steps.plan.outputs.web }}
+      field: ${{ steps.plan.outputs.field }}
+      preview: ${{ steps.plan.outputs.preview }}
+      inventory: ${{ steps.plan.outputs.inventory }}
+      seed: ${{ steps.plan.outputs.seed }}
+      phone_setup: ${{ steps.plan.outputs.phone_setup }}
+      preview_worker: ${{ steps.plan.outputs.preview_worker }}
+      preview_worker_fly: ${{ steps.plan.outputs.preview_worker_fly }}
+      voice_setup: ${{ steps.plan.outputs.voice_setup }}
+      billing_setup: ${{ steps.plan.outputs.billing_setup }}
+      countries_set: ${{ steps.plan.outputs.countries_set }}
+      whatsapp_templates: ${{ steps.plan.outputs.whatsapp_templates }}
+      auth_templates: ${{ steps.plan.outputs.auth_templates }}
+      eval: ${{ steps.plan.outputs.eval }}
+    steps:
+      - name: Decide what this run may touch
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          # Full ref (refs/heads/… or refs/tags/…): a tag named like a branch must not pass the guard.
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          TARGET: ${{ inputs.target || 'all' }}
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          supabase=false worker=false web=false field=false preview=false inventory=false seed=false phone_setup=false preview_worker=false preview_worker_fly=false voice_setup=false billing_setup=false countries_set=false whatsapp_templates=false auth_templates=false eval=false
+          # `all` covers the four deploy targets; the inventory runs only when asked for.
+          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ] && [ "$1" != phone-setup ] && [ "$1" != preview-worker ] && [ "$1" != preview-worker-fly ] && [ "$1" != voice-setup ] && [ "$1" != billing-setup ] && [ "$1" != countries-set ] && [ "$1" != whatsapp-templates ] && [ "$1" != auth-templates ] && [ "$1" != eval ]; }; }
+
+          if [ "$EVENT" = pull_request ]; then
+            web=true field=true preview=true
+            echo "::notice::Pull request: panel and field app previews only (alias pr-$PR_NUMBER), with the preview Environment's Supabase project (else the panel in demo mode and the field app without /api); no migrations, functions, worker or --prod."
+          elif [ "$TARGET" = inventory ]; then
+            if [ "$ENVIRONMENT" = staging ]; then
+              inventory=true
+            else
+              echo "::notice::Inventory skipped: it reads the staging project only. Dispatch it with environment staging."
+            fi
+          elif [ "$TARGET" = phone-setup ]; then
+            # The owner's phone check of the field app (W1-09) against the preview project only.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              phone_setup=true
+            else
+              echo "::notice::phone-setup skipped: it touches the preview project only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
+          elif [ "$TARGET" = preview-worker ]; then
+            # The owner's phone check of the whole field flow (W1-13, W1-15) against the preview project only.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              preview_worker=true
+            else
+              echo "::notice::preview-worker skipped: it runs the worker against the preview project only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
+          elif [ "$TARGET" = preview-worker-fly ]; then
+            # The always-on worker for the preview project on its own Fly.io app, never staging's.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              preview_worker_fly=true
+            else
+              echo "::notice::preview-worker-fly skipped: it deploys the preview project's worker to its own Fly.io app only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
+          elif [ "$TARGET" = voice-setup ]; then
+            # LiveKit Cloud (W3-16) for the preview project only: its voice secrets and the agent.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              voice_setup=true
+            else
+              echo "::notice::voice-setup skipped: it touches the preview project and its LiveKit Cloud project only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
+          elif [ "$TARGET" = billing-setup ]; then
+            # Stripe test mode (W4-15) for the preview project only.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              billing_setup=true
+            else
+              echo "::notice::billing-setup skipped: it touches the preview project and Stripe test mode only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
+          elif [ "$TARGET" = countries-set ]; then
+            # A country pack's senders and WhatsApp templates (pnpm countries:set) on the preview project only.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              countries_set=true
+            else
+              echo "::notice::countries-set skipped: it writes the preview project's country packs only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
+          elif [ "$TARGET" = whatsapp-templates ]; then
+            # The WhatsApp templates (pnpm whatsapp:templates) in Twilio and the preview project's packs only.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              whatsapp_templates=true
+            else
+              echo "::notice::whatsapp-templates skipped: it writes the preview project's country packs only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
+          elif [ "$TARGET" = auth-templates ]; then
+            # The Auth email templates (pnpm auth:templates) on the preview project only.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              auth_templates=true
+            else
+              echo "::notice::auth-templates skipped: it writes the preview project's Auth email templates only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
+          elif [ "$TARGET" = eval ]; then
+            # The model comparison (.github/workflows/eval.yml) with the preview Environment's key only.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              eval=true
+            else
+              echo "::notice::eval skipped: it uses the preview Environment's Anthropic key only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
+          elif [ "$TARGET" = seed ]; then
+            # W1-06 apply mode (RUNBOOK §2 step 5): the two demo orgs into the preview project only.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              seed=true
+            else
+              echo "::notice::Seed skipped: it writes the demo orgs into the preview project only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
+          elif [ "$ENVIRONMENT" = preview ]; then
+            if [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ] || [ "$REF" = "refs/heads/$LIVE_BRANCH" ]; then
+              if wants supabase; then supabase=true; fi
+            else
+              echo "::notice::Deploy guard (D41): the preview project takes deploys from the branches $PREVIEW_BRANCH or $LIVE_BRANCH only; this run is on $REF, so nothing is deployed."
+            fi
+            for t in worker web field; do
+              if wants "$t"; then
+                echo "::notice::Environment preview takes the supabase target only (migrations and functions to the preview project): $t skipped."
+              fi
+            done
+          elif [ "$REF" = "refs/heads/$LIVE_BRANCH" ]; then
+            if wants supabase; then supabase=true; fi
+            if wants worker; then worker=true; fi
+            if wants web; then web=true; fi
+            if wants field; then field=true; fi
+          else
+            echo "::notice::Deploy guard (D40): $ENVIRONMENT deploys (db push, functions deploy, the Fly worker, the panel and the field app with --prod) run only from the branch $LIVE_BRANCH; this run is on $REF, so they are skipped. Use target inventory for a read-only look at staging, or environment preview for the preview project."
+          fi
+
+          {
+            echo "supabase=$supabase"
+            echo "worker=$worker"
+            echo "web=$web"
+            echo "field=$field"
+            echo "preview=$preview"
+            echo "inventory=$inventory"
+            echo "seed=$seed"
+            echo "phone_setup=$phone_setup"
+            echo "preview_worker=$preview_worker"
+            echo "preview_worker_fly=$preview_worker_fly"
+            echo "voice_setup=$voice_setup"
+            echo "billing_setup=$billing_setup"
+            echo "countries_set=$countries_set"
+            echo "whatsapp_templates=$whatsapp_templates"
+            echo "auth_templates=$auth_templates"
+            echo "eval=$eval"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Deploy plan"
+            echo
+            if [ "$EVENT" = pull_request ]; then
+              echo "Pull request #$PR_NUMBER: panel and field app previews only."
+            else
+              echo "Event \`$EVENT\` on \`$REF_NAME\` (\`$REF\`), environment \`$ENVIRONMENT\`, target \`$TARGET\`. Live branch: \`$LIVE_BRANCH\`."
+            fi
+            echo
+            echo "| Job | Runs |"
+            echo "| --- | --- |"
+            for k in supabase worker web field preview inventory seed phone_setup preview_worker preview_worker_fly voice_setup billing_setup countries_set whatsapp_templates auth_templates eval; do echo "| $k | ${!k} |"; done
+          } >> "$GITHUB_STEP_SUMMARY"
+
   supabase:
     name: Supabase · migrations + edge functions
-    if: github.event_name != 'pull_request' && contains(fromJSON('["all","supabase"]'), inputs.target || 'all')
+    needs: plan
+    # Guard (D40/D41), repeated literally after the plan job: staging and production only from the live
+    # branch; the preview project also from spec-v1.2.
+    if: >-
+      needs.plan.outputs.supabase == 'true' &&
+      (github.ref == 'refs/heads/claude/focused-newton-5v0u2q' ||
+       (inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: ${{ inputs.environment || 'staging' }}
@@ -48,6 +326,12 @@ jobs:
         id: cfg
         run: |
           if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD_SECRET" ] && [ -n "$SUPABASE_PROJECT_REF" ]; then
+            # A missing Environment value falls back to a repository or organization one, so `preview`
+            # (or `production`) can resolve to staging's project without anyone copying it (D40/D41).
+            if [ "$ENVIRONMENT" != staging ] && [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+              echo "::error::$ENVIRONMENT resolves to the staging Supabase project ($STAGING_PROJECT_REF); refusing to deploy. Give $ENVIRONMENT its own SUPABASE_PROJECT_REF and SUPABASE_DB_PASSWORD (docs/RUNBOOK.md §2)."
+              exit 1
+            fi
             # A password pasted on a phone often carries a trailing space or line break.
             pw="$(printf '%s' "$SUPABASE_DB_PASSWORD_SECRET" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
             echo "::add-mask::$pw"
@@ -80,13 +364,1222 @@ jobs:
         # verify_jwt, entrypoints and the import map come from supabase/config.toml.
         run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
 
+  seed:
+    name: Seed · demo orgs into the preview project
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # Writes only the is_demo orgs (Kestrel, Demir Yapı) in one transaction; refuses staging.
+    if: >-
+      needs.plan.outputs.seed == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: preview
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD_SECRET: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      DEMO_OFFICE_PASSWORD_SECRET: ${{ secrets.DEMO_OFFICE_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      # The pr-1 field preview (its /api reaches the preview project): the links in the seeded texts.
+      FIELD_APP_URL: ${{ vars.FIELD_APP_URL || 'https://pr-1--sitelog-field-staging-ertannnc.netlify.app' }}
+    steps:
+      - name: Check configuration
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD_SECRET" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::Seed needs SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD (secrets) and SUPABASE_PROJECT_REF (variable) in the preview Environment."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing to seed."
+            exit 1
+          fi
+          pw="$(printf '%s' "$SUPABASE_DB_PASSWORD_SECRET" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          echo "::add-mask::$pw"
+          { echo "SUPABASE_DB_PASSWORD<<__PW__"; printf '%s\n' "$pw"; echo "__PW__"; } >> "$GITHUB_ENV"
+          # The demo office users' password: the Environment's secret, else a random one (the panel
+          # signs in by magic link only, so nobody needs to know it; RUNBOOK §2 step 5).
+          office="$DEMO_OFFICE_PASSWORD_SECRET"
+          if [ "${#office}" -lt 16 ]; then
+            office="$(openssl rand -base64 30 | tr -d '\n')"
+            echo "::notice::DEMO_OFFICE_PASSWORD is not set (or shorter than 16): using a random one for the demo office users."
+          fi
+          echo "::add-mask::$office"
+          { echo "DEMO_OFFICE_PASSWORD<<__PW__"; printf '%s\n' "$office"; echo "__PW__"; } >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+      - name: Connection string
+        # The CLI saves the project's pooler address on link; the seed connects in session mode (5432),
+        # with the password URL-encoded. Never printed.
+        run: |
+          f=supabase/.temp/pooler-url
+          if [ ! -s "$f" ]; then
+            echo "::error::supabase link saved no pooler address ($f)."
+            exit 1
+          fi
+          url="$(node -e '
+            const u = new URL(require("fs").readFileSync(process.argv[1], "utf8").trim());
+            u.password = encodeURIComponent(process.env.SUPABASE_DB_PASSWORD);
+            u.port = "5432";
+            if (!u.username.includes(process.env.SUPABASE_PROJECT_REF)) { console.error("pooler user is not the preview project"); process.exit(1); }
+            console.log(u.toString());
+          ' "$f")"
+          echo "::add-mask::$url"
+          { echo "SUPABASE_DB_URL<<__URL__"; printf '%s\n' "$url"; echo "__URL__"; } >> "$GITHUB_ENV"
+      - name: Apply the demo seed (today)
+        run: pnpm seed:demo -- --date today --apply
+      - name: Field-api secrets on the preview project (names only)
+        # Read-only: the device check needs LINK_SIGNING_SECRET and the Origin check FIELD_APP_URL.
+        run: |
+          names="$(supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(x=>x.name).join(" ")))')"
+          {
+            echo "### Demo seed applied to the preview project"
+            echo
+            echo "Field links point at \`$FIELD_APP_URL\`."
+            echo
+            for n in LINK_SIGNING_SECRET FIELD_APP_URL; do
+              if [[ " $names " == *" $n "* ]]; then echo "- $n: set"; else echo "- $n: **missing** (the field app's device check will fail until it is set)"; fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  countries-set:
+    name: Country pack · senders and WhatsApp templates (preview)
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # `pnpm countries:set` against the preview project: the pack's SMS sender, WhatsApp sender and
+    # approved WhatsApp templates (audited as country.endpoints_set), or with pack_print the template
+    # bodies to submit, writing nothing. From the moment a sender is set, every real (non-demo) org
+    # on that pack texts from it; demo orgs stay on console (RUNBOOK "Country packs per environment").
+    if: >-
+      needs.plan.outputs.countries_set == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: preview
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD_SECRET: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      PACK_CODE: ${{ inputs.pack_code }}
+      PACK_SMS_SENDER: ${{ inputs.pack_sms_sender }}
+      PACK_WHATSAPP_SENDER: ${{ inputs.pack_whatsapp_sender }}
+      PACK_WHATSAPP_TEMPLATES: ${{ inputs.pack_whatsapp_templates }}
+      PACK_PRINT: ${{ inputs.pack_print && 'true' || 'false' }}
+    steps:
+      - name: Check configuration
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD_SECRET" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::countries-set needs SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD (secrets) and SUPABASE_PROJECT_REF (variable) in the preview Environment."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing."
+            exit 1
+          fi
+          if ! [[ "$PACK_CODE" =~ ^[A-Za-z]{2}$ ]]; then
+            echo "::error::pack_code must be a country code such as US or TR."
+            exit 1
+          fi
+          pw="$(printf '%s' "$SUPABASE_DB_PASSWORD_SECRET" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          echo "::add-mask::$pw"
+          { echo "SUPABASE_DB_PASSWORD<<__PW__"; printf '%s\n' "$pw"; echo "__PW__"; } >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+      - name: Connection string
+        # As the seed job: the pooler address `supabase link` saved, session mode, never printed.
+        run: |
+          f=supabase/.temp/pooler-url
+          if [ ! -s "$f" ]; then
+            echo "::error::supabase link saved no pooler address ($f)."
+            exit 1
+          fi
+          url="$(node -e '
+            const u = new URL(require("fs").readFileSync(process.argv[1], "utf8").trim());
+            u.password = encodeURIComponent(process.env.SUPABASE_DB_PASSWORD);
+            u.port = "5432";
+            if (!u.username.includes(process.env.SUPABASE_PROJECT_REF)) { console.error("pooler user is not the preview project"); process.exit(1); }
+            console.log(u.toString());
+          ' "$f")"
+          echo "::add-mask::$url"
+          { echo "SUPABASE_DB_URL<<__URL__"; printf '%s\n' "$url"; echo "__URL__"; } >> "$GITHUB_ENV"
+      - name: pnpm countries:set
+        # The inputs reach the script as separate arguments from the environment, never through
+        # the shell's parsing of the command line.
+        run: |
+          set -o pipefail
+          # A hosted database needs --yes even to read; the dispatch is the owner's approval.
+          args=(--code "$PACK_CODE" --yes)
+          if [ "$PACK_PRINT" = true ]; then
+            args+=(--print-whatsapp-templates)
+          else
+            if [ -n "$PACK_SMS_SENDER" ]; then args+=(--sms-sender "$PACK_SMS_SENDER"); fi
+            if [ -n "$PACK_WHATSAPP_SENDER" ]; then args+=(--whatsapp-sender "$PACK_WHATSAPP_SENDER"); fi
+            if [ -n "$PACK_WHATSAPP_TEMPLATES" ]; then
+              printf '%s' "$PACK_WHATSAPP_TEMPLATES" > "$RUNNER_TEMP/whatsapp-templates.json"
+              args+=(--whatsapp-templates "$RUNNER_TEMP/whatsapp-templates.json")
+            fi
+          fi
+          pnpm -s countries:set -- "${args[@]}" | tee "$RUNNER_TEMP/countries-set.txt"
+          {
+            echo "### Country pack $PACK_CODE (preview)"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/countries-set.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  whatsapp-templates:
+    name: WhatsApp templates · Twilio Content API and the country packs (preview)
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # `pnpm whatsapp:templates` with the preview project's packs: wa_mode dry-run prints the templates
+    # the packs need and calls nothing; submit creates the missing ones in Twilio's Content API and
+    # submits each for WhatsApp approval (re-runs skip what exists); sync writes the approved ids into
+    # the packs through set_country_endpoints() (audited as country.endpoints_set), never one Meta
+    # recategorised. From the moment a pack holds a key's id, real orgs' WhatsApp messages of that key
+    # go out on it (RUNBOOK "Country packs per environment").
+    if: >-
+      needs.plan.outputs.whatsapp_templates == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: preview
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD_SECRET: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      PACK_CODE: ${{ inputs.pack_code }}
+      WA_MODE: ${{ inputs.wa_mode || 'dry-run' }}
+      WA_LANGUAGES: ${{ inputs.wa_languages || 'tr,en' }}
+      # Presence only: the values reach the script's step alone.
+      HAS_TWILIO: ${{ secrets.TWILIO_ACCOUNT_SID != '' && secrets.TWILIO_AUTH_TOKEN != '' }}
+    steps:
+      - name: Check configuration
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD_SECRET" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::whatsapp-templates needs SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD (secrets) and SUPABASE_PROJECT_REF (variable) in the preview Environment."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing."
+            exit 1
+          fi
+          if [ "$WA_MODE" != dry-run ] && [ "$HAS_TWILIO" != true ]; then
+            echo "::error::wa_mode $WA_MODE needs TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN (secrets) in the preview Environment."
+            exit 1
+          fi
+          if ! [[ "$PACK_CODE" =~ ^[A-Za-z]{2}(,[A-Za-z]{2})*$ ]]; then
+            echo "::error::pack_code must be one or more country codes such as TR or TR,US."
+            exit 1
+          fi
+          if ! [[ "$WA_LANGUAGES" =~ ^(en|es|tr)(,(en|es|tr))*$ ]]; then
+            echo "::error::wa_languages must be en, es and tr, comma-separated (e.g. tr,en)."
+            exit 1
+          fi
+          pw="$(printf '%s' "$SUPABASE_DB_PASSWORD_SECRET" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          echo "::add-mask::$pw"
+          { echo "SUPABASE_DB_PASSWORD<<__PW__"; printf '%s\n' "$pw"; echo "__PW__"; } >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+      - name: Connection string
+        # As the seed job: the pooler address `supabase link` saved, session mode, never printed.
+        run: |
+          f=supabase/.temp/pooler-url
+          if [ ! -s "$f" ]; then
+            echo "::error::supabase link saved no pooler address ($f)."
+            exit 1
+          fi
+          url="$(node -e '
+            const u = new URL(require("fs").readFileSync(process.argv[1], "utf8").trim());
+            u.password = encodeURIComponent(process.env.SUPABASE_DB_PASSWORD);
+            u.port = "5432";
+            if (!u.username.includes(process.env.SUPABASE_PROJECT_REF)) { console.error("pooler user is not the preview project"); process.exit(1); }
+            console.log(u.toString());
+          ' "$f")"
+          echo "::add-mask::$url"
+          { echo "SUPABASE_DB_URL<<__URL__"; printf '%s\n' "$url"; echo "__URL__"; } >> "$GITHUB_ENV"
+      - name: pnpm whatsapp:templates
+        # The inputs reach the script as separate arguments from the environment, never through the
+        # shell's parsing of the command line. The Twilio credentials go to this step only.
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+        run: |
+          set -o pipefail
+          # A hosted database needs --yes even to read; the dispatch is the owner's approval.
+          case "$WA_MODE" in
+            dry-run) args=(--submit --dry-run --lang "$WA_LANGUAGES") ;;
+            submit) args=(--submit --lang "$WA_LANGUAGES") ;;
+            sync) args=(--sync) ;;
+            *) echo "::error::wa_mode must be dry-run, submit or sync."; exit 1 ;;
+          esac
+          args+=(--code "$PACK_CODE" --yes)
+          status=0
+          pnpm -s whatsapp:templates -- "${args[@]}" > "$RUNNER_TEMP/whatsapp-templates.md" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/whatsapp-templates.md"
+          {
+            echo "### WhatsApp templates · $WA_MODE · $PACK_CODE (preview)"
+            echo
+            cat "$RUNNER_TEMP/whatsapp-templates.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+  auth-templates:
+    name: Auth email templates · sign-in and invite, English (preview)
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # `pnpm auth:templates`: the magic-link and invite subjects and bodies from supabase/config.toml
+    # and supabase/templates, English only (§19 Q378), PATCHed into the preview project's Auth config
+    # through the Management API with SUPABASE_ACCESS_TOKEN, then read back. No database access.
+    if: >-
+      needs.plan.outputs.auth_templates == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: preview
+    env:
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      # Presence only: the token reaches the script's step alone.
+      HAS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+    steps:
+      - name: Check configuration
+        run: |
+          if [ "$HAS_TOKEN" != true ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::auth-templates needs SUPABASE_ACCESS_TOKEN (secret) and SUPABASE_PROJECT_REF (variable) in the preview Environment."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: pnpm auth:templates
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -o pipefail
+          status=0
+          pnpm -s auth:templates -- --yes > "$RUNNER_TEMP/auth-templates.md" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/auth-templates.md"
+          {
+            echo "### Auth email templates (preview)"
+            echo
+            cat "$RUNNER_TEMP/auth-templates.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+  phone-setup:
+    name: Phone check · field-api secrets and a panel sign-in link (preview)
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # 1. field-api on the preview project: FIELD_APP_URL (the Origin check) and, only when missing,
+    #    a random LINK_SIGNING_SECRET (an existing one is never rotated: it signs live links).
+    # 2. A one-time magic link for Lena (admin of the demo org Kestrel) to the pr-1 panel preview, so
+    #    the Demo phone shows the device code (RUNBOOK §2 step 5). It goes to the run summary only.
+    if: >-
+      needs.plan.outputs.phone_setup == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: preview
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      FIELD_APP_URL: ${{ vars.FIELD_APP_URL || 'https://pr-1--sitelog-field-staging-ertannnc.netlify.app' }}
+      PANEL_URL: ${{ vars.VITE_APP_URL || 'https://pr-1--staging-sitelog.netlify.app' }}
+      # The demo orgs' admins: Kestrel (US, Lena) and Demir Yapı (TR, Elif); each sees only its own
+      # org's texts on the Demo phone.
+      SIGN_IN_AS: lena@kestrelbuild.example elif@demiryapi.example
+      # Web push (W2-14): field-api hands the browser this public key (`GET push/key`); the pair's
+      # private half stays on the worker. Owner-approved (2026-10-16) as a field-api secret.
+      VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+    steps:
+      - name: Check configuration
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::phone-setup needs SUPABASE_ACCESS_TOKEN (secret) and SUPABASE_PROJECT_REF (variable) in the preview Environment."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing."
+            exit 1
+          fi
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: field-api secrets
+        run: |
+          names="$(supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(x=>x.name).join(" ")))')"
+          set_args=("FIELD_APP_URL=$FIELD_APP_URL")
+          if [[ " $names " == *" LINK_SIGNING_SECRET "* ]]; then
+            echo "LINK_SIGNING_SECRET already set: kept."
+          else
+            secret="$(openssl rand -hex 32)"
+            echo "::add-mask::$secret"
+            set_args+=("LINK_SIGNING_SECRET=$secret")
+            echo "LINK_SIGNING_SECRET was missing: set to a new random value."
+          fi
+          if [ -n "$VAPID_PUBLIC_KEY" ]; then
+            set_args+=("VAPID_PUBLIC_KEY=$VAPID_PUBLIC_KEY")
+          fi
+          supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" "${set_args[@]}" >/dev/null
+          echo "FIELD_APP_URL set to $FIELD_APP_URL."
+          if [ -n "$VAPID_PUBLIC_KEY" ]; then
+            echo "VAPID_PUBLIC_KEY set from the preview Environment (web push on)."
+          else
+            echo "No VAPID_PUBLIC_KEY in the preview Environment: web push stays off."
+          fi
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - name: Device-code diagnostics (read-only)
+        # Owner-approved (2026-10-15): what happened to the last device codes. field-api's answers
+        # and errors from the function logs, and the demo orgs' newest texts and device audit rows.
+        # Reads only; no phone number and no text body is printed.
+        continue-on-error: true
+        run: |
+          key="$(supabase projects api-keys --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const k=JSON.parse(s).find(x=>x.name==="service_role");if(!k)process.exit(1);console.log(k.api_key)})')"
+          echo "::add-mask::$key"
+          SERVICE_KEY="$key" node .github/scripts/device-code-diagnostics.mjs
+      - name: Panel sign-in link
+        run: |
+          key="$(supabase projects api-keys --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const k=JSON.parse(s).find(x=>x.name==="service_role");if(!k)process.exit(1);console.log(k.api_key)})')"
+          echo "::add-mask::$key"
+          {
+            echo "### Phone check (preview)"
+            echo
+            echo "- field-api: FIELD_APP_URL = \`$FIELD_APP_URL\`; LINK_SIGNING_SECRET set."
+          } >> "$GITHUB_STEP_SUMMARY"
+          for email in $SIGN_IN_AS; do
+            body="$(EMAIL="$email" node -e 'console.log(JSON.stringify({type:"magiclink",email:process.env.EMAIL,redirect_to:process.env.PANEL_URL+"/auth/callback"}))')"
+            # The panel's client uses PKCE, which ignores the implicit tokens the action link's
+            # redirect puts in the URL hash: link straight to the callback with the token hash,
+            # which the panel verifies (verifyOtp).
+            link="$(curl -fsS "https://${SUPABASE_PROJECT_REF}.supabase.co/auth/v1/admin/generate_link" \
+              -H "apikey: $key" -H "Authorization: Bearer $key" -H 'Content-Type: application/json' \
+              -d "$body" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const h=j.hashed_token||(j.properties&&j.properties.hashed_token)||"";console.log(h?process.env.PANEL_URL+"/auth/callback?token_hash="+encodeURIComponent(h)+"&type=magiclink":"")})')"
+            if [ -z "$link" ]; then
+              echo "::error::generate_link returned no action link for $email."
+              exit 1
+            fi
+            echo "- One-time panel sign-in as $email (expires in an hour, works once): [open the panel]($link)" >> "$GITHUB_STEP_SUMMARY"
+          done
+          {
+            echo "- Then open **Demo phone** in the panel; the device code of that org's reporters appears there."
+            echo "- Kestrel codes (Lena): 345WF5 Marco Ruiz, X7BWGH Dana Whitfield. Demir codes (Elif): Y3AXHQ Emre Yıldız, DP46EP Selin Kaya."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  preview-worker:
+    name: Phone check · the worker against the preview project (60 min)
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # Runs the worker in this runner against the preview project for 60 minutes, then exits 0, so the
+    # owner can test the whole field flow from a phone with no Anthropic or Deepgram key and no
+    # developer machine: record → fake transcript (fixtures/voice) → fake extraction
+    # (fixtures/tool-outputs) → question → answer → draft → Confirm & send → filed → PDF, the `filed`
+    # text and the email, both console (the panel's Demo phone). No real text or email can leave:
+    # no SMS provider credentials and EMAIL_PROVIDER=console.
+    #
+    # It sets or changes no Supabase secret. The worker's LINK_SIGNING_SECRET is a random value made
+    # in this job and handed to the worker process only. That is safe on the preview project: a
+    # personal link's code is stored only as its sha256 (`field_links.code_hash`) and field-api
+    # resolves `/r/:code` by that hash (`linkCodeHash`), never by the secret. The worker uses the
+    # secret only in `ensurePersonalLink` (packages/shared/src/links.ts; the links of the
+    # question_ready, draft_ready and filed texts, the welcome and the HELP reply): it cannot derive
+    # the existing links' codes under another secret, so it inserts one new personal link per
+    # reporter it texts in this run (audited `field_link.created`). Existing links, and devices (they
+    # belong to the reporter, not to a link), keep working; device codes are field-api's, not the
+    # worker's.
+    #
+    # Once the always-on worker runs on Fly.io (target preview-worker-fly), this 60-minute worker is
+    # not needed. Running both at once is safe: claim_jobs() locks each job (FOR UPDATE SKIP LOCKED),
+    # so a job runs in one of them only.
+    if: >-
+      needs.plan.outputs.preview_worker == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    environment: preview
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD_SECRET: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      # The pr-1 previews (their /api reaches the preview project): the links in the texts and emails.
+      FIELD_APP_URL: ${{ vars.FIELD_APP_URL || 'https://pr-1--sitelog-field-staging-ertannnc.netlify.app' }}
+      PANEL_URL: ${{ vars.VITE_APP_URL || 'https://pr-1--staging-sitelog.netlify.app' }}
+      RUN_MINUTES: '60'
+    steps:
+      - name: Check configuration
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD_SECRET" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::preview-worker needs SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD (secrets) and SUPABASE_PROJECT_REF (variable) in the preview Environment."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing to run the worker against it."
+            exit 1
+          fi
+          pw="$(printf '%s' "$SUPABASE_DB_PASSWORD_SECRET" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          echo "::add-mask::$pw"
+          { echo "SUPABASE_DB_PASSWORD<<__PW__"; printf '%s\n' "$pw"; echo "__PW__"; } >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+      - name: Connection string
+        # As the seed job: the pooler address `supabase link` saved, in session mode (5432, which also
+        # delivers the worker's LISTEN), with the password URL-encoded. Never printed.
+        run: |
+          f=supabase/.temp/pooler-url
+          if [ ! -s "$f" ]; then
+            echo "::error::supabase link saved no pooler address ($f)."
+            exit 1
+          fi
+          url="$(node -e '
+            const u = new URL(require("fs").readFileSync(process.argv[1], "utf8").trim());
+            u.password = encodeURIComponent(process.env.SUPABASE_DB_PASSWORD);
+            u.port = "5432";
+            if (!u.username.includes(process.env.SUPABASE_PROJECT_REF)) { console.error("pooler user is not the preview project"); process.exit(1); }
+            console.log(u.toString());
+          ' "$f")"
+          echo "::add-mask::$url"
+          { echo "SUPABASE_DB_URL<<__URL__"; printf '%s\n' "$url"; echo "__URL__"; } >> "$GITHUB_ENV"
+      - name: Start the worker
+        env:
+          NODE_ENV: development
+          EMAIL_PROVIDER: console
+          # Real transcription and extraction once the owner puts the keys in the preview
+          # Environment's secrets (ANTHROPIC_API_KEY, DEEPGRAM_API_KEY); each provider stays the
+          # fake while its key is missing. Texts and email stay console either way.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          TRANSCRIBE_PROVIDER: ${{ secrets.DEEPGRAM_API_KEY != '' && 'deepgram' || 'fake' }}
+          EXTRACT_PROVIDER: ${{ secrets.ANTHROPIC_API_KEY != '' && 'claude' || 'fake' }}
+          # The models (with the key): the preview Environment's variables CLAUDE_MODEL and
+          # CLAUDE_MODEL_FAST switch them without a code change; these ids are only the defaults.
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-sonnet-5-5' }}
+          CLAUDE_MODEL_FAST: ${{ vars.CLAUDE_MODEL_FAST || 'claude-haiku-5-5' }}
+          # Twilio for a real (non-demo) test org whose pack has a sender on the preview project;
+          # demo orgs always stay on console, and a pack with no sender here sends nothing real.
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          # Web push (W2-14) for a real (non-demo) org; demo orgs stay on console push.
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          # Stripe test mode (billing-setup) for the billing_sync job; empty = the job logs and ends.
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          # Open-Meteo's free endpoint (no key; the worker's default is the commercial one).
+          WEATHER_API_BASE: https://api.open-meteo.com/v1/forecast
+          WORKER_PORT: '8080'
+          WORKER_ID: preview-worker-${{ github.run_id }}
+        run: |
+          # The service-role key (Storage: audio in, PDFs out) and a random LINK_SIGNING_SECRET (see
+          # the job's comment), masked and passed to the worker process only, not to later steps.
+          key="$(supabase projects api-keys --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const k=JSON.parse(s).find(x=>x.name==="service_role");if(!k)process.exit(1);console.log(k.api_key)})')"
+          if [ -z "$key" ]; then
+            echo "::error::no service_role key for the preview project."
+            exit 1
+          fi
+          echo "::add-mask::$key"
+          link_secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$link_secret"
+          # What the log steps print: phone numbers, email addresses, link codes and email previews
+          # hidden (the worker logs ids, not phone numbers; the console email provider logs its
+          # recipients and a preview, and an error message can quote a value).
+          cat > "$RUNNER_TEMP/redact.mjs" <<'JS'
+          import { createInterface } from 'node:readline';
+          createInterface({ input: process.stdin }).on('line', (line) => {
+            let out = line;
+            try {
+              const rec = JSON.parse(line);
+              delete rec.text_preview;
+              if (Array.isArray(rec.to)) rec.to = `${rec.to.length} recipient(s)`;
+              out = JSON.stringify(rec);
+            } catch {}
+            console.log(
+              out
+                .replace(/\+\d[\d\s().-]{6,}\d/g, '[phone]')
+                .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '[email]')
+                .replace(/\/r\/[A-Za-z0-9]{6,}/g, '/r/[code]'),
+            );
+          });
+          JS
+          SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co" \
+          SUPABASE_SERVICE_ROLE_KEY="$key" LINK_SIGNING_SECRET="$link_secret" APP_URL="$PANEL_URL" \
+            setsid nohup pnpm --filter @sitelog/worker exec tsx src/index.ts > "$RUNNER_TEMP/worker.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/worker.pid"
+          for attempt in $(seq 1 120); do
+            body=$(curl -sS -m 5 http://127.0.0.1:8080/health || true)
+            case "$body" in *'"listening":true'*) echo "worker healthy and listening after ${attempt}s"; break ;; esac
+            if [ "$attempt" = 120 ]; then
+              echo "::error::the worker did not answer /health with listening: true"
+              node "$RUNNER_TEMP/redact.mjs" < "$RUNNER_TEMP/worker.log" | tail -n 200
+              exit 1
+            fi
+            sleep 1
+          done
+          until=$(( $(date +%s) + RUN_MINUTES * 60 ))
+          echo "WORKER_UNTIL=$until" >> "$GITHUB_ENV"
+          {
+            echo "### Worker on the preview project"
+            echo
+            echo "The worker runs in this job against \`$SUPABASE_PROJECT_REF\` until **$(date -u -d "@$until" '+%Y-%m-%d %H:%M UTC')** ($RUN_MINUTES minutes), then stops."
+            echo
+            echo "- Transcription: **$TRANSCRIBE_PROVIDER**; extraction: **$EXTRACT_PROVIDER** (each is the real provider when its key is in the preview Environment's secrets, else the fake). With the fakes a recording gets the fixtures/voice transcript of its reporter's language and the golden case's recorded tool output; an EN or ES reporter (Marco Ruiz, Dana Whitfield) gets the Riverside hero report, which asks one question: the Delta crew's headcount."
+            echo "- Texts and email are console only: they appear in the panel's **Demo phone** ([$PANEL_URL]($PANEL_URL)); nothing reaches a real phone or inbox."
+            echo "- Field links in the texts point at \`$FIELD_APP_URL\`. The first text to a reporter in this run carries a new personal link (this run's own signing secret); the existing links keep working."
+            echo "- No Supabase secret was set or changed."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Keep the worker running (heartbeat every 5 minutes)
+        run: |
+          while :; do
+            left=$(( WORKER_UNTIL - $(date +%s) ))
+            if [ "$left" -le 0 ]; then break; fi
+            sleep $(( left < 300 ? left : 300 ))
+            # Alive = /health answers (200, or 503 while a job is stuck; the worker then exits).
+            health=$(curl -sS -m 10 http://127.0.0.1:8080/health || true)
+            if [ -z "$health" ]; then
+              echo "::error::the worker stopped answering /health before the time limit (its log is in the next step)."
+              exit 1
+            fi
+            echo "── $(date -u '+%H:%M:%S UTC') · $(( (WORKER_UNTIL - $(date +%s) + 59) / 60 )) min left"
+            echo "$health"
+            tail -n 20 "$RUNNER_TEMP/worker.log" | node "$RUNNER_TEMP/redact.mjs"
+          done
+          echo "Time limit reached ($RUN_MINUTES minutes): stopping the worker."
+      - name: Stop the worker and print its log
+        if: always()
+        run: |
+          # SIGTERM lets the worker finish its jobs' current step and close its connections; a job
+          # it leaves running is taken back by claim_jobs() after the stale lock (10 min).
+          if [ -f "$RUNNER_TEMP/worker.pid" ]; then
+            pid="$(cat "$RUNNER_TEMP/worker.pid")"
+            kill -TERM -- "-$pid" 2>/dev/null || true
+          fi
+          pkill -TERM -f 'tsx src/index.ts' 2>/dev/null || true
+          for _ in $(seq 1 30); do pgrep -f 'tsx src/index.ts' >/dev/null || break; sleep 1; done
+          pkill -KILL -f 'tsx src/index.ts' 2>/dev/null || true
+          if [ -f "$RUNNER_TEMP/worker.log" ]; then
+            echo "Last 200 lines of the worker log (phone numbers, email addresses, link codes and email previews hidden):"
+            tail -n 200 "$RUNNER_TEMP/worker.log" | node "$RUNNER_TEMP/redact.mjs"
+            phones=$(grep -cE '\+[0-9][0-9 ().-]{6,}[0-9]' "$RUNNER_TEMP/worker.log" || true)
+            echo "Phone-like strings in the whole log (hidden above): ${phones:-0}"
+          fi
+
+  preview-worker-fly:
+    name: Worker · Fly.io, always on, for the preview project
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # Deploys the worker to its own Fly.io app (the preview Environment's FLY_APP, whose name must
+    # contain "preview", so a repository-level FLY_APP of staging's worker is refused) with
+    # apps/worker/fly.preview.toml: one machine, always on, against the preview project. The runtime
+    # secrets are staged on the app from the preview Environment (stdin only, never argv or the log);
+    # a GitHub secret left empty sets nothing, and a value already on the app stays until it is
+    # unset there (`flyctl secrets unset`). docs/RUNBOOK.md §2 "Preview worker on Fly.io".
+    #
+    # NODE_ENV=production: the worker refuses the fake transcriber and extractor in production, and
+    # its Docker image ships without fixtures/, so the fakes could not run there anyway. This job
+    # therefore requires ANTHROPIC_API_KEY and DEEPGRAM_API_KEY (the keyless run is preview-worker).
+    #
+    # LINK_SIGNING_SECRET is the worker's own, made here once and kept on the app (a later run makes
+    # none while the app has one), so the links the worker creates stay stable across deploys. It is
+    # never a Supabase secret, and that is safe on the preview project for the reason preview-worker
+    # gives: field-api resolves `/r/:code` by the code's sha256 (`field_links.code_hash`), never by
+    # the secret, so the worker inserts one new personal link per reporter it first texts (audited
+    # `field_link.created`) and every existing link and device keeps working.
+    if: >-
+      needs.plan.outputs.preview_worker_fly == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: preview
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      FLY_APP: ${{ vars.FLY_APP }}
+      # The Fly organization the app is created in when it does not exist yet (an org token can).
+      FLY_ORG: ${{ vars.FLY_ORG || 'personal' }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD_SECRET: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      # The links in the texts (the field app with /api to the preview project) and the panel's
+      # address in the email links. The panel default is talkolog.com, where the preview panel is
+      # published (preview-worker's default is still the pr-1 Netlify alias).
+      FIELD_APP_URL: ${{ vars.FIELD_APP_URL || 'https://pr-1--sitelog-field-staging-ertannnc.netlify.app' }}
+      PANEL_URL: ${{ vars.VITE_APP_URL || 'https://talkolog.com' }}
+      # The models: the preview Environment's variables switch them without a code change; these
+      # ids are only the defaults (as preview-worker's).
+      CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-sonnet-5-5' }}
+      CLAUDE_MODEL_FAST: ${{ vars.CLAUDE_MODEL_FAST || 'claude-haiku-5-5' }}
+    steps:
+      - name: Check configuration
+        env:
+          HAS_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          HAS_DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY != '' }}
+        run: |
+          missing=()
+          for n in FLY_API_TOKEN SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD_SECRET; do
+            if [ -z "${!n}" ]; then missing+=("${n%_SECRET} (secret)"); fi
+          done
+          for n in FLY_APP SUPABASE_PROJECT_REF; do
+            if [ -z "${!n}" ]; then missing+=("$n (variable)"); fi
+          done
+          if [ "$HAS_ANTHROPIC_API_KEY" != true ]; then missing+=("ANTHROPIC_API_KEY (secret)"); fi
+          if [ "$HAS_DEEPGRAM_API_KEY" != true ]; then missing+=("DEEPGRAM_API_KEY (secret)"); fi
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::preview-worker-fly needs these in the preview Environment: ${missing[*]}. FLY_API_TOKEN is a deploy token of the preview worker's Fly app, FLY_APP its name (docs/RUNBOOK.md \"Preview worker on Fly.io\"). The worker runs in production mode, where the fake transcriber and extractor are refused: both AI keys are required."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing to deploy a worker against it."
+            exit 1
+          fi
+          if [[ ! "$FLY_APP" =~ ^[a-z0-9][a-z0-9-]*$ ]] || [[ "$FLY_APP" != *preview* ]]; then
+            echo "::error::FLY_APP ($FLY_APP) must be the preview worker's own Fly app, a name with \"preview\" in it (e.g. talkolog-worker-preview); refusing, so staging's worker app is never redeployed against the preview project."
+            exit 1
+          fi
+          pw="$(printf '%s' "$SUPABASE_DB_PASSWORD_SECRET" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          echo "::add-mask::$pw"
+          { echo "SUPABASE_DB_PASSWORD<<__PW__"; printf '%s\n' "$pw"; echo "__PW__"; } >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+      - name: Fly secrets
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          # The connection string as preview-worker builds it: the pooler address `supabase link`
+          # saved, in session mode (5432, which also delivers the worker's LISTEN), with the password
+          # URL-encoded, and the pooler user checked against the preview ref. Never printed.
+          f=supabase/.temp/pooler-url
+          if [ ! -s "$f" ]; then
+            echo "::error::supabase link saved no pooler address ($f)."
+            exit 1
+          fi
+          SUPABASE_DB_URL="$(node -e '
+            const u = new URL(require("fs").readFileSync(process.argv[1], "utf8").trim());
+            u.password = encodeURIComponent(process.env.SUPABASE_DB_PASSWORD);
+            u.port = "5432";
+            if (!u.username.includes(process.env.SUPABASE_PROJECT_REF)) { console.error("pooler user is not the preview project"); process.exit(1); }
+            console.log(u.toString());
+          ' "$f")"
+          echo "::add-mask::$SUPABASE_DB_URL"
+          SUPABASE_SERVICE_ROLE_KEY="$(supabase projects api-keys --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const k=JSON.parse(s).find(x=>x.name==="service_role");if(!k)process.exit(1);console.log(k.api_key)})')"
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::no service_role key for the preview project."
+            exit 1
+          fi
+          echo "::add-mask::$SUPABASE_SERVICE_ROLE_KEY"
+          SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"
+
+          # The app itself, created on the first run when the token may (an organization token);
+          # with an app's deploy token the app must exist already.
+          if ! flyctl status --app "$FLY_APP" > /dev/null 2>&1; then
+            echo "The Fly app $FLY_APP does not exist yet: creating it in the organization $FLY_ORG."
+            if ! flyctl apps create "$FLY_APP" --org "$FLY_ORG"; then
+              echo "::error::could not create the Fly app $FLY_APP in $FLY_ORG: use an organization token as FLY_API_TOKEN, or create the app first (docs/RUNBOOK.md \"Preview worker on Fly.io\")."
+              exit 1
+            fi
+          fi
+
+          # The names the app already has (values are never readable back).
+          if ! existing="$(flyctl secrets list --app "$FLY_APP" --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const a=JSON.parse(s||"[]");console.log(a.map(x=>x.Name??x.name).filter(Boolean).join(" "))})')"; then
+            echo "::error::could not list the secrets of the Fly app $FLY_APP: create the app and its deploy token first (docs/RUNBOOK.md \"Preview worker on Fly.io\")."
+            exit 1
+          fi
+          names=(SUPABASE_URL SUPABASE_DB_URL SUPABASE_SERVICE_ROLE_KEY)
+          for n in TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN ANTHROPIC_API_KEY DEEPGRAM_API_KEY \
+            VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT STRIPE_SECRET_KEY \
+            LIVEKIT_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET SENTRY_DSN RESEND_API_KEY; do
+            if [ -n "${!n}" ]; then names+=("$n"); fi
+          done
+          if [[ " $existing " == *" LINK_SIGNING_SECRET "* ]]; then
+            echo "LINK_SIGNING_SECRET already on the app: kept (links stay stable)."
+          else
+            LINK_SIGNING_SECRET="$(openssl rand -hex 32)"
+            echo "::add-mask::$LINK_SIGNING_SECRET"
+            names+=(LINK_SIGNING_SECRET)
+            echo "LINK_SIGNING_SECRET was missing: a new random one is set."
+          fi
+          for n in "${names[@]}"; do
+            if [[ "${!n}" =~ [[:space:]] ]]; then
+              echo "::error::$n holds a space or a line break; paste it again in the preview Environment's secrets."
+              exit 1
+            fi
+          done
+          # NAME=value lines on stdin (printf is a shell builtin: no value in any process's argv),
+          # staged for the deploy below.
+          for n in "${names[@]}"; do printf '%s=%s\n' "$n" "${!n}"; done |
+            flyctl secrets import --stage --app "$FLY_APP" >/dev/null
+          echo "Staged on $FLY_APP: ${names[*]}."
+          echo "FLY_STAGED_SECRETS=${names[*]}" >> "$GITHUB_ENV"
+      - name: Deploy
+        run: |
+          # The values that follow the preview Environment's variables (fly.preview.toml's [env] is
+          # static); none of them is a secret. --ha=false: one machine, not Fly's default two.
+          flyctl deploy . --remote-only --ha=false --app "$FLY_APP" \
+            --config apps/worker/fly.preview.toml --dockerfile "$GITHUB_WORKSPACE/apps/worker/Dockerfile" \
+            --env "APP_URL=$PANEL_URL" --env "FIELD_APP_URL=$FIELD_APP_URL" \
+            --env "CLAUDE_MODEL=$CLAUDE_MODEL" --env "CLAUDE_MODEL_FAST=$CLAUDE_MODEL_FAST"
+      - name: Health check and summary
+        run: |
+          url="https://${FLY_APP}.fly.dev/health"
+          for attempt in $(seq 1 30); do
+            body=$(curl -sS -m 10 "$url" || true)
+            case "$body" in *'"listening":true'*) echo "worker healthy and listening (attempt $attempt): $body"; break ;; esac
+            if [ "$attempt" = 30 ]; then
+              echo "::error::$url did not answer with listening: true after the deploy (flyctl logs --app $FLY_APP)."
+              echo "Last answer: ${body:-none}"
+              exit 1
+            fi
+            sleep 10
+          done
+          staged=" $FLY_STAGED_SECRETS "
+          has() { [[ "$staged" == *" $1 "* ]]; }
+          {
+            echo "### Worker on Fly.io for the preview project"
+            echo
+            echo "App \`$FLY_APP\` (one always-on machine, \`apps/worker/fly.preview.toml\`) runs against \`$SUPABASE_PROJECT_REF\` and answers \`$url\` with \`listening: true\`."
+            echo
+            echo "- Transcription: **deepgram** (nova-3); extraction: **claude** (\`$CLAUDE_MODEL\`, fast \`$CLAUDE_MODEL_FAST\`)."
+            if has TWILIO_AUTH_TOKEN; then
+              echo "- Texts: **Twilio** for a real (non-demo) org whose pack has a sender on the preview project; demo orgs, and packs with no sender, stay console (the panel's Demo phone)."
+            else
+              echo "- Texts: console only (no TWILIO_* in the preview Environment): the panel's Demo phone."
+            fi
+            if has RESEND_API_KEY; then echo "- Email: **Resend** for real orgs (from \`reports@talkolog.com\`, the domain verified in Resend); demo orgs stay console (the Demo phone's Email tab)."; else echo "- Email: **console** (no RESEND_API_KEY in the preview Environment): the Demo phone's Email tab and the worker log."; fi
+            if has VAPID_PRIVATE_KEY; then echo "- Web push: real for real orgs; console for demo orgs."; else echo "- Web push: console (no VAPID pair)."; fi
+            if has LIVEKIT_API_SECRET; then echo "- Reminder calls: LiveKit for a real org whose pack has an outbound trunk; demo orgs ring the Demo phone."; else echo "- Reminder calls: none placed for real orgs (no LIVEKIT_*); demo orgs ring the Demo phone."; fi
+            if has STRIPE_SECRET_KEY; then echo "- billing_sync: Stripe (the preview Environment's key, test mode)."; else echo "- billing_sync: no Stripe key, the job logs and ends."; fi
+            echo "- Links in texts: \`$FIELD_APP_URL\`; panel links in email: \`$PANEL_URL\`."
+            echo "- Secrets staged this run (names only): ${FLY_STAGED_SECRETS}."
+            echo "- No Supabase secret was set or changed. The 60-minute preview-worker is no longer needed while this runs (both at once are safe: claim_jobs locks each job)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  voice-setup:
+    name: Voice · LiveKit Cloud agent and voice secrets (preview)
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # RUNBOOK §2 "Voice: M7 live on the preview project (W3-16)", steps 3, 5 and 6, English only:
+    # 1. The preview project's functions: LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET and
+    #    LIVEKIT_AGENT_NAME (voice-events and Talk now), VOICE_CALL_TOKEN_SECRET only when missing
+    #    (field-api's alone, never rotated: it signs live call tokens) and a VOICE_AGENT_TOOL_SECRET
+    #    made anew each run, which the agent gets in the same job.
+    # 2. The Python agent (apps/voice-agent) on LiveKit Cloud with the lk CLI: the agent already in
+    #    the project gets the secrets and a new version, else one is created (CI commits no
+    #    livekit.toml, so the agent is found by `lk agent list`). Its secrets file lives in
+    #    RUNNER_TEMP (mode 600) and is deleted at the end. No Azure key: a Turkish call refuses
+    #    (AZURE_SPEECH_KEY, session.py) until the TR voice is set up by hand.
+    # The LiveKit webhook URL is the one step left in LiveKit's dashboard (the run summary names it).
+    if: >-
+      needs.plan.outputs.voice_setup == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: preview
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      LIVEKIT_AGENT_NAME: sitelog-voice
+      # Non-interactive `lk agent create` needs a region (the preview Environment's variable wins).
+      LIVEKIT_AGENT_REGION: ${{ vars.LIVEKIT_AGENT_REGION || 'us-east' }}
+      # The lk CLI: a pinned release binary, checked against the release's checksums.txt entry.
+      LK_VERSION: 2.18.8
+      LK_SHA256: 3e0977d0385d2f220d7f455105ac52f8035f79e70aecdf70b6dc054179905c7c
+      LK_PROJECT: sitelog-preview
+      LOGS_ONLY: ${{ inputs.voice_logs_only && 'true' || 'false' }}
+    steps:
+      - name: Check configuration
+        # Presence and shape only; no value is printed.
+        env:
+          LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          missing=()
+          for n in SUPABASE_ACCESS_TOKEN LIVEKIT_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET DEEPGRAM_API_KEY ANTHROPIC_API_KEY; do
+            if [ -z "${!n}" ]; then missing+=("$n (secret)"); fi
+          done
+          if [ -z "$SUPABASE_PROJECT_REF" ]; then missing+=("SUPABASE_PROJECT_REF (variable)"); fi
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::voice-setup needs these in the preview Environment: ${missing[*]}."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing."
+            exit 1
+          fi
+          # A value pasted on a phone often carries a space or a line break: name it, never show it.
+          for n in LIVEKIT_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET DEEPGRAM_API_KEY ANTHROPIC_API_KEY; do
+            if [[ "${!n}" =~ [[:space:]] ]]; then
+              echo "::error::$n holds a space or a line break; paste it again in the preview Environment's secrets."
+              exit 1
+            fi
+          done
+          if [[ ! "$LIVEKIT_URL" =~ ^wss://[A-Za-z0-9.-]+$ ]]; then
+            echo "::error::LIVEKIT_URL must be the LiveKit project's URL, wss://<project>.livekit.cloud."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Voice contract is current
+        # The contract and copy the agent's image carries (apps/voice-agent/contract, copy).
+        run: pnpm voice:contract -- --check
+      - name: Install the lk CLI
+        run: |
+          dir="$RUNNER_TEMP/lk-cli"
+          mkdir -p "$dir"
+          archive="lk_${LK_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$dir/$archive" "https://github.com/livekit/livekit-cli/releases/download/v${LK_VERSION}/$archive"
+          echo "$LK_SHA256  $dir/$archive" | sha256sum -c -
+          tar -xzf "$dir/$archive" -C "$dir" lk
+          echo "$dir" >> "$GITHUB_PATH"
+          "$dir/lk" --version
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: Secrets files
+        if: env.LOGS_ONLY != 'true'
+        # Two env files in RUNNER_TEMP (mode 600): the functions' and the agent's. They share the new
+        # VOICE_AGENT_TOOL_SECRET; VOICE_CALL_TOKEN_SECRET goes to the functions only.
+        env:
+          LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # The preview worker's fast model (as preview-worker), switched by the Environment's variable.
+          CLAUDE_MODEL_FAST: ${{ vars.CLAUDE_MODEL_FAST || 'claude-haiku-5-5' }}
+        run: |
+          umask 077
+          names="$(supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(x=>x.name).join(" ")))')"
+          tool_secret="$(openssl rand -base64 32 | tr -d '\n')"
+          echo "::add-mask::$tool_secret"
+          fn="$RUNNER_TEMP/voice-functions.env"
+          agent="$RUNNER_TEMP/voice-agent.env"
+          {
+            echo "LIVEKIT_URL=$LIVEKIT_URL"
+            echo "LIVEKIT_API_KEY=$LIVEKIT_API_KEY"
+            echo "LIVEKIT_API_SECRET=$LIVEKIT_API_SECRET"
+            echo "LIVEKIT_AGENT_NAME=$LIVEKIT_AGENT_NAME"
+            echo "VOICE_AGENT_TOOL_SECRET=$tool_secret"
+          } > "$fn"
+          set_names="LIVEKIT_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET LIVEKIT_AGENT_NAME VOICE_AGENT_TOOL_SECRET"
+          if [[ " $names " == *" VOICE_CALL_TOKEN_SECRET "* ]]; then
+            echo "VOICE_CALL_TOKEN_SECRET already set: kept."
+          else
+            call_secret="$(openssl rand -base64 32 | tr -d '\n')"
+            echo "::add-mask::$call_secret"
+            echo "VOICE_CALL_TOKEN_SECRET=$call_secret" >> "$fn"
+            set_names="$set_names VOICE_CALL_TOKEN_SECRET"
+            echo "VOICE_CALL_TOKEN_SECRET was missing: set to a new random value."
+          fi
+          # The names of apps/voice-agent/src/sitelog_voice/config.py. No LIVEKIT_URL, key or secret:
+          # LiveKit Cloud gives a deployed agent its own project's.
+          {
+            echo "FIELD_API_URL=https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/field-api"
+            echo "VOICE_AGENT_TOOL_SECRET=$tool_secret"
+            echo "DEEPGRAM_API_KEY=$DEEPGRAM_API_KEY"
+            echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY"
+            echo "CLAUDE_MODEL_FAST=$CLAUDE_MODEL_FAST"
+            echo "STT_MODEL=nova-3"
+            echo "TTS_VOICE_EN=aura-2-thalia-en"
+            echo "LIVEKIT_AGENT_NAME=$LIVEKIT_AGENT_NAME"
+            echo "NODE_ENV=production"
+            echo "SENTRY_ENVIRONMENT=preview"
+          } > "$agent"
+          chmod 600 "$fn" "$agent"
+          echo "VOICE_FUNCTION_SECRETS=$set_names" >> "$GITHUB_ENV"
+      - name: Function secrets on the preview project
+        if: env.LOGS_ONLY != 'true'
+        run: |
+          supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --env-file "$RUNNER_TEMP/voice-functions.env" >/dev/null
+          echo "Set on the preview project: $VOICE_FUNCTION_SECRETS."
+      - name: LiveKit project for the lk CLI
+        # Non-interactive: `lk project add <name> --url --api-key --api-secret --default` saves the
+        # project in the runner's ~/.livekit (removed at the end); the later commands name it.
+        env:
+          LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+        run: |
+          lk project add "$LK_PROJECT" --url "$LIVEKIT_URL" --api-key "$LIVEKIT_API_KEY" --api-secret "$LIVEKIT_API_SECRET" --default --yes >/dev/null
+          echo "lk project $LK_PROJECT added as the default."
+      - name: Agent on LiveKit Cloud
+        id: agent
+        working-directory: apps/voice-agent
+        run: |
+          # The agent already in the project: the one whose dispatch name is sitelog-voice, else the
+          # only one (the Build plan allows one), else none.
+          lk agent list --project "$LK_PROJECT" --json --yes > "$RUNNER_TEMP/agents.json"
+          if ! id="$(node "$GITHUB_WORKSPACE/.github/scripts/livekit-pick-agent.mjs" "$RUNNER_TEMP/agents.json")"; then
+            echo "::error::Several agents in the LiveKit project and none clearly TalkOlog's; delete the extra ones (lk agent delete) or keep one named $LIVEKIT_AGENT_NAME."
+            exit 1
+          fi
+          if [ "$LOGS_ONLY" = true ]; then
+            # voice_logs_only: the running version is left as it is, so its logs are still there.
+            [ -n "$id" ] || { echo "::error::No agent in the LiveKit project to read logs from."; exit 1; }
+            echo "Agent $id: logs only, nothing changed."
+            echo "id=$id" >> "$GITHUB_OUTPUT"
+            echo "action=left as it is (logs only)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          secrets="$RUNNER_TEMP/voice-agent.env"
+          if [ -n "$id" ]; then
+            echo "Agent $id found: its secrets updated (others it has, such as Azure ones added by hand, are kept), then a new version deployed."
+            lk agent update-secrets --project "$LK_PROJECT" --id "$id" --secrets-file "$secrets" --yes
+            lk agent deploy --project "$LK_PROJECT" --id "$id" --yes
+            action=deployed
+          else
+            echo "No agent in the project yet: creating one (region $LIVEKIT_AGENT_REGION)."
+            lk agent create --project "$LK_PROJECT" --region "$LIVEKIT_AGENT_REGION" --secrets-file "$secrets" --yes
+            id="$(sed -n 's/^[[:space:]]*id[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' livekit.toml | head -n 1)"
+            action=created
+          fi
+          if [ -z "$id" ]; then
+            echo "::error::lk agent create left no agent id in livekit.toml."
+            exit 1
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+      - name: Agent status and summary
+        if: steps.agent.outputs.id != '' && env.LOGS_ONLY != 'true'
+        working-directory: apps/voice-agent
+        env:
+          AGENT_ID: ${{ steps.agent.outputs.id }}
+          AGENT_ACTION: ${{ steps.agent.outputs.action }}
+          NO_COLOR: '1'
+        run: |
+          status="$(lk agent status --project "$LK_PROJECT" --id "$AGENT_ID" --yes 2>&1 || true)"
+          echo "$status"
+          {
+            echo "### Voice on the preview project"
+            echo
+            echo "- Function secrets set on \`$SUPABASE_PROJECT_REF\` (names only): $VOICE_FUNCTION_SECRETS. An existing VOICE_CALL_TOKEN_SECRET is kept."
+            echo "- Agent \`$AGENT_ID\` $AGENT_ACTION on LiveKit Cloud (dispatch name \`$LIVEKIT_AGENT_NAME\`), its secrets updated (others kept): FIELD_API_URL, VOICE_AGENT_TOOL_SECRET, DEEPGRAM_API_KEY, ANTHROPIC_API_KEY, CLAUDE_MODEL_FAST, STT_MODEL, TTS_VOICE_EN, LIVEKIT_AGENT_NAME, NODE_ENV, SENTRY_ENVIRONMENT. English voices only: a Turkish call needs AZURE_SPEECH_KEY (RUNBOOK, W3-16 step 5)."
+            echo
+            echo "**Left for you in LiveKit's dashboard**, once (project settings → Webhooks): add this URL, signed with the same API key, and send a test event (200 = the signature passed):"
+            echo
+            echo "\`https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/voice-events\`"
+            echo
+            echo "Agent status:"
+            echo
+            echo '```'
+            echo "$status"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Agent logs (read-only)
+        # The new version's first minutes: its build log, then its runtime log (start-up errors,
+        # a missing setting, and a test call made meanwhile: the runtime log is followed for 15
+        # minutes; with voice_logs_only, the running version's log so far, read for a minute).
+        # `lk agent logs` tails, so each read is cut off by a timeout.
+        if: steps.agent.outputs.id != ''
+        continue-on-error: true
+        working-directory: apps/voice-agent
+        env:
+          AGENT_ID: ${{ steps.agent.outputs.id }}
+          NO_COLOR: '1'
+        run: |
+          follow=900
+          if [ "$LOGS_ONLY" = true ]; then
+            follow=60
+          else
+            sleep 90
+            echo "=== build log ==="
+            timeout 30 lk agent logs --project "$LK_PROJECT" --id "$AGENT_ID" --log-type build --yes 2>&1 | tail -n 80 || true
+          fi
+          echo "=== deploy log ==="
+          timeout "$follow" lk agent logs --project "$LK_PROJECT" --id "$AGENT_ID" --log-type deploy --yes 2>&1 | tail -n 1500 || true
+      - name: Remove the secrets files and the lk config
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/voice-functions.env" "$RUNNER_TEMP/voice-agent.env" "$RUNNER_TEMP/agents.json" "$HOME/.livekit"
+
+  billing-setup:
+    name: Billing · Stripe test mode for the preview project
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # RUNBOOK §2 "Billing (W4-15)", steps 2, 4 and 5, test mode only (the key must start sk_test_):
+    # .github/scripts/stripe-billing-setup.mjs finds or creates the Product (metadata sitelog=site)
+    # and its monthly USD per-unit price of 39900 (lookup key sitelog_site_usd_monthly), and
+    # replaces the webhook endpoint for the preview project's stripe-webhook (a signing secret
+    # cannot be read back) with exactly HANDLED_EVENTS. Then the preview project's functions get
+    # STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and STRIPE_PRICE_ID_SITE_US, and APP_URL (Checkout's
+    # and the portal's return URLs, the api-* CORS origin) when it is missing.
+    if: >-
+      needs.plan.outputs.billing_setup == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: preview
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      PANEL_URL: ${{ vars.VITE_APP_URL || 'https://pr-1--staging-sitelog.netlify.app' }}
+      # The endpoint's API version is the functions' Stripe SDK's (supabase/functions/README.md).
+      STRIPE_WEBHOOK_API_VERSION: 2026-09-30.endive
+    steps:
+      - name: Check configuration
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: |
+          missing=()
+          for n in SUPABASE_ACCESS_TOKEN STRIPE_SECRET_KEY; do
+            if [ -z "${!n}" ]; then missing+=("$n (secret)"); fi
+          done
+          if [ -z "$SUPABASE_PROJECT_REF" ]; then missing+=("SUPABASE_PROJECT_REF (variable)"); fi
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::billing-setup needs these in the preview Environment: ${missing[*]}."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing."
+            exit 1
+          fi
+          if [[ "$STRIPE_SECRET_KEY" != sk_test_* ]]; then
+            echo "::error::STRIPE_SECRET_KEY is not a test-mode secret key (it must start sk_test_); refusing. No live key goes on the preview project."
+            exit 1
+          fi
+          if [[ "$STRIPE_SECRET_KEY" =~ [[:space:]] ]]; then
+            echo "::error::STRIPE_SECRET_KEY holds a space or a line break; paste it again in the preview Environment's secrets."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+            supabase/functions/stripe-webhook
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: Stripe product, price and webhook endpoint
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: |
+          umask 077
+          WEBHOOK_URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/stripe-webhook" \
+          WEBHOOK_API_VERSION="$STRIPE_WEBHOOK_API_VERSION" \
+          OUT_ENV="$RUNNER_TEMP/billing-functions.env" OUT_JSON="$RUNNER_TEMP/billing.json" \
+            node .github/scripts/stripe-billing-setup.mjs
+      - name: Function secrets on the preview project
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: |
+          umask 077
+          f="$RUNNER_TEMP/billing-functions.env"
+          echo "STRIPE_SECRET_KEY=$STRIPE_SECRET_KEY" >> "$f"
+          set_names="STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_ID_SITE_US"
+          names="$(supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(x=>x.name).join(" ")))')"
+          if [[ " $names " == *" APP_URL "* ]]; then
+            echo "APP_URL already set: kept."
+          else
+            echo "APP_URL=$PANEL_URL" >> "$f"
+            set_names="$set_names APP_URL"
+            echo "APP_URL was missing: set to $PANEL_URL."
+          fi
+          supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --env-file "$f" >/dev/null
+          echo "Set on the preview project: $set_names."
+          echo "BILLING_FUNCTION_SECRETS=$set_names" >> "$GITHUB_ENV"
+          if [[ " $names " == *" STRIPE_PRICE_ID_SITE "* ]]; then
+            echo "::warning::The old STRIPE_PRICE_ID_SITE is still set on the preview project; STRIPE_PRICE_ID_SITE_US wins. Unset it when convenient (GAP 9.1)."
+          fi
+      - name: Summary
+        run: node .github/scripts/stripe-billing-setup.mjs --summary "$RUNNER_TEMP/billing.json"
+      - name: Remove the secrets file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/billing-functions.env" "$RUNNER_TEMP/billing.json"
+
+  eval:
+    name: Eval · Claude models on the golden sets (preview key)
+    needs: plan
+    # Guard repeated literally: environment preview, branch spec-v1.2. Read-only (eval.yml: contents:
+    # read, the Anthropic key only, no database). `secrets: inherit` because a called workflow sees no
+    # repository secret otherwise (the first run had an empty key); eval.yml reads ANTHROPIC_API_KEY
+    # alone and hands it to the eval step only.
+    if: >-
+      needs.plan.outputs.eval == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/eval.yml
+    secrets: inherit
+    with:
+      models: ${{ inputs.eval_models || 'claude-sonnet-5-5,claude-haiku-5-5,claude-opus-5-5' }}
+      sets: ${{ inputs.eval_sets || 'all' }}
+
   worker:
     name: Worker · Fly.io
-    needs: supabase
+    needs: [plan, supabase]
+    # Guard (D40): staging and production only, from the live branch only.
     if: >-
-      always() && github.event_name != 'pull_request' &&
-      (needs.supabase.result == 'success' || needs.supabase.result == 'skipped') &&
-      contains(fromJSON('["all","worker"]'), inputs.target || 'all')
+      always() && needs.plan.outputs.worker == 'true' &&
+      github.ref == 'refs/heads/claude/focused-newton-5v0u2q' && inputs.environment != 'preview' &&
+      (needs.supabase.result == 'success' || needs.supabase.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: ${{ inputs.environment || 'staging' }}
@@ -117,48 +1610,159 @@ jobs:
       - name: Health check
         if: steps.cfg.outputs.ready == 'true'
         run: |
-          for i in 1 2 3 4 5 6; do
+          for _ in 1 2 3 4 5 6; do
             if curl -fsS "https://${FLY_APP}.fly.dev/health"; then exit 0; fi
             sleep 10
           done
           echo "::error::worker /health did not answer after deploy"
           exit 1
 
+  preview:
+    name: Preview · Supabase build settings
+    needs: plan
+    # D41: the PR panel and field previews take their Supabase project from the `preview` Environment
+    # (non-secret variables only). Without them the panel builds in demo mode and the field app without
+    # its /api rule; neither ever falls back to staging.
+    if: needs.plan.outputs.preview == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: preview
+    outputs:
+      supabase_url: ${{ steps.cfg.outputs.supabase_url }}
+      # Base64: the anon key is public (it ships in the panel bundle), but when the Environment also
+      # holds it as a secret, GitHub drops a job output that contains a secret's value ("Skip output
+      # since it may contain secret") and the panel preview fell back to demo mode.
+      anon_key_b64: ${{ steps.cfg.outputs.anon_key_b64 }}
+    steps:
+      - name: Read the preview project settings
+        id: cfg
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          SUPABASE_URL_VAR: ${{ vars.VITE_SUPABASE_URL }}
+          ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          url="$SUPABASE_URL_VAR"
+          if ! [[ "$url" =~ ^https://[^\<\>[:space:]]+$ ]]; then
+            url=""
+            if [ -n "$SUPABASE_PROJECT_REF" ]; then url="https://${SUPABASE_PROJECT_REF}.supabase.co"; fi
+          fi
+          if [ -n "$ANON_KEY" ] && ! [[ "$ANON_KEY" =~ ^(eyJ|sb_publishable_) ]]; then
+            echo "::warning::The preview VITE_SUPABASE_ANON_KEY is not a Supabase anon key (eyJ…) or publishable key (sb_publishable_…); the panel preview builds in demo mode."
+            ANON_KEY=""
+          fi
+          # A legacy anon key (a JWT) names its project; one for another project (staging's, copied
+          # into the preview Environment) cannot sign anyone in to this one.
+          if [[ "$ANON_KEY" == eyJ* ]] && [[ "$url" =~ ^https://([a-z0-9]+)\.supabase\.co/?$ ]]; then
+            ref="${BASH_REMATCH[1]}"
+            key_ref=$(node -e 'try{console.log(JSON.parse(Buffer.from(process.argv[1].split(".")[1],"base64url")).ref||"")}catch{}' "$ANON_KEY")
+            if [ -n "$key_ref" ] && [ "$key_ref" != "$ref" ]; then
+              echo "::error::The preview VITE_SUPABASE_ANON_KEY belongs to project $key_ref, not $ref. Set the preview Environment variable to $ref's anon key (Supabase dashboard, Project Settings, API keys); the panel preview builds in demo mode until then."
+              ANON_KEY=""
+            fi
+          fi
+          if [ -n "$url" ] && [ -n "$ANON_KEY" ]; then
+            echo "supabase_url=$url" >> "$GITHUB_OUTPUT"
+            echo "anon_key_b64=$(printf '%s' "$ANON_KEY" | base64 -w0)" >> "$GITHUB_OUTPUT"
+            echo "Panel preview Supabase project: $url"
+          else
+            echo "::notice::The preview Environment has no Supabase project yet (variables SUPABASE_PROJECT_REF or VITE_SUPABASE_URL, and VITE_SUPABASE_ANON_KEY); the panel preview builds in demo mode and the field preview without /api."
+          fi
+
   web:
     name: Web panel · Netlify
-    needs: supabase
+    needs: [plan, supabase, preview]
+    # Guard (D40): --prod only from the live branch, for staging or production. Pull requests deploy
+    # the pr-<n> alias, which never reads staging data (D41).
     if: >-
-      always() &&
+      always() && needs.plan.outputs.web == 'true' &&
       (needs.supabase.result == 'success' || needs.supabase.result == 'skipped') &&
-      (github.event_name == 'pull_request' || contains(fromJSON('["all","web"]'), inputs.target || 'all'))
+      (needs.preview.result == 'success' || needs.preview.result == 'skipped') &&
+      (github.event_name == 'pull_request' ||
+       (github.ref == 'refs/heads/claude/focused-newton-5v0u2q' && inputs.environment != 'preview'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Pull requests use `staging` only for the Netlify token and site: their Supabase settings come from
+    # the `preview` job, and every other staging variable below is blanked for them (the WhatsApp number
+    # and the Sentry DSN too, so a preview neither invites live WhatsApp traffic nor reports to staging).
     environment: ${{ inputs.environment || 'staging' }}
+    # NETLIFY_AUTH_TOKEN is not job-wide: only the steps that call Netlify get it, so `pnpm install`
+    # and the build (third-party code) never see it.
     env:
-      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      EVENT: ${{ github.event_name }}
       NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
-      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
-      SUPABASE_URL_VAR: ${{ vars.VITE_SUPABASE_URL }}
-      VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-      VITE_APP_URL: ${{ vars.VITE_APP_URL }}
-      VITE_WA_DISPLAY_NUMBER: ${{ vars.VITE_WA_DISPLAY_NUMBER }}
-      VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+      # Deploys (--prod): this Environment's project. Empty on pull requests.
+      SUPABASE_PROJECT_REF: ${{ github.event_name != 'pull_request' && vars.SUPABASE_PROJECT_REF || '' }}
+      SUPABASE_URL_VAR: ${{ github.event_name != 'pull_request' && vars.VITE_SUPABASE_URL || '' }}
+      DEPLOY_ANON_KEY: ${{ github.event_name != 'pull_request' && vars.VITE_SUPABASE_ANON_KEY || '' }}
+      VITE_APP_URL: ${{ github.event_name != 'pull_request' && vars.VITE_APP_URL || '' }}
+      # Pull requests: the preview project (both empty → demo mode).
+      PREVIEW_SUPABASE_URL: ${{ needs.preview.outputs.supabase_url }}
+      PREVIEW_ANON_KEY_B64: ${{ needs.preview.outputs.anon_key_b64 }}
+      # Only compared with the preview settings, so a preview can never point at this project.
+      LIVE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      LIVE_PROJECT_URL: ${{ vars.VITE_SUPABASE_URL }}
+      # Empty on pull requests: the demo then shows the fictional +1 555 014 2290, and Sentry is off.
+      VITE_WA_DISPLAY_NUMBER: ${{ github.event_name != 'pull_request' && vars.VITE_WA_DISPLAY_NUMBER || '' }}
+      VITE_SENTRY_DSN: ${{ github.event_name != 'pull_request' && vars.VITE_SENTRY_DSN || '' }}
+      # §11.1: 'true' on staging shows admins the Demo phone in every org (real orgs' link codes
+      # masked); unset elsewhere, where only demo orgs (`orgs.is_demo`) have it.
+      VITE_DEMO_PHONE_ALL_ORGS: ${{ github.event_name != 'pull_request' && vars.VITE_DEMO_PHONE_ALL_ORGS || '' }}
     steps:
       - name: Check configuration
         id: cfg
+        env:
+          # Whether the token exists, not the token.
+          HAS_NETLIFY_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN != '' }}
         run: |
+          if [ "$EVENT" = pull_request ]; then
+            # The preview job passes the (public) anon key base64-encoded; see its outputs.
+            key="${PREVIEW_ANON_KEY:-$(printf '%s' "${PREVIEW_ANON_KEY_B64:-}" | base64 -d 2>/dev/null || true)}"
+            url="$PREVIEW_SUPABASE_URL"
+            # Compared as the browser will read it. The host must be plain ASCII (letters, digits, dots,
+            # hyphens) with an optional port, so no %-escape, credentials or Unicode can spell staging's
+            # host another way; refs and hosts are compared without case, trailing dot or port.
+            url_ok() { local LC_ALL=C; [[ "$1" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[^\<\>[:space:]]*)?$ ]]; }
+            host_of() { local h="${1#*://}"; h="${h%%/*}"; h="${h%%:*}"; h="${h%.}"; printf '%s' "${h,,}"; }
+            if [ -n "$url" ] && ! url_ok "$url"; then
+              echo "::warning::The preview Supabase URL is not a plain https URL; the panel preview builds in demo mode instead."
+              url="" key=""
+            fi
+            live_host="$(host_of "$LIVE_PROJECT_URL")"
+            # Staging's ref is a workflow constant, so this holds even before staging's own variables exist.
+            if [ -n "$url" ] && { [[ "${url,,}" == *"${STAGING_PROJECT_REF,,}"* ]] || { [ -n "$LIVE_PROJECT_REF" ] && [[ "${url,,}" == *"${LIVE_PROJECT_REF,,}"* ]]; } || { [ -n "$live_host" ] && [ "$(host_of "$url")" = "$live_host" ]; }; }; then
+              echo "::warning::The preview Environment points at the staging Supabase project; the panel preview builds in demo mode instead. Give preview its own project (docs/RUNBOOK.md §2)."
+              url="" key=""
+            fi
+            if [ -n "$url" ] && [ -n "$key" ]; then
+              { echo "VITE_DEMO=false"; echo "VITE_SUPABASE_URL=$url"; echo "VITE_SUPABASE_ANON_KEY=$key"; } >> "$GITHUB_ENV"
+              echo "mode=preview Supabase project" >> "$GITHUB_OUTPUT"
+            else
+              # Demo mode: the in-memory Kestrel data, no Supabase at all.
+              { echo "VITE_DEMO=true"; echo "VITE_SUPABASE_URL="; echo "VITE_SUPABASE_ANON_KEY="; } >> "$GITHUB_ENV"
+              echo "mode=demo (no Supabase)" >> "$GITHUB_OUTPUT"
+            fi
+            if [ "$HAS_NETLIFY_TOKEN" = true ]; then
+              echo "ready=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::notice::Web preview skipped: set NETLIFY_AUTH_TOKEN (secret) in the staging Environment."
+              echo "ready=false" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
           # The project URL follows from the project ref; a missing or placeholder value is derived.
           VITE_SUPABASE_URL="$SUPABASE_URL_VAR"
           if ! [[ "$VITE_SUPABASE_URL" =~ ^https://[^\<\>[:space:]]+$ ]] && [ -n "$SUPABASE_PROJECT_REF" ]; then
             VITE_SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"
             echo "::notice::VITE_SUPABASE_URL unset or not a URL; using $VITE_SUPABASE_URL"
           fi
-          echo "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" >> "$GITHUB_ENV"
-          if [ -n "$VITE_SUPABASE_ANON_KEY" ] && ! [[ "$VITE_SUPABASE_ANON_KEY" =~ ^(eyJ|sb_publishable_) ]]; then
+          if [ -n "$DEPLOY_ANON_KEY" ] && ! [[ "$DEPLOY_ANON_KEY" =~ ^(eyJ|sb_publishable_) ]]; then
             echo "::error::VITE_SUPABASE_ANON_KEY is not a Supabase anon key (eyJ…) or publishable key (sb_publishable_…)."
             exit 1
           fi
-          if [ -n "$NETLIFY_AUTH_TOKEN" ] && [ -n "$VITE_SUPABASE_URL" ] && [ -n "$VITE_SUPABASE_ANON_KEY" ]; then
+          { echo "VITE_SUPABASE_URL=$VITE_SUPABASE_URL"; echo "VITE_SUPABASE_ANON_KEY=$DEPLOY_ANON_KEY"; } >> "$GITHUB_ENV"
+          echo "mode=$ENVIRONMENT Supabase project" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_NETLIFY_TOKEN" = true ] && [ -n "$VITE_SUPABASE_URL" ] && [ -n "$DEPLOY_ANON_KEY" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "::notice::Web deploy skipped for $ENVIRONMENT: set NETLIFY_AUTH_TOKEN (secret) and VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (variables)."
@@ -183,7 +1787,9 @@ jobs:
         if: steps.cfg.outputs.ready == 'true'
         # The site id comes from NETLIFY_SITE_ID or .github/netlify-sites.json (an id survives renaming
         # the site in Netlify). With neither, a site is found or created by name, so a token is all
-        # Netlify needs for the first deploy.
+        # Netlify needs for the first deploy. Pull requests look up the panel's `staging` key.
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: |
           api=https://api.netlify.com/api/v1
           auth="Authorization: Bearer $NETLIFY_AUTH_TOKEN"
@@ -208,15 +1814,379 @@ jobs:
           echo "url=$(jq -r '.ssl_url // .url' <<<"$site")" >> "$GITHUB_OUTPUT"
       - name: Deploy
         if: steps.cfg.outputs.ready == 'true'
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          SITE_ID: ${{ steps.site.outputs.id }}
+          SITE_URL: ${{ github.event_name != 'pull_request' && vars.VITE_APP_URL || steps.site.outputs.url }}
+          PR_NUMBER: ${{ github.event.number }}
+          MODE: ${{ steps.cfg.outputs.mode }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            flags="--alias pr-${{ github.event.number }}"
+          if [ "$EVENT" = pull_request ]; then
+            flags=(--alias "pr-$PR_NUMBER")
           else
-            flags="--prod"
+            flags=(--prod)
           fi
-          npx --yes netlify-cli@27.10.2 deploy --filter @sitelog/web --dir "$GITHUB_WORKSPACE/apps/web/dist" --site "${{ steps.site.outputs.id }}" \
-            --auth "$NETLIFY_AUTH_TOKEN" --message "${GITHUB_SHA::7} ${ENVIRONMENT}" $flags --json > deploy.json
+          npx --yes netlify-cli@27.10.2 deploy --filter @sitelog/web --dir "$GITHUB_WORKSPACE/apps/web/dist" --site "$SITE_ID" \
+            --auth "$NETLIFY_AUTH_TOKEN" --message "${GITHUB_SHA::7} ${ENVIRONMENT}" "${flags[@]}" --json > deploy.json
           url=$(node -e "const d=require('./deploy.json');console.log(d.deploy_url||d.url||'')")
           echo "Deployed: $url"
-          echo "### Web panel (${ENVIRONMENT})" >> "$GITHUB_STEP_SUMMARY"
-          echo "${{ vars.VITE_APP_URL || steps.site.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$EVENT" = pull_request ]; then
+            echo "### Web panel preview (pr-$PR_NUMBER, $MODE)" >> "$GITHUB_STEP_SUMMARY"
+            echo "$url" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Web panel (${ENVIRONMENT}, $MODE)" >> "$GITHUB_STEP_SUMMARY"
+            echo "$SITE_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  field:
+    name: Field app · Netlify
+    needs: [plan, supabase, preview]
+    # D42: the field web recorder on its own Netlify site (its routes, /settings among them, cannot share
+    # the panel's origin). Guard (D40): --prod only from the live branch, for staging or production.
+    # Pull requests deploy the pr-<n> alias of the field site, whose /api reaches the preview project
+    # (D41), never staging.
+    if: >-
+      always() && needs.plan.outputs.field == 'true' &&
+      (needs.supabase.result == 'success' || needs.supabase.result == 'skipped') &&
+      (needs.preview.result == 'success' || needs.preview.result == 'skipped') &&
+      (github.event_name == 'pull_request' ||
+       (github.ref == 'refs/heads/claude/focused-newton-5v0u2q' && inputs.environment != 'preview'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # As for the panel, pull requests take only the Netlify token from `staging`. The site is the field
+    # app's own (key "field-<environment>" or name sitelog-field-<environment>-<owner>), never the panel's.
+    environment: ${{ inputs.environment || 'staging' }}
+    # NETLIFY_AUTH_TOKEN is not job-wide: only the steps that call Netlify get it, so `pnpm install`
+    # and the build (vite-plugin-pwa, Workbox and their dependencies) never see it.
+    env:
+      EVENT: ${{ github.event_name }}
+      # Deploys (--prod): this Environment's project, for the /api rule. Empty on pull requests.
+      SUPABASE_PROJECT_REF: ${{ github.event_name != 'pull_request' && vars.SUPABASE_PROJECT_REF || '' }}
+      SUPABASE_URL_VAR: ${{ github.event_name != 'pull_request' && vars.VITE_SUPABASE_URL || '' }}
+      # Pull requests: the preview project (empty → no /api rule).
+      PREVIEW_SUPABASE_URL: ${{ needs.preview.outputs.supabase_url }}
+      # Only compared: a preview never points at this project, and the field site is never the panel's.
+      LIVE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      LIVE_PROJECT_URL: ${{ vars.VITE_SUPABASE_URL }}
+      PANEL_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+    steps:
+      - name: Check configuration
+        id: cfg
+        # Decides the one value the build gets: the Supabase project URL for the /api rule (D43).
+        env:
+          # Whether the token exists, not the token.
+          HAS_NETLIFY_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN != '' }}
+        run: |
+          # The build reads the URL with a URL parser, which lowercases the host and decodes escapes, so
+          # the checks below take the host as plain ASCII only (letters, digits, dots, hyphens) with an
+          # optional port, and compare refs and hosts without case, trailing dot or port. The Build
+          # step checks the host the generated rule really forwards to once more.
+          url_ok() { local LC_ALL=C; [[ "$1" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[^\<\>[:space:]]*)?$ ]]; }
+          host_of() { local h="${1#*://}"; h="${h%%/*}"; h="${h%%:*}"; h="${h%.}"; printf '%s' "${h,,}"; }
+          if [ "$EVENT" = pull_request ]; then
+            url="$PREVIEW_SUPABASE_URL"
+            if [ -n "$url" ] && ! url_ok "$url"; then
+              echo "::warning::The preview Supabase URL is not a plain https URL; the field preview builds without /api."
+              url=""
+            fi
+            live_host="$(host_of "$LIVE_PROJECT_URL")"
+            # Staging's ref is a workflow constant, so this holds even before staging's own variables exist.
+            if [ -n "$url" ] && { [[ "${url,,}" == *"${STAGING_PROJECT_REF,,}"* ]] || { [ -n "$LIVE_PROJECT_REF" ] && [[ "${url,,}" == *"${LIVE_PROJECT_REF,,}"* ]]; } || { [ -n "$live_host" ] && [ "$(host_of "$url")" = "$live_host" ]; }; }; then
+              echo "::warning::The preview Environment points at the staging Supabase project; the field preview builds without /api instead. Give preview its own project (docs/RUNBOOK.md §2)."
+              url=""
+            fi
+            echo "supabase_url=$url" >> "$GITHUB_OUTPUT"
+            if [ -n "$url" ]; then
+              echo "mode=/api to the preview Supabase project" >> "$GITHUB_OUTPUT"
+            else
+              echo "mode=no /api (the preview Environment has no Supabase project)" >> "$GITHUB_OUTPUT"
+            fi
+            if [ "$HAS_NETLIFY_TOKEN" = true ]; then
+              echo "ready=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::notice::Field preview skipped: set NETLIFY_AUTH_TOKEN (secret) in the staging Environment."
+              echo "ready=false" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
+          # The project URL follows from the project ref; a missing or placeholder value is derived.
+          url="$SUPABASE_URL_VAR"
+          if ! url_ok "$url"; then
+            url=""
+            if [ -n "$SUPABASE_PROJECT_REF" ]; then
+              url="https://${SUPABASE_PROJECT_REF}.supabase.co"
+              echo "::notice::VITE_SUPABASE_URL unset or not a plain https URL; the field app's /api goes to $url"
+            fi
+          fi
+          if [ -n "$url" ] && ! url_ok "$url"; then
+            echo "::error::SUPABASE_PROJECT_REF does not make a valid project URL."
+            exit 1
+          fi
+          # A missing Environment value falls back to a repository or organization one (D40/D41).
+          if [ "$ENVIRONMENT" != staging ] && [ -n "$url" ] && [[ "${url,,}" == *"${STAGING_PROJECT_REF,,}"* ]]; then
+            echo "::error::$ENVIRONMENT resolves to the staging Supabase project ($STAGING_PROJECT_REF); refusing to deploy its field app against it. Give $ENVIRONMENT its own SUPABASE_PROJECT_REF (docs/RUNBOOK.md §2)."
+            exit 1
+          fi
+          echo "supabase_url=$url" >> "$GITHUB_OUTPUT"
+          echo "mode=/api to the $ENVIRONMENT Supabase project" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_NETLIFY_TOKEN" = true ] && [ -n "$url" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Field deploy skipped for $ENVIRONMENT: set NETLIFY_AUTH_TOKEN (secret) and SUPABASE_PROJECT_REF or VITE_SUPABASE_URL (variables)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ready == 'true'
+      - uses: pnpm/action-setup@v4
+        if: steps.cfg.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.cfg.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: steps.cfg.outputs.ready == 'true'
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        if: steps.cfg.outputs.ready == 'true'
+        # The build writes dist/_redirects (D43, apps/field/config/redirects.ts): /api/* to
+        # {url}/functions/v1/field-api first, the app fallback second, and no /api rule without a URL.
+        # Only the URL checked above reaches the build: no key, no other Supabase or VITE_* value.
+        # Then the staging guard once more, on the host the /api rule really forwards to.
+        env:
+          SUPABASE_URL: ${{ steps.cfg.outputs.supabase_url }}
+          VITE_SUPABASE_URL: ${{ steps.cfg.outputs.supabase_url }}
+        run: |
+          pnpm --filter @sitelog/field build
+          file=apps/field/dist/_redirects
+          rules="$(grep -v -e '^#' -e '^[[:space:]]*$' "$file" || true)"
+          if [ -n "$SUPABASE_URL" ]; then
+            if [[ "$(head -n 1 <<<"$rules")" != '/api/*  '* ]]; then
+              echo "::error::$file does not start with the /api rule although a Supabase URL was given (the build log says why)."
+              exit 1
+            fi
+          elif grep -q '^/api' <<<"$rules"; then
+            echo "::error::$file forwards /api although no Supabase URL was given."
+            exit 1
+          fi
+          if [ "$(tail -n 1 <<<"$rules")" != '/*  /index.html  200' ]; then
+            echo "::error::$file does not end with the app fallback."
+            exit 1
+          fi
+          # Pull requests and Environments other than staging must not reach the staging project. The
+          # host is read the way the browser and Netlify read it (WHATWG URL: lowercased, escapes
+          # decoded), whatever spelling the Environment used.
+          hostname_of() {
+            node -e 'try { console.log(new URL(process.argv[1]).hostname.replace(/\.$/, "").toLowerCase()) } catch { console.log("") }' "$1"
+          }
+          target="$(grep -m 1 '^/api/' <<<"$rules" | awk '{ print $2 }' || true)"
+          if [ -n "$target" ] && { [ "$EVENT" = pull_request ] || [ "$ENVIRONMENT" != staging ]; }; then
+            host="$(hostname_of "$target")"
+            staging=""
+            if [ -z "$host" ] || [[ "$host" == *"${STAGING_PROJECT_REF,,}"* ]]; then staging=yes; fi
+            if [ "$EVENT" = pull_request ]; then
+              live_host="$(hostname_of "$LIVE_PROJECT_URL")"
+              if [ -n "$LIVE_PROJECT_REF" ] && [[ "$host" == *"${LIVE_PROJECT_REF,,}"* ]]; then staging=yes; fi
+              if [ -n "$live_host" ] && [ "$host" = "$live_host" ]; then staging=yes; fi
+            fi
+            if [ -n "$staging" ]; then
+              run="a $ENVIRONMENT deploy"
+              if [ "$EVENT" = pull_request ]; then run="a pull request"; fi
+              echo "::error::$file forwards /api to ${host:-a host that cannot be read}; $run must never reach the staging Supabase project. Refusing to deploy it."
+              exit 1
+            fi
+          fi
+          cat "$file"
+      - name: Netlify site
+        id: site
+        if: steps.cfg.outputs.ready == 'true'
+        # The field app's own site (D42): its key "field-<environment>" in .github/netlify-sites.json (an
+        # id survives renaming the site), else found or created by its own name
+        # sitelog-field-<environment>-<owner>, so the token is all Netlify needs. Never NETLIFY_SITE_ID, the
+        # panel's key or the panel's name: a site that resolves to the panel's stops the job. Pull requests
+        # look up "field-staging".
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: |
+          api=https://api.netlify.com/api/v1
+          auth="Authorization: Bearer $NETLIFY_AUTH_TOKEN"
+          key="field-${ENVIRONMENT}"
+          owner="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          id="" panel_id=""
+          if [ -f .github/netlify-sites.json ]; then
+            id=$(jq -r --arg k "$key" '.[$k] // empty' .github/netlify-sites.json)
+            panel_id=$(jq -r --arg e "$ENVIRONMENT" '.[$e] // empty' .github/netlify-sites.json)
+          fi
+          if [ -n "$id" ]; then
+            site=$(curl -sS --fail-with-body -H "$auth" "$api/sites/$id")
+          else
+            name="sitelog-field-${ENVIRONMENT}-${owner}"
+            site=$(curl -sS --fail-with-body -H "$auth" "$api/sites?name=$name&filter=all" \
+              | jq -c --arg n "$name" '[.[] | select(.name == $n)][0] // empty')
+            if [ -z "$site" ]; then
+              site=$(jq -n --arg n "$name" '{name: $n}' \
+                | curl -sS --fail-with-body -H "$auth" -H 'Content-Type: application/json' -d @- "$api/sites")
+              echo "Created Netlify site $name"
+            fi
+            echo "::notice::Netlify field site $(jq -r .name <<<"$site") has id $(jq -r .id <<<"$site"); add it to .github/netlify-sites.json under \"$key\" so a rename keeps deploys on it."
+          fi
+          site_id=$(jq -r '.id // empty' <<<"$site")
+          site_name=$(jq -r '.name // empty' <<<"$site")
+          if [ -z "$site_id" ]; then
+            echo "::error::Netlify returned no site id for the field app."
+            exit 1
+          fi
+          if { [ -n "$panel_id" ] && [ "$site_id" = "$panel_id" ]; } || { [ -n "$PANEL_SITE_ID" ] && [ "$site_id" = "$PANEL_SITE_ID" ]; } || [ "$site_name" = "sitelog-${ENVIRONMENT}-${owner}" ]; then
+            echo "::error::The field app's site ($site_name, $site_id) is the panel's; refusing to deploy over the panel. Give \"$key\" its own site (docs/RUNBOOK.md §2)."
+            exit 1
+          fi
+          echo "id=$site_id" >> "$GITHUB_OUTPUT"
+          echo "url=$(jq -r '.ssl_url // .url' <<<"$site")" >> "$GITHUB_OUTPUT"
+      - name: Deploy
+        if: steps.cfg.outputs.ready == 'true'
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          SITE_ID: ${{ steps.site.outputs.id }}
+          SITE_URL: ${{ steps.site.outputs.url }}
+          PR_NUMBER: ${{ github.event.number }}
+          MODE: ${{ steps.cfg.outputs.mode }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            flags=(--alias "pr-$PR_NUMBER")
+          else
+            flags=(--prod)
+          fi
+          npx --yes netlify-cli@27.10.2 deploy --filter @sitelog/field --dir "$GITHUB_WORKSPACE/apps/field/dist" --site "$SITE_ID" \
+            --auth "$NETLIFY_AUTH_TOKEN" --message "${GITHUB_SHA::7} ${ENVIRONMENT} field" "${flags[@]}" --json > deploy.json
+          url=$(node -e "const d=require('./deploy.json');console.log(d.deploy_url||d.url||'')")
+          echo "Deployed: $url"
+          if [ "$EVENT" = pull_request ]; then
+            echo "### Field app preview (pr-$PR_NUMBER, $MODE)" >> "$GITHUB_STEP_SUMMARY"
+            echo "$url/today" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Field app (${ENVIRONMENT}, $MODE)" >> "$GITHUB_STEP_SUMMARY"
+            echo "$SITE_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  inventory:
+    name: Inventory · staging (read-only)
+    needs: plan
+    # W1-01 step 0 (docs/GAP_ANALYSIS.md §4.1 stage 1). Read-only: migration list, function list, secret
+    # names and counts in a READ ONLY transaction. It never runs db push, functions deploy or secrets set,
+    # so the guard lets it run from any ref.
+    if: needs.plan.outputs.inventory == 'true' && inputs.environment == 'staging'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD_SECRET: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - name: Check configuration
+        id: cfg
+        run: |
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD_SECRET" ] && [ -n "$SUPABASE_PROJECT_REF" ]; then
+            pw="$(printf '%s' "$SUPABASE_DB_PASSWORD_SECRET" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+            echo "::add-mask::$pw"
+            { echo "SUPABASE_DB_PASSWORD<<__PW__"; printf '%s\n' "$pw"; echo "__PW__"; } >> "$GITHUB_ENV"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Staging inventory (read-only)"
+              echo
+              echo "Project \`$SUPABASE_PROJECT_REF\`, ref \`$GITHUB_REF_NAME\`, commit \`${GITHUB_SHA::7}\`. Nothing was written: no db push, functions deploy or secrets set, and the counts ran in a READ ONLY transaction that was rolled back."
+              echo
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::notice::Inventory skipped: set SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD (secrets) and SUPABASE_PROJECT_REF (variable) in staging."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ready == 'true'
+      - uses: supabase/setup-cli@v1
+        if: steps.cfg.outputs.ready == 'true'
+        with:
+          version: 2.118.0
+      - name: Link project
+        if: steps.cfg.outputs.ready == 'true'
+        # Writes only supabase/.temp on the runner (project ref, pooler address), through the Management
+        # API. No database password: link has no reason to open a database connection here (older CLIs
+        # created their migration tables when given one), so it is unset for this command only.
+        run: env -u SUPABASE_DB_PASSWORD supabase link --project-ref "$SUPABASE_PROJECT_REF" < /dev/null
+      - name: Migrations
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          supabase migration list --linked > "$RUNNER_TEMP/migrations.txt"
+          cat "$RUNNER_TEMP/migrations.txt"
+          { echo "### Migrations (local = this ref, remote = staging)"; echo; echo '```'; cat "$RUNNER_TEMP/migrations.txt"; echo '```'; echo; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Edge functions
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          supabase functions list --project-ref "$SUPABASE_PROJECT_REF" > "$RUNNER_TEMP/functions.txt"
+          cat "$RUNNER_TEMP/functions.txt"
+          { echo "### Edge functions"; echo; echo '```'; cat "$RUNNER_TEMP/functions.txt"; echo '```'; echo; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Secret names
+        if: steps.cfg.outputs.ready == 'true'
+        # Names only. The CLI also prints a digest per secret; that output stays in a temp file that
+        # is never printed and is deleted here.
+        run: |
+          raw="$RUNNER_TEMP/secrets.raw"
+          names=""
+          if supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" -o json > "$raw" 2>/dev/null; then
+            names="$(jq -r 'if type == "array" then .[] | .name // empty else empty end' "$raw" 2>/dev/null || true)"
+          fi
+          if [ -z "$names" ] && supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" > "$raw" 2> "$RUNNER_TEMP/secrets.err"; then
+            names="$(awk -F'|' 'NF > 1 { n = $1; gsub(/[[:space:]]/, "", n); if (n != "" && n != "NAME" && n !~ /^-+$/) print n }' "$raw")"
+          fi
+          rm -f "$raw"
+          if [ -z "$names" ]; then
+            cat "$RUNNER_TEMP/secrets.err" 2>/dev/null || true
+            echo "::error::Could not read the secret names (supabase secrets list)."
+            exit 1
+          fi
+          sorted="$(sort -u <<<"$names")"
+          echo "$(wc -l <<<"$sorted") secret names:"
+          echo "$sorted"
+          {
+            echo "### Edge function secrets (names only)"
+            echo
+            echo "| Name |"
+            echo "| --- |"
+            while IFS= read -r n; do printf "| \`%s\` |\n" "$n"; done <<<"$sorted"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Database counts (read-only transaction)
+        if: steps.cfg.outputs.ready == 'true'
+        env:
+          PGDATABASE: postgres
+          PGSSLMODE: require
+          PGCONNECT_TIMEOUT: '20'
+          PGCLIENTENCODING: UTF8
+        # supabase/ops/inventory.sql: counts and labels only, in a READ ONLY transaction that is rolled
+        # back (tested on PGlite by supabase/db-tests/src/inventory.test.ts).
+        run: |
+          # Runners have no IPv6, so connect through the session pooler that `supabase link` recorded;
+          # without one, try the direct host.
+          pooler="$(cat supabase/.temp/pooler-url 2>/dev/null || true)"
+          if [[ "$pooler" =~ ^postgres(ql)?://([^:@/]+)(:[^@]*)?@([^:/?]+) ]]; then
+            export PGUSER="${BASH_REMATCH[2]}" PGHOST="${BASH_REMATCH[4]}" PGPORT=5432
+          else
+            export PGUSER=postgres PGHOST="db.${SUPABASE_PROJECT_REF}.supabase.co" PGPORT=5432
+          fi
+          export PGPASSWORD="$SUPABASE_DB_PASSWORD"
+          echo "psql to $PGHOST:$PGPORT as $PGUSER"
+          psql -X -q -A -t -F $'\t' -v ON_ERROR_STOP=1 -f supabase/ops/inventory.sql > "$RUNNER_TEMP/counts.tsv"
+          cat "$RUNNER_TEMP/counts.tsv"
+          {
+            echo "### Database counts"
+            echo
+            echo "Demo orgs = the orgs with \`is_demo\` (W1-05 step 9 on), or, on a database without that column, the seeded Kestrel org (\`7a0cfa5d-2a29-43fb-8665-fcd9bed4106d\`, \`DEMO_ORG_ID\` in \`packages/shared/src/demo/kestrel.ts\`): the row \"demo orgs by\" says which; other orgs = every other row, including rows with no org; \`-\` = the table has no org."
+            awk -F'\t' '
+              function cell(v) { return v == "" ? "-" : v }
+              $1 != section {
+                section = $1
+                printf "\n#### %s\n\n| Item | Demo orgs | Other orgs | Total or state |\n| --- | ---: | ---: | ---: |\n", section
+              }
+              { printf "| %s | %s | %s | %s |\n", $2, cell($3), cell($4), cell($5) }
+            ' "$RUNNER_TEMP/counts.tsv"
+          } >> "$GITHUB_STEP_SUMMARY"

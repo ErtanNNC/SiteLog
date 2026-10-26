@@ -1,0 +1,46 @@
+{
+  "event": "track_published",
+  "room": {
+    "sid": "RM_{{room_sid}}",
+    "name": "{{room}}",
+    "emptyTimeout": 300,
+    "departureTimeout": 20,
+    "creationTime": "{{ts}}",
+    "enabledCodecs": [
+      {
+        "mime": "audio/opus"
+      }
+    ],
+    "metadata": "",
+    "numParticipants": 2
+  },
+  "participant": {
+    "sid": "PA_sip{{room_sid}}",
+    "identity": "sip_{{phone}}",
+    "state": "ACTIVE",
+    "joinedAt": "{{ts+2}}",
+    "name": "Phone {{phone}}",
+    "version": 2,
+    "permission": {
+      "canSubscribe": true,
+      "canPublish": true,
+      "canPublishData": true
+    },
+    "kind": "SIP",
+    "attributes": {
+      "sip.callID": "SCL_{{room_sid}}",
+      "sip.callStatus": "active",
+      "sip.phoneNumber": "{{phone}}",
+      "sip.trunkID": "ST_sitelogUS",
+      "sip.trunkPhoneNumber": "{{to}}"
+    }
+  },
+  "track": {
+    "sid": "TR_sip{{room_sid}}",
+    "type": "AUDIO",
+    "source": "MICROPHONE",
+    "mimeType": "audio/opus"
+  },
+  "id": "{{id}}",
+  "createdAt": "{{ts+9}}"
+}

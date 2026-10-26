@@ -1,4 +1,4 @@
-import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { describe, expect, it } from 'vitest';
 import { makeSource } from '@/test/render';
 import { DemoStore } from './store';
@@ -73,7 +73,7 @@ describe('DemoStore field-simulator writes', () => {
     let row = (await source.getOverview()).sitesToday.find((r) => r.siteId === site.id)!;
     expect(row.chip.label).toBe('Awaiting');
 
-    const data = emptyReportData('2026-10-09');
+    const data = emptyReportDataV1('2026-10-09');
     data.summary = 'Test day.';
     data.manpower = [
       {
@@ -116,7 +116,7 @@ describe('DemoStore field-simulator writes', () => {
       reportId: 'sim-r1',
       version: 2,
       data: { ...data, manpower: [{ ...data.manpower[0]!, workers: 7, totalHours: 56 }] },
-      author: 'reporter_reply',
+      author: 'reporter',
       changeNote: 'Apex Concrete 7 workers · 56 h (was 6 · 48 h)',
       messageId: 'sim-m9',
       source: null,
@@ -124,7 +124,7 @@ describe('DemoStore field-simulator writes', () => {
     });
     const detail = await source.getReportDetail('sim-r1');
     expect(detail.version).toBe(2);
-    expect(detail.versions.map((v) => v.author)).toEqual(['agent', 'reporter_reply']);
+    expect(detail.versions.map((v) => v.author)).toEqual(['agent', 'reporter']);
   });
 
   it('no work flips the site-day without a report; a weather day files its own record', () => {
@@ -143,7 +143,7 @@ describe('DemoStore field-simulator writes', () => {
       kind: 'weather_day',
       at,
     });
-    const data = emptyReportData('2026-10-09');
+    const data = emptyReportDataV1('2026-10-09');
     data.weather.periods = [{ condition: 'Rain', fullDay: true, lostHours: 8, source: [] }];
     store.fileFieldReport({
       reportId: 'sim-wx',

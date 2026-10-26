@@ -1,6 +1,6 @@
 import type { MouseEvent, ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { copy } from '@/copy/en';
+import { useCopy } from '@/i18n/useCopy';
 import { useScrollRegion } from '@/lib/useScrollRegion';
 import { cn } from '@/lib/utils';
 import {
@@ -59,6 +59,7 @@ export function DataTable<T>({
   ...rest
 }: DataTableProps<T>) {
   const navigate = useNavigate();
+  const { t } = useCopy();
   const scrollRegion = useScrollRegion(rest['aria-label'] ?? caption);
   if (rows.length === 0 && empty) {
     return (
@@ -95,7 +96,7 @@ export function DataTable<T>({
           {rows.length === 0 ? (
             <TableRow>
               <TableCell colSpan={columns.length} className="py-8 text-center text-dust">
-                {copy.table.empty}
+                {t('table.empty')}
               </TableCell>
             </TableRow>
           ) : (

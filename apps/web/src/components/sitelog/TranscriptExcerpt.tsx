@@ -1,30 +1,40 @@
 import { formatAudioTimestamp } from '@sitelog/shared/format.ts';
-import { copy } from '@/copy/en';
+import { useCopy } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
-import { useVoicePlayer } from './VoicePlayer';
+import { useClipActive, useMediaPlayer } from './MediaPlayer';
 
 export interface TranscriptExcerptProps {
+  /** The clip the excerpt is from (a voice note's upload, a call). */
+  clipId?: string | null;
+  kind?: 'voice_note' | 'call';
   start: number;
   end: number;
   quote: string;
   mapped?: string | null;
+  /** A call excerpt's speaker (§11.3: assistant lines muted). */
+  speaker?: 'reporter' | 'agent';
   className?: string;
 }
 
-/** Timestamp · original quote (any language) · "→" the mapped English facts. Highlights while the player is inside it. */
+/**
+ * §11.3 TranscriptExcerpt: timestamp · speaker · original words (any language) · "→" the mapped
+ * facts. The timestamp seeks the clip; the excerpt is highlighted while the player is inside it.
+ */
 export function TranscriptExcerpt({
+  clipId = null,
+  kind = 'voice_note',
   start,
   end,
   quote,
   mapped,
+  speaker,
   className,
 }: TranscriptExcerptProps) {
-  const player = useVoicePlayer();
+  const { t } = useCopy();
+  const player = useMediaPlayer();
   const ts = formatAudioTimestamp(start);
-  const active = player
-    ? (player.highlight !== null && player.highlight >= start && player.highlight < end) ||
-      (player.currentTime > 0 && player.currentTime >= start && player.currentTime < end)
-    : false;
+  const active = useClipActive(clipId, start, end);
+  const isCall = kind === 'call';
   return (
     <div
       className={cn(
@@ -33,16 +43,31 @@ export function TranscriptExcerpt({
         className,
       )}
       data-active={active || undefined}
+      data-testid="transcript-excerpt"
     >
-      <button
-        type="button"
-        className="font-mono text-[12px] font-medium text-level hover:underline"
-        onClick={() => player?.seek(start)}
-        aria-label={copy.source.seekTo(ts)}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="inline-flex min-h-6 items-center font-mono text-[12px] font-medium text-level hover:underline"
+          onClick={() => player?.seek(start, clipId ?? undefined)}
+          aria-label={`${ts} · ${t(isCall ? 'source.links.playCall' : 'source.links.playVoiceNote', { ts })}`}
+        >
+          {ts}
+        </button>
+        {speaker ? (
+          <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-dust">
+            {t(speaker === 'agent' ? 'report.transcript.agent' : 'report.transcript.reporter')}
+          </span>
+        ) : null}
+      </div>
+      <p
+        className={cn(
+          'mt-0.5 text-[15px] leading-[22px]',
+          speaker === 'agent' ? 'text-dust' : 'text-asphalt',
+        )}
       >
-        {ts}
-      </button>
-      <p className="mt-0.5 text-[15px] leading-[22px] text-asphalt">“{quote}”</p>
+        “{quote}”
+      </p>
       {mapped ? (
         <p className="mt-1 text-caption text-dust">
           <span aria-hidden="true">→ </span>

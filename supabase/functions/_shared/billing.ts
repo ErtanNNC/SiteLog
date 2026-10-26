@@ -1,13 +1,29 @@
 /**
- * Pure billing helpers shared by api-billing, stripe-webhook and scheduler-tick
- * (§1.3 pricing, §F19, §19 #4 trial, #5 paused sites).
+ * Billing helpers of the edge functions (api-billing, stripe-webhook, scheduler-tick, field-api;
+ * §1.3, F23, P13, §19 Q234–Q236). The rules shared with the panel and the worker (the org's
+ * price, the provider pick, the trial-end rule, `isBillingBlocked`, the quantity sync) live in
+ * `@sitelog/shared/billing.ts` and are re-exported here; this file adds the Stripe specifics.
  */
+import { TRIAL_DAYS, type BillingStatus } from '@sitelog/shared/billing.ts';
 
-export const PRICE_PER_SITE_CENTS = 39_900;
-export const TRIAL_DAYS = 14;
-
-/** orgs.billing_status values: Stripe's statuses collapsed to what the panel distinguishes. */
-export type BillingStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'paused';
+export {
+  billingAlert,
+  billingPrice,
+  billingProviderOf,
+  effectiveBilling,
+  isBillingBlocked,
+  isOrgBillingBlocked,
+  monthlyTotalMinor,
+  prorationFor,
+  stripePriceEnvName,
+  syncDecision,
+  TRIAL_DAYS,
+  type BillingPrice,
+  type BillingProviderName,
+  type BillingStateInput,
+  type BillingStatus,
+  type SyncDecision,
+} from '@sitelog/shared/billing.ts';
 
 /** Stripe subscription status → orgs.billing_status; null for a status we do not know. */
 export function mapStripeStatus(status: string): BillingStatus | null {
@@ -28,10 +44,6 @@ export function mapStripeStatus(status: string): BillingStatus | null {
     default:
       return null;
   }
-}
-
-export function monthlyTotalCents(activeSites: number): number {
-  return PRICE_PER_SITE_CENTS * Math.max(0, Math.floor(activeSites));
 }
 
 /** Stripe Checkout refuses a `subscription_data.trial_end` less than 48 hours away. */
@@ -60,17 +72,6 @@ export function checkoutTrial(org: { trial_ends_at: string | null }, now: Date):
   if (!Number.isFinite(end) || end <= nowMs) return {};
   const earliest = nowMs + MIN_CHECKOUT_TRIAL_MS + CHECKOUT_TRIAL_MARGIN_MS;
   return { trial_end: Math.ceil(Math.max(end, earliest) / 1000) };
-}
-
-/**
- * Adding a site is prorated (Stripe default); removing/pausing one is not credited mid-cycle,
- * the lower quantity simply applies from the next invoice (§19 #5).
- */
-export function prorationFor(
-  previousQuantity: number,
-  nextQuantity: number,
-): 'create_prorations' | 'none' {
-  return nextQuantity > previousQuantity ? 'create_prorations' : 'none';
 }
 
 /** New billing status after `invoice.paid`, or null when nothing should change. */
@@ -108,29 +109,4 @@ export function periodEndOf(subscription: unknown): number | null {
   const fromItem = sub.items?.data?.[0]?.current_period_end;
   if (typeof fromItem === 'number') return fromItem;
   return typeof sub.current_period_end === 'number' ? sub.current_period_end : null;
-}
-
-/**
- * §F19 step 5: past_due orgs keep working for `graceDays`, then the scheduler stops creating
- * site-days and sending reminders. Canceled and paused subscriptions are blocked immediately.
- * A past_due org whose start of arrears is unknown is treated as still within the grace period.
- */
-export function isBillingBlocked(
-  org: { billingStatus: string | null; pastDueSince: string | null },
-  now: Date,
-  graceDays: number,
-): boolean {
-  switch (org.billingStatus) {
-    case 'canceled':
-    case 'paused':
-      return true;
-    case 'past_due': {
-      if (!org.pastDueSince) return false;
-      const since = new Date(org.pastDueSince).getTime();
-      if (Number.isNaN(since)) return false;
-      return now.getTime() - since > Math.max(0, graceDays) * 86_400_000;
-    }
-    default:
-      return false;
-  }
 }

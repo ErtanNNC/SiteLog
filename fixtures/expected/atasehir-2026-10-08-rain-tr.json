@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 2,
+  "reportDate": "2026-10-08",
+  "reportLanguage": "tr",
+  "units": "metric",
+  "languageDetected": ["tr"],
+  "summary": "07:30–11:00 arasındaki yağmur nedeniyle dış cephe işleri 3,5 saat durdu; ekip 5. katta sıva işine geçti. Usta Beton 7. kat kolon betonunu döktü (yaklaşık 12 m³). Volt Elektrik 6. katta aydınlatma tesisatına devam etti, yaklaşık %40 tamamlandı. Islak zeminde kayma riski konulu iş güvenliği bilgilendirmesi yapıldı; kaza olmadı.",
+  "weather": {
+    "observed": {
+      "precip": 8.4,
+      "tempMin": 14,
+      "tempMax": 18,
+      "wind": 14,
+      "gust": 32,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "Yağmur 07:30–11:00, sonrasında kuru",
+    "periods": [
+      {
+        "start": "07:30",
+        "end": "11:00",
+        "condition": "Yağmur",
+        "impact": "Dış cephe işleri durdu; ekip 5. katta sıvaya geçti",
+        "lostHours": 3.5,
+        "source": [
+          {
+            "type": "voice_note",
+            "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+            "start": 0,
+            "end": 7.5
+          },
+          {
+            "type": "voice_note",
+            "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+            "start": 7.5,
+            "end": 15
+          }
+        ]
+      }
+    ]
+  },
+  "manpower": [
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c004",
+      "companyNameHeard": "Öz ekip",
+      "companyName": "Demir Yapı öz ekip",
+      "trade": "Genel işçilik",
+      "area": "5. Kat",
+      "workers": 6,
+      "hoursPerWorker": 8,
+      "totalHours": 48,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+          "start": 7.5,
+          "end": 15
+        }
+      ]
+    },
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c002",
+      "companyNameHeard": "Volt Elektrik",
+      "companyName": "Volt Elektrik",
+      "trade": "Elektrik",
+      "area": "6. Kat",
+      "workers": 2,
+      "hoursPerWorker": 8,
+      "totalHours": 16,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+          "start": 15,
+          "end": 21.5
+        }
+      ]
+    },
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c001",
+      "companyNameHeard": "Usta Beton",
+      "companyName": "Usta Beton",
+      "trade": "Beton",
+      "area": "7. Kat",
+      "workers": 3,
+      "hoursPerWorker": 4,
+      "totalHours": 12,
+      "hoursBasis": "stated",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+          "start": 21.5,
+          "end": 28
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Dış cephe",
+      "activity": "Cephe işleri",
+      "status": "stopped",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+          "start": 0,
+          "end": 7.5
+        }
+      ]
+    },
+    {
+      "area": "5. Kat",
+      "activity": "Sıva",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+          "start": 7.5,
+          "end": 15
+        }
+      ]
+    },
+    {
+      "area": "6. Kat",
+      "activity": "Aydınlatma tesisatı",
+      "status": "in_progress",
+      "percentComplete": 40,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+          "start": 15,
+          "end": 21.5
+        }
+      ]
+    },
+    {
+      "area": "7. Kat",
+      "activity": "Kolon betonu dökümü",
+      "status": "complete",
+      "quantity": {
+        "value": 12,
+        "unit": "m³",
+        "heardAs": "on iki metreküp"
+      },
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+          "start": 21.5,
+          "end": 28
+        }
+      ]
+    }
+  ],
+  "deliveries": [],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Islak zeminde kayma riski",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "voice_note",
+        "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+        "start": 28,
+        "end": 34
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [
+    {
+      "item": "Cephe işlerine devam edilecek",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+          "start": 34,
+          "end": 39
+        }
+      ]
+    }
+  ],
+  "photos": [
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000b4",
+      "caption": "7. kat kolonlar",
+      "takenAt": "2026-10-08T14:10:00Z"
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000b5",
+      "takenAt": "2026-10-08T14:10:30Z"
+    }
+  ],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": []
+}

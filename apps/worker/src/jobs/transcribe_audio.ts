@@ -1,3 +1,4 @@
+import { openAiTranscribeModel } from '../config';
 import { buildTranscriptionPrompt, transcribeAudio } from '../ai/transcribe';
 import { afterTranscription } from '../router/continue';
 import { ensureMediaStored, loadStoredAudio } from '../router/media';
@@ -41,7 +42,7 @@ export const transcribeAudioJob: JobHandler<'transcribe_audio'> = async (ctx, pa
       {
         audio: audio.buffer,
         ext: audio.ext,
-        model: ctx.config.TRANSCRIBE_MODEL,
+        model: openAiTranscribeModel(ctx.config),
         prompt,
         durationS: message.duration_s ?? undefined,
       },

@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { loadLogo, renderEvidencePackPdf, renderReportPdf, weatherExcerpts } from './render';
-import { sampleEvidencePackInput, sampleReportInput } from '@sitelog/pdf/sample-data.ts';
+import type { DailyReportData, TranscriptRow } from '@sitelog/shared';
+import {
+  loadLogo,
+  renderEvidencePackPdf,
+  renderReportPdf,
+  reporterSegments,
+  weatherExcerpts,
+  type PackClip,
+} from './render';
+import {
+  demirReportInput,
+  sampleEvidencePackInput,
+  sampleReportInput,
+} from '@sitelog/pdf/sample-data.ts';
 import { fmtPhotoTime } from '@sitelog/pdf/components.tsx';
 
 function pageCount(pdf: Buffer): number {
@@ -25,12 +37,34 @@ describe('PDF rendering (smoke)', () => {
     expect(pdf.toString('latin1')).toMatch(/\/MediaBox \[0 0 595\.2\d* 841\.8\d*\]/);
   }, 60_000);
 
-  it('renders a report typed in the panel (prepared by the office, no WhatsApp source)', async () => {
+  it('renders the Turkish v2 sample (Demir Yapı) as a 2-page A4 PDF', async () => {
+    const pdf = await renderReportPdf(demirReportInput);
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    expect(pageCount(pdf)).toBe(2);
+    expect(pdf.toString('latin1')).toMatch(/\/MediaBox \[0 0 595\.2\d* 841\.8\d*\]/);
+  }, 60_000);
+
+  it('renders a WhatsApp-era report (no channel) and a call report confirmed by voice', async () => {
+    for (const report of [
+      { ...sampleReportInput.report, channel: null, confirmedVia: null },
+      { ...sampleReportInput.report, channel: 'voice' as const, confirmedVia: 'voice' as const },
+    ]) {
+      const pdf = await renderReportPdf({ ...sampleReportInput, report });
+      expect(pageCount(pdf)).toBe(2);
+    }
+  }, 60_000);
+
+  it('renders a report typed in the panel (prepared by the office, no voice source)', async () => {
     const pdf = await renderReportPdf({
       ...sampleReportInput,
       reporterName: null,
       enteredBy: 'Lena Ortiz',
-      report: { ...sampleReportInput.report, confirmedAt: null },
+      report: {
+        ...sampleReportInput.report,
+        confirmedAt: null,
+        channel: 'office',
+        confirmedVia: null,
+      },
       sources: { ...sampleReportInput.sources, audioCount: 0, totalAudioSeconds: 0, textCount: 0 },
       photos: [],
     });
@@ -61,29 +95,69 @@ describe('fmtPhotoTime', () => {
 });
 
 describe('weatherExcerpts', () => {
+  const seg = (prefix: string, n: number) =>
+    Array.from({ length: n }, (_, i) => ({ start: i * 6, end: i * 6 + 6, text: `${prefix}${i}` }));
+  const withSources = (source: DailyReportData['weather']['periods'][number]['source']) => ({
+    ...sampleReportInput.data,
+    weather: {
+      ...sampleReportInput.data.weather,
+      periods: [{ condition: 'Rain', lostHours: 1, source }],
+    },
+  });
+  const note = (id: string, n: number, clipNo: number | null = null): PackClip => ({
+    kind: 'voice_note',
+    id,
+    clipNo,
+    segments: seg(`${id}:`, n),
+  });
+
   it('picks the segments the weather period sources point at, with neighbours', () => {
-    const segs = Array.from({ length: 10 }, (_, i) => ({
-      start: i * 6,
-      end: i * 6 + 6,
-      text: `s${i}`,
-    }));
-    const data = {
-      ...sampleReportInput.data,
-      weather: {
-        ...sampleReportInput.data.weather,
-        periods: [
-          {
-            condition: 'Rain',
-            lostHours: 1,
-            source: [{ type: 'audio' as const, messageId: 'm', start: 41 }],
-          },
-        ],
-      },
-    };
-    expect(weatherExcerpts(data, segs).map((s) => s.text)).toEqual(['s5', 's6', 's7']);
+    const data = withSources([{ type: 'voice_note', uploadId: 'm', start: 41 }]);
+    expect(weatherExcerpts(data, [note('m', 10)]).map((s) => s.text)).toEqual([
+      'm:5',
+      'm:6',
+      'm:7',
+    ]);
     expect(
-      weatherExcerpts({ ...data, weather: { ...data.weather, periods: [] } }, segs),
+      weatherExcerpts({ ...data, weather: { ...data.weather, periods: [] } }, [note('m', 10)]),
     ).toHaveLength(3);
+  });
+
+  it('quotes the cited clip only, never the same second of another voice note', () => {
+    // Note A is the crew (0–60 s), note B the rain at 5–12 s: the period cites B at 5 s.
+    const data = withSources([{ type: 'voice_note', uploadId: 'B', start: 5 }]);
+    const out = weatherExcerpts(data, [note('A', 10, 1), note('B', 3, 2)]);
+    expect(out.map((e) => e.text)).toEqual(['B:0', 'B:1']);
+    expect(out.every((e) => e.clip === 'voice_note' && e.clipNo === 2)).toBe(true);
+  });
+
+  it('quotes a call from the reporter’s lane at the cited second', () => {
+    const data = withSources([{ type: 'call', callId: 'c1', start: 135 }]);
+    const call = reporterSegments({
+      segments: [
+        { start: 120, end: 128, text: 'Was there any weather today?', speaker: 'agent' },
+        {
+          start: 130,
+          end: 140,
+          text: 'rain stopped the facade for two and a half hours',
+          speaker: 'reporter',
+        },
+        { start: 140, end: 146, text: 'Got it. Anything else?', speaker: 'agent' },
+      ],
+    } as unknown as TranscriptRow);
+    const out = weatherExcerpts(data, [
+      note('m', 2),
+      { kind: 'call', id: 'c1', clipNo: null, segments: call },
+    ]);
+    expect(out).toEqual([
+      {
+        clip: 'call',
+        clipNo: null,
+        start: 130,
+        end: 140,
+        text: 'rain stopped the facade for two and a half hours',
+      },
+    ]);
   });
 });
 

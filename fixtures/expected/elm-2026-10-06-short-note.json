@@ -1,13 +1,17 @@
 {
+  "schemaVersion": 2,
+  "reportDate": "2026-10-06",
+  "reportLanguage": "en",
+  "units": "imperial",
   "languageDetected": ["en"],
   "summary": "Framing continued on Units 1–4 (Kestrel crew of 6). Dry; no weather impact. No incidents.",
   "weather": {
     "observed": {
-      "precipIn": 0,
-      "tempMinF": 53,
-      "tempMaxF": 67,
-      "windMph": 8,
-      "gustMph": 14,
+      "precip": 0,
+      "tempMin": 53,
+      "tempMax": 67,
+      "wind": 8,
+      "gust": 14,
       "provider": "Open-Meteo"
     },
     "conditionsText": "Dry",
@@ -27,8 +31,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000015-0000-4000-8000-000000001501",
+          "type": "voice_note",
+          "uploadId": "e0000015-0000-4000-8000-000000001501",
           "start": 0,
           "end": 8.6
         }
@@ -42,8 +46,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000015-0000-4000-8000-000000001501",
+          "type": "voice_note",
+          "uploadId": "e0000015-0000-4000-8000-000000001501",
           "start": 0,
           "end": 8.6
         }
@@ -58,8 +62,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000015-0000-4000-8000-000000001501",
+        "type": "voice_note",
+        "uploadId": "e0000015-0000-4000-8000-000000001501",
         "start": 0,
         "end": 8.6
       }
@@ -67,13 +71,14 @@
   },
   "issues": [],
   "nextWorkday": [],
+  "photos": [
+    {
+      "uploadId": "e0000015-0000-4000-8000-000000001505",
+      "takenAt": "2026-10-06T21:47:00Z"
+    }
+  ],
   "newTerms": [],
   "missingRequired": [],
   "lowConfidence": [],
-  "proposedQuestions": [],
-  "schemaVersion": 1,
-  "reportDate": "2026-10-06",
-  "photos": [
-    { "messageId": "e0000015-0000-4000-8000-000000001505", "takenAt": "2026-10-06T21:47:00Z" }
-  ]
+  "proposedQuestions": []
 }

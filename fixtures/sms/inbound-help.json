@@ -1,0 +1,18 @@
+{
+  "path": "",
+  "params": {
+    "ToCountry": "US",
+    "SmsMessageSid": "{{sid}}",
+    "NumMedia": "0",
+    "SmsSid": "{{sid}}",
+    "SmsStatus": "received",
+    "Body": "HELP",
+    "FromCountry": "US",
+    "To": "{{to}}",
+    "NumSegments": "1",
+    "MessageSid": "{{sid}}",
+    "AccountSid": "AC00000000000000000000000000000000",
+    "From": "{{phone}}",
+    "ApiVersion": "2010-04-01"
+  }
+}

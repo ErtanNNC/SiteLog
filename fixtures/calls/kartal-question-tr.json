@@ -1,0 +1,294 @@
+{
+  "$comment": "W3-09 recorded call (W3-02's format, extended): start, routes (field-api's recorded answers per voice route, in order; the last repeats), reporterTurns (one session run each), agentTurns (the dialog model's recorded turns). `extraction` names the eval case (fixtures/transcripts, expected, tool-outputs) whose recorded tool output EXTRACT_PROVIDER=fake replays for this call's update_draft; `answers` are the reporter's words record_answer sends. The worker's PGlite test (apps/worker/src/jobs/voice-turn.pglite.test.ts) checks that the live pipeline answers what `routes` records (ids aside); the agent's pytest (tests/test_live_draft.py) replays the call on FakeFieldApi. W3-15: `simulate` is this call as `pnpm simulate:call` runs it on a local stack (scripts/src/call-sim): the org it arranges, the requests the agent sends in order (`$…` values from the call so far; `recorded` = the route's next recorded answer above, pending ones skipped, ids aside) and what the call leaves behind. W4-07: a Turkish call by Talk now with one question, spoken in Turkish; the answer is the parse_answer golden case fixtures/answers/tr-akis-alti; F7's confirmation and the read-back from code's numbers, in words.",
+  "id": "kartal-question-tr",
+  "locale": "tr-TR",
+  "extraction": "call-kartal-2026-10-08-tr",
+  "start": {
+    "request": {
+      "room": "call-d1470000-0000-4000-8000-000000000002",
+      "transport": "web",
+      "callId": "d1470000-0000-4000-8000-000000000002"
+    },
+    "response": {
+      "callId": "d1470000-0000-4000-8000-000000000002",
+      "callToken": "derived-by-the-fake-AAAAAAAAAAAAAAAAAAAAAAAA",
+      "reporter": {
+        "firstName": "Emre",
+        "locale": "tr-TR"
+      }
+    }
+  },
+  "routes": {
+    "disclosure": [
+      {
+        "ok": true
+      }
+    ],
+    "get_context": [
+      {
+        "call": {
+          "direction": "inbound",
+          "transport": "web",
+          "purpose": "daily_report"
+        },
+        "reporter": {
+          "firstName": "Emre",
+          "locale": "tr-TR"
+        },
+        "company": "Demir Yapı A.Ş.",
+        "reportLanguage": "tr",
+        "sites": [
+          {
+            "id": "d1000000-0000-4000-8000-00000000a001",
+            "name": "Kartal Konutları — B Blok",
+            "status": "reminded",
+            "deadline": "17:30"
+          }
+        ],
+        "siteId": "d1000000-0000-4000-8000-00000000a001",
+        "companies": [
+          {
+            "name": "Usta Beton",
+            "aliases": []
+          },
+          {
+            "name": "Volt Elektrik",
+            "aliases": []
+          },
+          {
+            "name": "Akış Mekanik",
+            "aliases": []
+          },
+          {
+            "name": "Demir Yapı öz ekip",
+            "aliases": []
+          }
+        ],
+        "keyterms": [
+          "Kartal Konutları — B Blok",
+          "Usta Beton",
+          "Volt Elektrik",
+          "Akış Mekanik",
+          "Demir Yapı öz ekip",
+          "döküm",
+          "kalıp söktük",
+          "demirci ekibi",
+          "TBM",
+          "tool box"
+        ],
+        "consents": {
+          "recording": true,
+          "dataProcessing": true,
+          "sms": true,
+          "autoCall": false
+        },
+        "recordingNoticeVersion": "voice.recording_notice.v1",
+        "consentTextVersion": "voice.consent.v2",
+        "maxQuestions": 3
+      }
+    ],
+    "update_draft": [
+      {
+        "reportId": "d1470000-0000-4000-8000-0000000000b1",
+        "draftRev": 1,
+        "missing": ["manpower.workers:Akış Mekanik", "manpower.hours:Akış Mekanik"],
+        "question": {
+          "id": "d1470000-0000-4000-8000-0000000000e1",
+          "text": "Kısa bir soru: Akış Mekanik ikinci katta kaç kişiydi, tam gün mü çalıştılar?",
+          "choices": []
+        },
+        "readBack": null
+      }
+    ],
+    "record_answer": [
+      {
+        "status": "applied",
+        "confirmation": "Akış Mekanik: altı kişi, kişi başı sekiz saat — toplam kırk sekiz saat.",
+        "draft": {
+          "reportId": "d1470000-0000-4000-8000-0000000000b1",
+          "draftRev": 2,
+          "missing": [],
+          "question": null,
+          "readBack": "Elimdeki bilgiler: üç firmadan sahada on iki kişi, toplam doksan altı saat. Yapılanlar: üçüncü Kat kolon kalıbı kurulumu, ikinci Kat kablo çekimi, ikinci Kat havalandırma kanalı montajı. İş güvenliği konuşması yapıldı. Kaza ya da olay yok. Kaydedeyim mi?"
+        }
+      }
+    ],
+    "file_report": [
+      {
+        "status": "filed",
+        "reportNo": "KK-0001",
+        "pdf": "pending"
+      }
+    ],
+    "end_call": [
+      {
+        "ok": true
+      }
+    ]
+  },
+  "reporterTurns": [
+    "İyi akşamlar, ben Emre. Kartal B Blok, perşembe raporu. Hava açıktı, yağmur yok. Usta Beton dört kişi tam gün, üçüncü katın kolon kalıplarını kurdular. Volt Elektrik iki kişi tam gün, ikinci katta kablo çekti. Akış Mekanik de geldi, ikinci katta havalandırma kanalı taktılar. Sabah TBM yaptık, kaza yok. Bu kadar.",
+    "Altı kişi, tam gün.",
+    "Evet, kaydedin."
+  ],
+  "answers": ["Altı kişi, tam gün."],
+  "agentTurns": [
+    {
+      "toolCalls": [
+        {
+          "name": "get_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Anladım, bir saniye.",
+      "toolCalls": [
+        {
+          "name": "update_draft",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Kısa bir soru: Akış Mekanik ikinci katta kaç kişiydi, tam gün mü çalıştılar?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "record_answer",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Akış Mekanik: altı kişi, kişi başı sekiz saat — toplam kırk sekiz saat. Elimdeki bilgiler: üç firmadan sahada on iki kişi, toplam doksan altı saat. Yapılanlar: üçüncü Kat kolon kalıbı kurulumu, ikinci Kat kablo çekimi, ikinci Kat havalandırma kanalı montajı. İş güvenliği konuşması yapıldı. Kaza ya da olay yok. Kaydedeyim mi?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "file_report",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Kaydedildi. PDF ve fotoğraf eklemeniz için bir link gönderdim. İyi akşamlar.",
+      "toolCalls": [
+        {
+          "name": "end_call",
+          "args": {
+            "outcome": "filed"
+          }
+        }
+      ]
+    },
+    {}
+  ],
+  "filing": [
+    {
+      "utterance": "Evet, kaydedin.",
+      "draftRev": 2,
+      "answer": "filed"
+    }
+  ],
+  "corrections": [],
+  "simulate": {
+    "title": "Turkish question by Talk now: Akış Mekanik six for a full day, filed",
+    "milestone": "m8",
+    "flow": "F7",
+    "arrange": {
+      "country": "TR",
+      "org": "Demir Yapı A.Ş.",
+      "reporter": {
+        "name": "Emre Yıldız",
+        "locale": "tr-TR",
+        "contactPref": "call"
+      },
+      "sites": [
+        {
+          "key": "kartal",
+          "name": "Kartal Konutları — B Blok",
+          "projectCode": "KK",
+          "timezone": "Europe/Istanbul"
+        }
+      ]
+    },
+    "steps": [
+      {
+        "route": "get_context",
+        "expect": {
+          "call": {
+            "direction": "inbound",
+            "transport": "web",
+            "purpose": "daily_report"
+          },
+          "reporter": {
+            "firstName": "Emre",
+            "locale": "tr-TR"
+          },
+          "company": "Demir Yapı A.Ş.",
+          "reportLanguage": "tr",
+          "consents": {
+            "recording": true,
+            "dataProcessing": true,
+            "sms": true,
+            "autoCall": false
+          },
+          "maxQuestions": 3,
+          "sites": [
+            {
+              "name": "Kartal Konutları — B Blok",
+              "deadline": "17:30"
+            }
+          ]
+        }
+      },
+      {
+        "route": "update_draft",
+        "body": {
+          "segments": "$segments"
+        }
+      },
+      {
+        "route": "record_answer",
+        "body": {
+          "questionId": "$draft.questionId",
+          "utterance": "Altı kişi, tam gün.",
+          "start": 44.5
+        }
+      },
+      {
+        "route": "file_report",
+        "body": {
+          "reportId": "$draft.reportId",
+          "draftRev": "$draft.draftRev",
+          "utterance": "Evet, kaydedin."
+        }
+      },
+      {
+        "route": "end_call",
+        "body": {
+          "outcome": "filed"
+        }
+      }
+    ],
+    "expect": {
+      "call": {
+        "outcome": "filed"
+      },
+      "report": {
+        "site": "kartal",
+        "status": "filed",
+        "channel": "voice",
+        "confirmedVia": "voice",
+        "crewOnSite": 12,
+        "totalHours": 96,
+        "language": "tr",
+        "units": "metric",
+        "pdfPaper": "a4"
+      },
+      "messages": ["filed", "photos_link"]
+    }
+  }
+}

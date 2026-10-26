@@ -1,4 +1,5 @@
-import type { ObservedWeather } from '../schemas/report.ts';
+import type { UnitSystem } from '../locale.ts';
+import type { ObservedWeather, ObservedWeatherV1 } from '../schemas/report.ts';
 import { splitWorkingHours } from '../report/hours.ts';
 
 /** §10.10 — Open-Meteo hourly data for a site-day. */
@@ -34,7 +35,7 @@ export interface SiteDayWeather {
   fetchedAt: string;
   units: { precip: 'in'; temp: 'F'; wind: 'mph' };
   hours: WeatherHour[];
-  summary: ObservedWeather & { precipWorkingHoursIn: number; maxGustWorkingHoursMph: number };
+  summary: ObservedWeatherV1 & { precipWorkingHoursIn: number; maxGustWorkingHoursMph: number };
 }
 
 export const WEATHER_THRESHOLDS = { precipIn: 0.05, gustMph: 25 } as const;
@@ -144,9 +145,77 @@ export function weatherPhrase(w: SiteDayWeather): string {
 }
 
 /** Observed block for the report (§10.3 weather.observed). */
-export function toObserved(w: SiteDayWeather): ObservedWeather {
+export function toObserved(w: SiteDayWeather): ObservedWeatherV1 {
   const { precipIn, tempMinF, tempMaxF, windMph, gustMph, provider } = w.summary;
   return { precipIn, tempMinF, tempMaxF, windMph, gustMph, provider };
+}
+
+/** One hour of observed weather in a unit system (§10.11 "units per org"). */
+export interface WeatherHourIn {
+  time: string;
+  precip: number;
+  temp: number | null;
+  wind: number | null;
+  gust: number | null;
+}
+
+/** Unit labels of a unit system: mm, °C, km/h (metric) or in, °F, mph (imperial). */
+export function weatherUnitLabels(units: UnitSystem): {
+  precip: string;
+  temp: string;
+  wind: string;
+} {
+  return units === 'metric'
+    ? { precip: 'mm', temp: 'C', wind: 'km/h' }
+    : { precip: 'in', temp: 'F', wind: 'mph' };
+}
+
+/** Inches → millimetres (1 decimal). */
+export const inToMm = (v: number): number => Math.round(v * 25.4 * 10) / 10;
+/** °F → °C (whole degrees). */
+export const fToC = (v: number): number => Math.round(((v - 32) * 5) / 9);
+/** mph → km/h (whole). */
+export const mphToKmh = (v: number): number => Math.round(v * 1.609344);
+
+/**
+ * The site-day's hours in the org's units. `fetch_weather` stores Open-Meteo's answer in imperial
+ * (`SiteDayWeather.units`); a metric org gets mm, °C and km/h (W1-12; the metric PDF is M11, D34).
+ */
+export function weatherHoursIn(w: SiteDayWeather, units: UnitSystem): WeatherHourIn[] {
+  return w.hours.map((h) =>
+    units === 'metric'
+      ? {
+          time: h.time,
+          precip: inToMm(h.precipIn),
+          temp: h.tempF === null ? null : fToC(h.tempF),
+          wind: h.windMph === null ? null : mphToKmh(h.windMph),
+          gust: h.gustMph === null ? null : mphToKmh(h.gustMph),
+        }
+      : { time: h.time, precip: h.precipIn, temp: h.tempF, wind: h.windMph, gust: h.gustMph },
+  );
+}
+
+/** §10.3 `weather.observed` (v2) in the org's units. */
+export function toObservedIn(w: SiteDayWeather, units: UnitSystem): ObservedWeather {
+  const { precipIn, tempMinF, tempMaxF, windMph, gustMph, provider } = w.summary;
+  if (units === 'metric') {
+    return {
+      precip: inToMm(precipIn),
+      tempMin: fToC(tempMinF),
+      tempMax: fToC(tempMaxF),
+      wind: mphToKmh(windMph),
+      ...(gustMph !== undefined ? { gust: mphToKmh(gustMph) } : {}),
+      provider,
+    };
+  }
+  return {
+    precip: precipIn,
+    tempMin: tempMinF,
+    tempMax: tempMaxF,
+    wind: windMph,
+    ...(gustMph !== undefined ? { gust: gustMph } : {}),
+    provider,
+  };
 }
 
 function average(xs: number[]): number {

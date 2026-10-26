@@ -1,18 +1,35 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import type { EmailOtpType } from '@supabase/supabase-js';
 import { useAuth } from '@/auth/AuthProvider';
+import { supabase } from '@/lib/supabase';
 import { homeFor } from '@/auth/guards';
 import { Logo } from '@/components/shell/Sidebar';
-import { copy } from '@/copy/en';
+import { useCopy } from '@/i18n/useCopy';
 
 /**
  * /auth/callback — the magic link lands here. supabase-js exchanges the code (PKCE) and
  * onAuthStateChange flips the AuthProvider; ≥ 1 org membership → home, none → /setup.
+ * A link made server-side (the admin generate_link of the preview phone check) carries
+ * `token_hash` + `type` instead: it is verified here, since a PKCE client ignores the implicit
+ * tokens such a link would otherwise put in the URL hash.
  */
 export default function AuthCallbackPage() {
   const { status, orgs, role } = useAuth();
+  const { t } = useCopy();
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const verified = useRef(false);
+
+  useEffect(() => {
+    const tokenHash = params.get('token_hash');
+    const type = params.get('type') as EmailOtpType | null;
+    if (!tokenHash || !type || !supabase || verified.current) return;
+    verified.current = true;
+    void supabase.auth.verifyOtp({ token_hash: tokenHash, type }).then(({ error }) => {
+      if (error) void navigate('/login?error=expired', { replace: true });
+    });
+  }, [params, navigate]);
 
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
@@ -51,8 +68,8 @@ export default function AuthCallbackPage() {
       <span className="rounded-btn bg-asphalt px-3 py-2">
         <Logo />
       </span>
-      <h1 className="font-display text-[26px]">{copy.login.callbackTitle}</h1>
-      <p className="text-dust">{copy.login.callbackBody}</p>
+      <h1 className="font-display text-[26px]">{t('login.callbackTitle')}</h1>
+      <p className="text-dust">{t('login.callbackBody')}</p>
     </div>
   );
 }

@@ -21,10 +21,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
-import { copy } from '@/copy/en';
 import { useDataSource } from '@/data/DataProvider';
 import { useCreateOfficeReport, useGlossary, useReportPdf, useSettings } from '@/data/hooks';
 import type { CompanyOption, SiteOption } from '@/data/types';
+import { useCopy } from '@/i18n/useCopy';
 import { errorMessage } from '@/lib/utils';
 import { PhotoPicker } from '../report/PhotoPicker';
 import { ReportEditor } from '../report/ReportEditor';
@@ -38,24 +38,28 @@ import {
 } from '../report/reportForm';
 import { newReportDraftKey, readNewReportDraft, writeNewReportDraft } from './draft';
 
-const c = copy.newReport;
-const cp = copy.report.editMode.photos;
+/**
+ * Report data v2 (W1-12). create_office_report stamps the org's report language and units (and the
+ * date) on the server, so these are placeholders the server replaces.
+ */
+const OFFICE_REPORT_STAMPS = { reportLanguage: 'en', units: 'imperial' } as const;
 
 /**
  * New report — the office types a site's daily report (no WhatsApp, no AI), with photos. It is
  * filed on save as version 1 (create_office_report, after the photos are uploaded) and its PDF
  * is rendered in the browser with the worker's document. `?site=` and `?date=` preselect the
  * fields. A day that already has a report is caught before anything is uploaded, and the page
- * keeps what was typed (also across a reload: ./draft).
+ * keeps what was typed (also across a reload: ./draft). EN/TR since W4-09.
  */
 export default function NewReportPage() {
+  const { t } = useCopy();
   // The glossary view model carries the org's sites and companies.
   const lists = useGlossary();
   if (lists.isPending) return <PageSkeleton />;
   if (lists.isError || !lists.data)
     return (
       <ErrorState
-        thing={copy.nav.reports.toLowerCase()}
+        thing={t('reports.thing')}
         error={lists.error}
         onRetry={() => void lists.refetch()}
       />
@@ -65,6 +69,7 @@ export default function NewReportPage() {
 }
 
 function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: CompanyOption[] }) {
+  const { t } = useCopy();
   const source = useDataSource();
   const { currentOrg } = useAuth();
   const navigate = useNavigate();
@@ -75,7 +80,7 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
   const draftKey = newReportDraftKey(source.orgId, source.user.id);
   // The form with nothing typed (the report date is chosen above, not in the form).
   const [blank] = useState(() =>
-    toFormValues(emptyReportData(source.now().toISOString().slice(0, 10))),
+    toFormValues(emptyReportData(source.now().toISOString().slice(0, 10), OFFICE_REPORT_STAMPS)),
   );
   const paramSite = () => {
     const wanted = params.get('site');
@@ -187,29 +192,29 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
 
   const fileReport = async (values: ReportFormValues) => {
     const errors: typeof fieldError = {};
-    if (!site) errors.site = c.pickSite;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today) errors.date = c.future;
+    if (!site) errors.site = t('newReport.pickSite');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today) errors.date = t('newReport.future');
     const empty =
       !values.summary.trim() &&
       values.manpower.length === 0 &&
       values.workPerformed.length === 0 &&
       values.periods.length === 0 &&
       values.deliveries.length === 0;
-    if (empty) errors.body = c.empty;
+    if (empty) errors.body = t('newReport.empty');
     setFieldError(errors);
     if (!site || errors.site || errors.date || errors.body) return;
 
     let data;
     try {
       data = withoutOfficeEdits(
-        toReportData(values, emptyReportData(date), {
+        toReportData(values, emptyReportData(date, OFFICE_REPORT_STAMPS), {
           userId: source.user.id,
           at: source.now().toISOString(),
           companies,
         }),
       );
     } catch (err) {
-      toast.error(errorMessage(err, copy.errors.generic));
+      toast.error(errorMessage(err, t('errors.generic')));
       return;
     }
     setBusy(true);
@@ -222,7 +227,7 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
       try {
         found = await source.findDayReport(site.id, date);
       } catch (err) {
-        toast.error(errorMessage(err, copy.errors.generic));
+        toast.error(errorMessage(err, t('errors.generic')));
         return;
       }
       if (!alive.current) return;
@@ -233,18 +238,22 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
       const picked = await photos.settle();
       if (!alive.current) return;
       if (!picked) {
-        toast.error(cp.notReady);
+        toast.error(t('report.editMode.photos.notReady'));
         return;
       }
       let uploads: Awaited<ReturnType<typeof photos.upload>> = [];
       if (picked.length) {
-        toastId = toast.loading(cp.uploading(1, picked.length));
+        toastId = toast.loading(
+          t('report.editMode.photos.uploadingProgress', { i: 1, n: picked.length }),
+        );
         try {
           uploads = await photos.upload(source, site.id, picked, (i, n) =>
-            toast.loading(cp.uploading(i, n), { id: toastId }),
+            toast.loading(t('report.editMode.photos.uploadingProgress', { i, n }), {
+              id: toastId,
+            }),
           );
         } catch {
-          if (alive.current) toast.error(cp.uploadFailed, { id: toastId });
+          if (alive.current) toast.error(t('report.editMode.photos.uploadFailed'), { id: toastId });
           else toast.dismiss(toastId);
           return;
         }
@@ -263,10 +272,10 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
       }
       filed.current = true;
       discardDraft();
-      const id = toast.loading(copy.report.pdfPreparing, { id: toastId });
+      const id = toast.loading(t('report.pdfPreparing'), { id: toastId });
       const ok = await reportPdf.prepare(res.reportId, 1);
-      if (ok) toast.success(c.filed(res.reportNo), { id });
-      else toast.warning(c.pdfLater, { id });
+      if (ok) toast.success(t('newReport.filed', { no: res.reportNo }), { id });
+      else toast.warning(t('newReport.pdfLater'), { id });
       if (alive.current) void navigate(`/reports/${res.reportId}`);
     } catch {
       // useSourceMutation already showed the error.
@@ -280,12 +289,12 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
   // While saving, Cancel would leave a save that still files: it waits instead.
   const cancel = busy ? (
     <Button variant="ghost" disabled>
-      {c.cancel}
+      {t('newReport.cancel')}
     </Button>
   ) : (
     <Button variant="ghost" asChild>
       <Link to="/reports" onClick={discardDraft}>
-        {c.cancel}
+        {t('newReport.cancel')}
       </Link>
     </Button>
   );
@@ -293,15 +302,18 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
   return (
     <>
       <PageHeader
-        breadcrumb={[{ label: c.breadcrumb, to: '/reports' }, { label: c.title }]}
-        title={c.title}
-        subtitle={c.subtitle}
+        breadcrumb={[
+          { label: t('newReport.breadcrumb'), to: '/reports' },
+          { label: t('newReport.title') },
+        ]}
+        title={t('newReport.title')}
+        subtitle={t('newReport.subtitle')}
         actions={
           sites.length ? (
             <>
               {cancel}
               <Button onClick={() => void onSubmit()} loading={busy} data-testid="file-report">
-                {c.submit}
+                {t('newReport.submit')}
               </Button>
             </>
           ) : null
@@ -310,10 +322,10 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
 
       {sites.length === 0 ? (
         <EmptyState
-          title={c.noSites}
+          title={t('newReport.noSites')}
           action={
             <Button variant="secondary" asChild>
-              <Link to="/sites">{copy.nav.sites}</Link>
+              <Link to="/sites">{t('nav.sites')}</Link>
             </Button>
           }
         />
@@ -325,9 +337,9 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
               className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-rebar bg-chalk px-4 py-3 text-caption"
               data-testid="draft-restored"
             >
-              <span>{c.restored}</span>
+              <span>{t('newReport.restored')}</span>
               <Button variant="link" size="sm" onClick={startOver} disabled={busy}>
-                {c.startOver}
+                {t('newReport.startOver')}
               </Button>
             </div>
           ) : null}
@@ -337,10 +349,12 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
               className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-signal bg-signal-tint/40 px-4 py-3 text-caption"
               data-testid="day-has-report"
             >
-              <span className="font-medium">{c.exists(existing.reportNo)}</span>
+              <span className="font-medium">
+                {t('newReport.exists', { no: existing.reportNo })}
+              </span>
               <Button variant="secondary" size="sm" asChild>
                 <Link to={`/reports/${existing.reportId}`}>
-                  {c.openExisting(existing.reportNo)}
+                  {t('newReport.openExisting', { no: existing.reportNo })}
                 </Link>
               </Button>
             </div>
@@ -355,7 +369,7 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
           >
             <Card className="grid gap-4 p-4 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <Label htmlFor="nr-site">{c.site}</Label>
+                <Label htmlFor="nr-site">{t('newReport.site')}</Label>
                 <Select
                   value={siteId}
                   onValueChange={(v) => {
@@ -370,7 +384,7 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
                     aria-invalid={!!fieldError.site}
                     data-testid="new-report-site"
                   >
-                    <SelectValue placeholder={c.pickSite} />
+                    <SelectValue placeholder={t('newReport.pickSite')} />
                   </SelectTrigger>
                   <SelectContent>
                     {sites.map((s) => (
@@ -387,7 +401,7 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
                 ) : null}
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="nr-date">{c.date}</Label>
+                <Label htmlFor="nr-date">{t('newReport.date')}</Label>
                 <Input
                   id="nr-date"
                   type="date"
@@ -435,7 +449,7 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
           <div className="flex justify-end gap-2 pb-6">
             {cancel}
             <Button onClick={() => void onSubmit()} loading={busy}>
-              {c.submit}
+              {t('newReport.submit')}
             </Button>
           </div>
         </div>

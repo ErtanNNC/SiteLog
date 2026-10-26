@@ -3,14 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Runs the SQL migrations + seed against PGlite and tests RLS policies and RPCs.",
+  "description": "Runs the SQL migrations + seed against PGlite and tests RLS policies and RPCs; `test:stack` runs the real-Postgres tests against a running local Supabase stack.",
   "scripts": {
     "test": "vitest run",
+    "test:stack": "vitest run --config vitest.stack.config.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
-    "@sitelog/shared": "workspace:*"
+    "@sitelog/shared": "workspace:*",
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

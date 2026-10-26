@@ -1,5 +1,5 @@
 /**
- * /try — "Try it on WhatsApp": the field side of SiteLog in the browser, on the demo data.
+ * /try — "Try it on WhatsApp": the field side of TalkOlog in the browser, on the demo data.
  * The chat is driven by the pure engine (engine.ts) through a controller that outlives the page
  * (controller.ts); its effects land in the DemoStore, so the panel's Overview, Sites and Reports
  * update as the conversation goes.
@@ -190,13 +190,16 @@ export function TrySimulator({
         >
           <div className="flex h-[min(760px,calc(100dvh-120px))] min-h-[520px] flex-col overflow-hidden rounded-[20px] bg-concrete lg:h-[min(760px,calc(100dvh-215px))]">
             <header className="on-dark flex items-center gap-2 bg-steel py-1.5 pl-3 pr-1.5 text-chalk">
-              <img
-                src={assetUrl('brand/logo-mark.svg')}
-                alt=""
-                width={36}
-                height={36}
-                className="size-9 shrink-0 rounded-full bg-asphalt p-1"
-              />
+              {/* The circle is on a wrapper: a rounded <img> would clip the mark to the circle. */}
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-asphalt">
+                <img
+                  src={assetUrl('brand/logo-mark.svg')}
+                  alt=""
+                  width={24}
+                  height={24}
+                  className="size-6"
+                />
+              </span>
               <div className="min-w-0 flex-1">
                 <div className="font-semibold leading-5">{t.phone.title}</div>
                 <div className="truncate text-[12px] leading-4 text-dust-light">

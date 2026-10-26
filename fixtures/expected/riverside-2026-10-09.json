@@ -1,13 +1,17 @@
 {
+  "schemaVersion": 2,
+  "reportDate": "2026-10-09",
+  "reportLanguage": "en",
+  "units": "imperial",
   "languageDetected": ["en", "es"],
   "summary": "Level 4 slab pour completed (approx. 68 yd³). Rain from 07:00 to 10:30 stopped exterior masonry on the south elevation for 3.5 h; the crew moved to interior blockwork on Level 2. Level 3 electrical rough-in approximately 60% complete; Level 2 ductwork continued in the east wing. Two loads of rebar delivered by Ironclad Steel at about 13:00. Toolbox talk on wet-weather access; no incidents.",
   "weather": {
     "observed": {
-      "precipIn": 0.4,
-      "tempMinF": 58,
-      "tempMaxF": 64,
-      "windMph": 9,
-      "gustMph": 17,
+      "precip": 0.4,
+      "tempMin": 58,
+      "tempMax": 64,
+      "wind": 9,
+      "gust": 17,
       "provider": "Open-Meteo"
     },
     "conditionsText": "Rain 07:00–10:30, dry afterwards",
@@ -20,8 +24,8 @@
         "lostHours": 3.5,
         "source": [
           {
-            "type": "audio",
-            "messageId": "11111111-0000-4000-8000-000000000101",
+            "type": "voice_note",
+            "uploadId": "11111111-0000-4000-8000-000000000101",
             "start": 6.2,
             "end": 18.9
           }
@@ -43,8 +47,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 18.9,
           "end": 26.1
         }
@@ -63,8 +67,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 26.1,
           "end": 33
         }
@@ -83,8 +87,8 @@
       "confidence": 0.85,
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 33,
           "end": 40.5
         }
@@ -103,8 +107,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 40.5,
           "end": 47.2
         }
@@ -123,8 +127,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 47.2,
           "end": 53.8
         }
@@ -143,8 +147,8 @@
       },
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 18.9,
           "end": 26.1
         }
@@ -157,8 +161,8 @@
       "percentComplete": 60,
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 26.1,
           "end": 33
         }
@@ -170,8 +174,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 33,
           "end": 40.5
         }
@@ -183,8 +187,8 @@
       "status": "stopped",
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 6.2,
           "end": 18.9
         }
@@ -196,8 +200,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 12.4,
           "end": 18.9
         }
@@ -209,8 +213,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 40.5,
           "end": 47.2
         }
@@ -225,8 +229,8 @@
       "time": "13:00",
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 40.5,
           "end": 47.2
         }
@@ -241,8 +245,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "11111111-0000-4000-8000-000000000101",
+        "type": "voice_note",
+        "uploadId": "11111111-0000-4000-8000-000000000101",
         "start": 53.8,
         "end": 60
       }
@@ -254,12 +258,23 @@
       "item": "Concrete pump Monday 07:00 for the Level 5 deck",
       "source": [
         {
-          "type": "audio",
-          "messageId": "11111111-0000-4000-8000-000000000101",
+          "type": "voice_note",
+          "uploadId": "11111111-0000-4000-8000-000000000101",
           "start": 60,
           "end": 67.5
         }
       ]
+    }
+  ],
+  "photos": [
+    {
+      "uploadId": "11111111-0000-4000-8000-000000000102",
+      "caption": "L4 pour done",
+      "takenAt": "2026-10-09T22:31:40Z"
+    },
+    {
+      "uploadId": "11111111-0000-4000-8000-000000000103",
+      "takenAt": "2026-10-09T22:31:52Z"
     }
   ],
   "newTerms": [],
@@ -267,26 +282,9 @@
   "lowConfidence": [],
   "proposedQuestions": [
     {
-      "field": "manpower.workers",
+      "field": "manpower.workers:Delta Mechanical",
       "question": "Quick check: you said 'the Delta guys' were on Level 2. How many, and for how long?",
-      "options": ["4 · full day", "5 · full day"],
-      "target": {
-        "companyNameHeard": "the Delta guys",
-        "manpowerIndex": 2
-      }
-    }
-  ],
-  "schemaVersion": 1,
-  "reportDate": "2026-10-09",
-  "photos": [
-    {
-      "messageId": "11111111-0000-4000-8000-000000000102",
-      "caption": "L4 pour done",
-      "takenAt": "2026-10-09T22:31:40Z"
-    },
-    {
-      "messageId": "11111111-0000-4000-8000-000000000103",
-      "takenAt": "2026-10-09T22:31:52Z"
+      "options": ["4 · full day", "5 · full day"]
     }
   ]
 }

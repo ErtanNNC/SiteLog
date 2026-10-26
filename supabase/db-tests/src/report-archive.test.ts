@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
-import { emptyReportData, type DailyReportData } from '@sitelog/shared';
+import { emptyReportDataV1, type DailyReportDataV1 } from '@sitelog/shared';
 import { DEMO_ORG_ID, DEMO_USERS } from '@sitelog/shared/demo/kestrel.ts';
-import { asService, asUser, bootDatabase } from './harness.ts';
+import { asService, asUser, bootDatabase, probeAs } from './harness.ts';
 
 /**
  * 20261013000002_report_archive.sql: the Reports archive view the panel filters, counts and pages
@@ -45,8 +45,8 @@ async function archiveAs(user: string, where = 'true', params: unknown[] = []) {
   ).rows;
 }
 
-function withIncident(date: string, incident: boolean, summary: string): DailyReportData {
-  const d = emptyReportData(date);
+function withIncident(date: string, incident: boolean, summary: string): DailyReportDataV1 {
+  const d = emptyReportDataV1(date);
   return {
     ...d,
     summary,
@@ -147,6 +147,53 @@ describe('report_archive view', () => {
     ]);
     expect(await archiveAs(LENA, `summary ilike '%rebar cage%'`)).toEqual([]);
     expect((await archiveAs(LENA, 'has_incident')).map((r) => r.id)).not.toContain(filed);
+  });
+
+  it('carries every column of reports, in order (recreated by 20261013000007)', async () => {
+    // r.* is expanded when the view is created: a migration that adds a reports column must
+    // recreate the view, or the archive silently lacks it.
+    const cols = async (rel: string) =>
+      (
+        await svc<{ name: string }>(
+          `select attname as name from pg_attribute
+           where attrelid = $1::regclass and attnum > 0 and not attisdropped order by attnum`,
+          [rel],
+        )
+      ).map((c) => c.name);
+    const reports = await cols('public.reports');
+    expect(reports).toEqual(expect.arrayContaining(['channel', 'language', 'confirmed_via']));
+    expect(await cols('public.report_archive')).toEqual([
+      ...reports,
+      'date',
+      'site_name',
+      'project_code',
+      'lost_hours',
+      'has_incident',
+      'summary',
+    ]);
+  });
+
+  it('shows the channel, language and confirmation channel of a report', async () => {
+    const [report] = await svc<{ id: string }>(
+      `update reports set channel = 'web', language = 'en', confirmed_via = 'voice'
+       where id = (select id from reports where org_id = $1 and status = 'filed' order by report_no limit 1)
+       returning id`,
+      [DEMO_ORG_ID],
+    );
+    const rows = await asUser(db, LENA, (q) =>
+      q(`select channel, language, confirmed_via from report_archive where id = $1`, [report!.id]),
+    );
+    expect(rows.rows).toEqual([{ channel: 'web', language: 'en', confirmed_via: 'voice' }]);
+  });
+
+  it('is read-only for signed-in users and closed to anon', async () => {
+    const anon = await probeAs(db, { role: 'anon' }, `select count(*) from report_archive`);
+    expect(anon.ok ? 'allowed' : anon.code).toBe('42501');
+    const priv = await svc<{ sel: boolean; write: boolean }>(
+      `select has_table_privilege('authenticated', 'public.report_archive', 'SELECT') as sel,
+              has_table_privilege('authenticated', 'public.report_archive', 'INSERT,UPDATE,DELETE,TRUNCATE') as write`,
+    );
+    expect(priv[0]).toEqual({ sel: true, write: false });
   });
 
   it('shows nothing to accounts members or to other orgs', async () => {

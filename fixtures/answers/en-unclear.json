@@ -1,0 +1,34 @@
+{
+  "id": "en-unclear",
+  "description": "English, spoken, no answer in it: “Hang on, I'll have to check with the foreman later.” The parse is below 0.7, so code applies nothing and the question is asked once more (F7).",
+  "voice": "answer-en-unclear",
+  "language": "en",
+  "question": {
+    "field": "manpower.workers",
+    "prompt": "You said your crew framed the second floor. How many were on site, and for how long?",
+    "options": [],
+    "target": {
+      "manpowerIndex": 0,
+      "companyName": "Our crew",
+      "companyNameHeard": "our crew",
+      "path": "manpower.workers:Our crew"
+    }
+  },
+  "companies": [],
+  "defaultShiftHours": 8,
+  "crew": {
+    "companyName": "Our crew",
+    "companyNameHeard": "our crew"
+  },
+  "recorded": {
+    "field": "manpower.workers",
+    "value": {
+      "text": "Hang on, I'll have to check with the foreman later."
+    },
+    "confidence": 0.15
+  },
+  "expected": {
+    "applies": false,
+    "reason": "low_confidence"
+  }
+}

@@ -6,9 +6,9 @@ import {
   recomputeManpowerTotals,
   splitWorkingHours,
 } from './hours.ts';
-import type { ManpowerEntry } from '../schemas/report.ts';
+import type { ManpowerEntryV1 } from '../schemas/report.ts';
 
-const entry = (over: Partial<ManpowerEntry>): ManpowerEntry => ({
+const entry = (over: Partial<ManpowerEntryV1>): ManpowerEntryV1 => ({
   companyId: 'c1',
   companyNameHeard: 'Apex',
   companyName: 'Apex Concrete',

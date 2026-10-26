@@ -1,40 +1,95 @@
-# fixtures/voice — real-style recordings
+# fixtures/voice — web recorder voice notes and their expected transcripts
 
-The eval set (§10.12) grows from here. Transcripts in `../transcripts/*.json` are the inputs the
-worker's extraction eval (`pnpm eval`) actually runs on; recordings are kept so the transcription
-step can be re-run when `TRANSCRIBE_MODEL` changes.
+One JSON file per voice note (W1-11, spec §10.2). Each holds the expected transcript (`text` and
+timed `segments`), the reporter it stands for (`reporter.locale`, `reporter.languages`), the
+Deepgram language that reporter gets (`transcriptionLanguage`: `multi` for English and/or Spanish
+speakers, `tr` for Turkish, `en` otherwise), the language(s) of the transcript (`expectedLanguage`),
+the golden extraction case it is the script of (`goldenCase`, `../transcripts/<id>.json`) and its
+recording (`audio`).
 
-## Adding a recording
+| File                              | Language | Reporter (§18)                     | What it covers                                                                                                 |
+| --------------------------------- | -------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `en-elm-2026-10-02.json`          | EN → en  | Priya Raman, Elm St. (EN · HI)     | Partial-day rain-out, one self-perform crew, a delivery (golden `elm-2026-10-02-rain-morning`)                 |
+| `es-en-riverside-2026-10-09.json` | ES + EN  | Marco Ruiz, Riverside (ES · EN)    | The hero report: code-switching, the Delta crew on site with no headcount (D27; golden `riverside-2026-10-09`) |
+| `tr-kartal-2026-10-09.json`       | TR → tr  | Emre Yıldız, Kartal (tr-TR, §18.2) | Four crews, a pour, the §18.2 glossary phrases (golden `kartal-2026-10-09-tr`, W1-12)                          |
 
-1. Record a voice note on WhatsApp (EN, ES or mixed; include machinery noise for a few) and export
-   the original `.ogg` from a test number, or record `.m4a` on a phone. Keep it under 5 minutes.
-2. Save it here as `<site-slug>-<YYYY-MM-DD>-<n>.ogg` (no names or phone numbers in the file name).
-3. Produce the transcript fixture with the worker's transcriber (needs `OPENAI_API_KEY`):
+### Spoken answers (W2-09, `kind: "answer"`)
 
-   ```bash
-   pnpm --filter @sitelog/worker exec tsx -e "
-   import { readFileSync, writeFileSync } from 'node:fs';
-   import OpenAI from 'openai';
-   import { createFfmpegRunner } from './src/media/ffmpeg';
-   import { transcribeAudio } from './src/ai/transcribe';
-   const audio = readFileSync('../../fixtures/voice/riverside-2026-10-09-1.ogg');
-   const t = await transcribeAudio(new OpenAI(), createFfmpegRunner(), { audio, ext: 'ogg', model: process.env.TRANSCRIBE_MODEL ?? 'whisper-1', prompt: 'Construction daily site report.' });
-   writeFileSync('../../fixtures/voice/riverside-2026-10-09-1.segments.json', JSON.stringify(t, null, 2));
-   "
-   ```
+F7 _Other…_: the clip a reporter says for an open question. Each is the answer of a case in
+`../answers/` (the `parse_answer` golden set), whose recorded tool output the fake Claude returns
+for that transcript.
 
-4. Copy the segments into a new `../transcripts/<id>.json` (add site context, companies, glossary,
-   photos — see the existing files; set `expectedQuestion` to the question code should ask first,
-   or `null`), and write the expected `DailyReportData` to `../expected/<id>.json`. Only values
-   that are actually said in the recording may appear in `expected`; every non-null number needs a
-   source with the segment start time. Save the model's `submit_daily_report` input for the case
-   as `../tool-outputs/<id>.json` (the worker tests replay it without an API key).
-5. Run `pnpm --filter @sitelog/worker test` (offline: every case must parse with the shared schemas,
-   be internally consistent and its recorded tool output must score as a pass) and `pnpm eval`
-   (needs `ANTHROPIC_API_KEY`; `--case <part>` to run a subset, `--recorded` to score the recorded
-   outputs offline). The eval checks manpower counts and hours exactly, weather `lostHours`
-   ±0.5 h, that every non-null number carries a source, that unknown companies are flagged, and
-   that code derives the same required gaps and next question as for the expected data.
+| File                                | Language | Reporter                     | What it covers                                             |
+| ----------------------------------- | -------- | ---------------------------- | ---------------------------------------------------------- |
+| `answer-en-delta-five-all-day.json` | EN       | Marco Ruiz (ES · EN → multi) | "Five, all day." to the Delta question (W2-09's Done-when) |
+| `answer-es-delta-cinco.json`        | ES       | Marco Ruiz                   | The same answer in Spanish                                 |
+| `answer-tr-demirci-alti.json`       | TR       | Emre Yıldız (tr)             | The rebar crew of the Kartal report: six, a full day       |
+| `answer-tr-kartal-akis-alti.json`   | TR       | Emre Yıldız (tr)             | W4-07, the Kartal call: Akış Mekanik six, a full day       |
+| `answer-en-unclear.json`            | EN       | Priya Raman (EN · HI → en)   | No answer in it: below 0.7, asked once more, then flagged  |
 
-Recordings are customer-style data: do not commit real customer audio. Synthetic recordings by
-the team are fine.
+### Corrections (W2-10, `kind: "correction"`)
+
+F8 _Fix by voice_: the clip a reporter says on the draft. Each is the fix of a case in
+`../corrections/` (the `apply_correction` golden set), whose recorded tool output the fake Claude
+returns for that transcript.
+
+| File                                | Language | Reporter                     | What it covers                                      |
+| ----------------------------------- | -------- | ---------------------------- | --------------------------------------------------- |
+| `correction-en-apex-seven.json`     | EN       | Marco Ruiz (ES · EN → multi) | "Apex had seven, not six." (W2-10's Done-when)      |
+| `correction-en-apex-total.json`     | EN       | Marco Ruiz                   | The headcount and a total said: the total is code's |
+| `correction-en-which-crew.json`     | EN       | Marco Ruiz                   | A number with no crew: the model asks which         |
+| `correction-es-apex-siete.json`     | ES       | Marco Ruiz                   | The Apex fix in Spanish                             |
+| `correction-tr-usta-bes.json`       | TR       | Emre Yıldız (tr)             | The Usta Beton headcount of the Kartal draft        |
+| `correction-tr-usta-call-alti.json` | TR       | Emre Yıldız (tr)             | W4-07, the Kartal call: Usta Beton six, not five    |
+
+### Test recordings (W2-13, `kind: "test"`)
+
+F4's optional 20-second test on the Welcome screen: `test-en-check.json` (Priya, en),
+`test-es-en-check.json` (Marco, ES + EN → multi) and `test-tr-check.json` (Emre, tr). The fake
+transcriber answers a test clip with the one in its reporter's language; nothing is filed.
+
+### Call recordings (W3-11, `kind: "call"`)
+
+The reporter lane (left channel) of a call's dual-channel recording, as the post-call job
+(`post_call_reconcile`) sends it to batch transcription after the call: `call-riverside-en.json`
+(Marco, ES + EN → multi), the Riverside report said on the phone, the script of the golden case
+`call-riverside-2026-10-09-en`. The fake transcriber answers a call lane with it; the worker's
+PGlite test (`apps/worker/src/jobs/post-call.pglite.test.ts`) reconciles it against the filed
+report.
+
+Every file has a `kind` (`report` when absent, `answer`, `test`, `correction`, `call`); the fake transcriber answers a
+request with a fixture of the request's purpose (`TranscriptionRequest.purpose`), so a real
+Chromium recording of an answer gets an answer transcript in its reporter's language.
+
+## Who reads them
+
+- **The fake transcriber** (`apps/worker/src/ai/fake-transcriber.ts`, `TRANSCRIBE_PROVIDER=fake`,
+  and the default outside production when the provider's key is missing): it answers with the
+  fixture a fake audio file names (the integration harness's `fakeAudio(id, seconds)`), else the
+  first fixture in the requested language (a real recording gets the transcript of its reporter's
+  language). The CI worker in `e2e-supabase` runs with it.
+- **The tests**: `apps/worker/src/ai/transcriber.test.ts` (each file parses, its language follows
+  from its reporter, the EN, ES + EN and TR scripts equal their golden cases) and
+  `apps/worker/src/integration/upload.integration.test.ts` (a fixture upload through
+  `transcribe_upload` on PGlite).
+- **`pnpm transcribe:fixture -- <id> [audio file]`**: the by-hand check with a real key. It runs a
+  recording through the configured provider (`TRANSCRIBE_PROVIDER`, `DEEPGRAM_API_KEY` in the root
+  `.env`) with the fixture reporter's language and the golden case's hints, and prints the
+  transcript, the detected language, the latency and the word error rate against `text`.
+
+## No recordings yet
+
+`audio` is `null` in all three: this repository was built without a microphone or an offline
+text-to-speech engine, so there are no audio files, only the scripts. Until they exist, the
+by-hand Deepgram check needs a recording made from the script:
+
+1. Read the fixture's `text` aloud in the field app (`pnpm dev:field`, the Recording screen) or a
+   phone's voice recorder, at a natural pace, with some site noise for one of them. The browser
+   gives `audio/webm` (Chrome, Firefox) or `audio/mp4` (Safari); keep what it gives.
+2. Save it here as `<id>.webm` or `<id>.m4a` (no names or phone numbers in the file name; the
+   team's own voices only, never customer audio) and set `audio` (and `mime`, for mp4) in the JSON.
+3. Run `pnpm transcribe:fixture -- <id>` with `DEEPGRAM_API_KEY` set. Adjust `segments` to the
+   recording's real timings if you want them exact; keep `text` as said.
+
+Larger than about 1 MB per file is too big for the repository: keep notes short (under a minute)
+or store them outside git and pass the path as the second argument.

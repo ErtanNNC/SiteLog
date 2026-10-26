@@ -1,0 +1,291 @@
+{
+  "$comment": "W3-09 recorded call (W3-02's format, extended): start, routes (field-api's recorded answers per voice route, in order; the last repeats), reporterTurns (one session run each), agentTurns (the dialog model's recorded turns). `extraction` names the eval case (fixtures/transcripts, expected, tool-outputs) whose recorded tool output EXTRACT_PROVIDER=fake replays for this call's update_draft; `answers` are the reporter's words record_answer sends. The worker's PGlite test (apps/worker/src/jobs/voice-turn.pglite.test.ts) checks that the live pipeline answers what `routes` records (ids aside); the agent's pytest (tests/test_live_draft.py) replays the call on FakeFieldApi. W3-15: `simulate` is this call as `pnpm simulate:call` runs it on a local stack (scripts/src/call-sim): the org it arranges, the requests the agent sends in order (`$…` values from the call so far; `recorded` = the route's next recorded answer above, pending ones skipped, ids aside) and what the call leaves behind. W4-07: a Turkish call by Talk now: after the read-back the reporter corrects a crew (the apply_correction golden case fixtures/corrections/tr-usta-alti); only the change is read back, in words, then the yes files the new revision.",
+  "id": "kartal-fix-tr",
+  "locale": "tr-TR",
+  "extraction": "call-kartal-2026-10-09-tr",
+  "start": {
+    "request": {
+      "room": "call-d1470000-0000-4000-8000-000000000003",
+      "transport": "web",
+      "callId": "d1470000-0000-4000-8000-000000000003"
+    },
+    "response": {
+      "callId": "d1470000-0000-4000-8000-000000000003",
+      "callToken": "derived-by-the-fake-AAAAAAAAAAAAAAAAAAAAAAAA",
+      "reporter": {
+        "firstName": "Emre",
+        "locale": "tr-TR"
+      }
+    }
+  },
+  "routes": {
+    "disclosure": [
+      {
+        "ok": true
+      }
+    ],
+    "get_context": [
+      {
+        "call": {
+          "direction": "inbound",
+          "transport": "web",
+          "purpose": "daily_report"
+        },
+        "reporter": {
+          "firstName": "Emre",
+          "locale": "tr-TR"
+        },
+        "company": "Demir Yapı A.Ş.",
+        "reportLanguage": "tr",
+        "sites": [
+          {
+            "id": "d1000000-0000-4000-8000-00000000a001",
+            "name": "Kartal Konutları — B Blok",
+            "status": "reminded",
+            "deadline": "17:30"
+          }
+        ],
+        "siteId": "d1000000-0000-4000-8000-00000000a001",
+        "companies": [
+          {
+            "name": "Usta Beton",
+            "aliases": []
+          },
+          {
+            "name": "Volt Elektrik",
+            "aliases": []
+          },
+          {
+            "name": "Akış Mekanik",
+            "aliases": []
+          },
+          {
+            "name": "Demir Yapı öz ekip",
+            "aliases": []
+          }
+        ],
+        "keyterms": [
+          "Kartal Konutları — B Blok",
+          "Usta Beton",
+          "Volt Elektrik",
+          "Akış Mekanik",
+          "Demir Yapı öz ekip",
+          "döküm",
+          "kalıp söktük",
+          "demirci ekibi",
+          "TBM",
+          "tool box"
+        ],
+        "consents": {
+          "recording": true,
+          "dataProcessing": true,
+          "sms": true,
+          "autoCall": false
+        },
+        "recordingNoticeVersion": "voice.recording_notice.v1",
+        "consentTextVersion": "voice.consent.v2",
+        "maxQuestions": 3
+      }
+    ],
+    "update_draft": [
+      {
+        "reportId": "d1470000-0000-4000-8000-0000000000b1",
+        "draftRev": 1,
+        "missing": [],
+        "question": null,
+        "readBack": "Elimdeki bilgiler: üç firmadan sahada on iki kişi, toplam doksan saat. Hava nedeniyle bir buçuk saat çalışılamadı. Yapılanlar: üçüncü Kat döşeme betonu dökümü tamamlandı, ikinci Kat elektrik tesisatı, birinci Kat kalıp sökümü tamamlandı. Teslimatlar: Kaya Demir firmasından iki tır inşaat demiri. İş güvenliği konuşması yapıldı. Kaza ya da olay yok. Kaydedeyim mi?"
+      }
+    ],
+    "apply_correction": [
+      {
+        "status": "applied",
+        "lines": ["Usta Beton: altı kişi, kişi başı sekiz saat — toplam kırk sekiz saat."],
+        "readBack": "Usta Beton: altı kişi, kişi başı sekiz saat — toplam kırk sekiz saat. Kaydedeyim mi?",
+        "draft": {
+          "reportId": "d1470000-0000-4000-8000-0000000000b1",
+          "draftRev": 2,
+          "missing": [],
+          "question": null,
+          "readBack": "Elimdeki bilgiler: üç firmadan sahada on üç kişi, toplam doksan sekiz saat. Hava nedeniyle bir buçuk saat çalışılamadı. Yapılanlar: üçüncü Kat döşeme betonu dökümü tamamlandı, ikinci Kat elektrik tesisatı, birinci Kat kalıp sökümü tamamlandı. Teslimatlar: Kaya Demir firmasından iki tır inşaat demiri. İş güvenliği konuşması yapıldı. Kaza ya da olay yok. Kaydedeyim mi?"
+        }
+      }
+    ],
+    "file_report": [
+      {
+        "status": "filed",
+        "reportNo": "KK-0001",
+        "pdf": "pending"
+      }
+    ],
+    "end_call": [
+      {
+        "ok": true
+      }
+    ]
+  },
+  "reporterTurns": [
+    "Merhaba, ben Emre, Kartal B Blok için bugünün raporu. Sabah saat ondan on bir buçuğa kadar yağmur yağdı, dış cephede sıva durdu, bir buçuk saat kaybettik. Usta Beton beş kişiyle bütün gün üçüncü kattaydı, döşeme dökümünü saat ikide bitirdik, yaklaşık kırk beş metreküp. Volt Elektrik üç kişi, tam gün, ikinci katta tesisat çekti. Bizim öz ekip dört kişi, altı buçuk saat çalıştı, birinci katta kalıp söktük. Öğlen Kaya Demir'den iki tır inşaat demiri geldi. Sabah TBM yaptık, iskele güvenliğini konuştuk. Kaza yok. Bu kadar.",
+    "Usta Beton beş değil, altı kişiydi.",
+    "Evet."
+  ],
+  "answers": [],
+  "agentTurns": [
+    {
+      "toolCalls": [
+        {
+          "name": "get_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Anladım, bir saniye.",
+      "toolCalls": [
+        {
+          "name": "update_draft",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Elimdeki bilgiler: üç firmadan sahada on iki kişi, toplam doksan saat. Hava nedeniyle bir buçuk saat çalışılamadı. Yapılanlar: üçüncü Kat döşeme betonu dökümü tamamlandı, ikinci Kat elektrik tesisatı, birinci Kat kalıp sökümü tamamlandı. Teslimatlar: Kaya Demir firmasından iki tır inşaat demiri. İş güvenliği konuşması yapıldı. Kaza ya da olay yok. Kaydedeyim mi?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "apply_correction",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Usta Beton: altı kişi, kişi başı sekiz saat — toplam kırk sekiz saat. Kaydedeyim mi?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "file_report",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Kaydedildi. PDF ve fotoğraf eklemeniz için bir link gönderdim. İyi akşamlar.",
+      "toolCalls": [
+        {
+          "name": "end_call",
+          "args": {
+            "outcome": "filed"
+          }
+        }
+      ]
+    },
+    {}
+  ],
+  "filing": [
+    {
+      "utterance": "Evet.",
+      "draftRev": 2,
+      "answer": "filed"
+    }
+  ],
+  "corrections": ["Usta Beton beş değil, altı kişiydi."],
+  "simulate": {
+    "title": "Turkish correction by Talk now: Usta Beton six, not five, then filed",
+    "milestone": "m8",
+    "flow": "F8",
+    "arrange": {
+      "country": "TR",
+      "org": "Demir Yapı A.Ş.",
+      "reporter": {
+        "name": "Emre Yıldız",
+        "locale": "tr-TR",
+        "contactPref": "call"
+      },
+      "sites": [
+        {
+          "key": "kartal",
+          "name": "Kartal Konutları — B Blok",
+          "projectCode": "KK",
+          "timezone": "Europe/Istanbul"
+        }
+      ]
+    },
+    "steps": [
+      {
+        "route": "get_context",
+        "expect": {
+          "call": {
+            "direction": "inbound",
+            "transport": "web",
+            "purpose": "daily_report"
+          },
+          "reporter": {
+            "firstName": "Emre",
+            "locale": "tr-TR"
+          },
+          "company": "Demir Yapı A.Ş.",
+          "reportLanguage": "tr",
+          "consents": {
+            "recording": true,
+            "dataProcessing": true,
+            "sms": true,
+            "autoCall": false
+          },
+          "maxQuestions": 3,
+          "sites": [
+            {
+              "name": "Kartal Konutları — B Blok",
+              "deadline": "17:30"
+            }
+          ]
+        }
+      },
+      {
+        "route": "update_draft",
+        "body": {
+          "segments": "$segments"
+        }
+      },
+      {
+        "route": "apply_correction",
+        "body": {
+          "utterance": "Usta Beton beş değil, altı kişiydi.",
+          "start": 70.5,
+          "end": 73
+        }
+      },
+      {
+        "route": "file_report",
+        "body": {
+          "reportId": "$draft.reportId",
+          "draftRev": "$draft.draftRev",
+          "utterance": "Evet."
+        }
+      },
+      {
+        "route": "end_call",
+        "body": {
+          "outcome": "filed"
+        }
+      }
+    ],
+    "expect": {
+      "call": {
+        "outcome": "filed"
+      },
+      "report": {
+        "site": "kartal",
+        "status": "filed",
+        "channel": "voice",
+        "confirmedVia": "voice",
+        "crewOnSite": 13,
+        "totalHours": 98,
+        "language": "tr",
+        "units": "metric",
+        "pdfPaper": "a4"
+      },
+      "messages": ["filed", "photos_link"]
+    }
+  }
+}

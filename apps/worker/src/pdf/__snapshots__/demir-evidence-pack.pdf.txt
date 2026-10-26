@@ -1,0 +1,126 @@
+Demir Yapı A.Ş. HAVA MUHALEFETİ KANITLARI
+Kartal Konutları — B Blok
+Süre uzatımı kanıt dosyası · Per, 1 Eki 2026 – Cmt, 31 Eki 2026
+PROJE NO. ADRES HAVA ENGELLİ GÜN
+KK-1203 Kartal, İstanbul 2
+KAYIP SAAT TALEBE HAZIR GÜN ŞANTİYE ŞEFİ ONAYLI
+5 sa 1/2 1/2
+OLUŞTURULMA
+2 Kas 2026 10:00
+Bu dosya, dönem içinde hava koşullarının çalışmayı durdurduğu veya değiştirdiği her gün için günlük şantiye raporlarını,
+şantiye şefinin sesli notlarından ve görüşmelerinden döküm alıntılarını, tarihli fotoğrafları ve ölçülen hava durumu
+verilerini içerir. Her gün, raporunun nasıl onaylandığını belirtir. Kayıtlar saklanmaktadır ve talep üzerine sunulabilir.
+Hava durumu verisi: Open-Meteo (CC BY 4.0), şantiye konumu için saatlik değerler. Talebe hazır = ses kanıtı + fotoğraf + ölçülen hava durumu verisi;
+rapor şantiye şefi veya ofis tarafından onaylanmış olmalıdır.
+TalkOlog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 1 / 6
+
+Demir Yapı A Ş · Kartal Konutları — B Blok Kanıt dosyası · Per 1 Eki – Cmt 31 Eki
+01 GÜNLERE GÖRE GECİKME ÖZETİ
+TARİH RAPOR DURUM ETKİ KAYIP KANIT ONAY
+Per 8 Eki KK-1203-0004 Yağmur Dış cephe işleri durdu; ekip 2,5 sa S-H Onaylanmadı
+v1 iç mekâna kaydırıldı
+Cum 9 Eki KK-1203-0005 Yağmur Dış cephe işleri durdu; ekip 2,5 sa SFH Görüşme
+v1 iç mekâna kaydırıldı
+Toplam 5 sa 1/2
+Kanıt: S = zaman damgalı ses kaydı (sesli not veya görüşme) · F = fotoğraf · H = ölçülen hava durumu verisi.
+TalkOlog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 2 / 6
+
+Demir Yapı A Ş · Kartal Konutları — B Blok KK-1203-0004 · Per, 8 Eki 2026
+Per, 8 Eki 2026 KK-1203-0004 v1 · dosyalandı · 2,5 sa kayıp
+Rapor, şantiye şefinin onayı olmadan otomatik olarak dosyalandı (saat 20:45). Ofis onaylayana kadar talebe hazır
+sayılmaz.
+01 ÖZET
+4. kat döşeme betonu Usta Beton tarafından tamamlandı (yaklaşık 52 m³). Sabah 07:30–10:00 arası yağmur nedeniyle
+dış cephe işleri 2,5 saat durdu; ekip iç mekân duvar işlerine kaydırıldı. 3. kat elektrik tesisatı yaklaşık %60 tamamlandı.
+İş güvenliği bilgilendirmesi yapıldı; olay bildirilmedi.
+02 HAVA DURUMU VE GECİKMELER
+Sabah yağmurlu, öğleden sonra bulutlu Ölçülen: 11,2 mm yağış · 14–19 °C · rüzgâr 18 km/h · hamle 34 km/h
+ZAMAN DURUM İŞE ETKİSİ KAYIP SÜRE
+07:30–10:00 Yağmur Dış cephe işleri durdu; ekip iç mekâna kaydırıldı 2,5 sa
+03 ŞANTİYEDEKİ İŞGÜCÜ
+FİRMA İŞ KOLU ALAN İŞÇİ SAAT
+Usta Beton Beton 4. kat 8 64 sa
+Volt Elektrik Elektrik 3. kat 4 32 sa
+Akış Mekanik TEYİTLİ Mekanik 2. kat 3 24 sa
+Demir Yapı öz ekip Genel işçilik Şantiye geneli 5 40 sa
+Toplam · 4 firma 20 160 sa
+04 YAPILAN İŞLER
+- 4. kat: Döşeme betonu dökümü (Tamamlandı)
+- 3. kat: Elektrik tesisatı (Devam ediyor · yaklaşık %60)
+- Dış cephe: Sıva hazırlığı (Durdu)
+- Zemin kat: Kalıp sökümü yapıldı (Tamamlandı)
+05 DÖKÜM ALINTILARI
+sesli not 0:12–0:19 “sabah yedi buçuktan ona kadar yağmur yağdı, dış cephede çalışamadık”
+06 FOTOĞRAFLAR
+Fotoğraf eklenmedi.
+07 ÖLÇÜLEN HAVA DURUMU (SAATLİK)
+SAAT YAĞIŞ (MM) SICAKLIK (°C) RÜZGÂR (KM/H) HAMLE (KM/H)
+05:00 0,0 14 18 34
+06:00 0,0 14 18 34
+07:00 3,8 14 18 34
+08:00 3,8 14 18 34
+09:00 3,8 14 18 34
+10:00 0,0 14 18 34
+11:00 0,0 14 18 34
+12:00 0,0 14 18 34
+TalkOlog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 3 / 6
+
+Demir Yapı A Ş · Kartal Konutları — B Blok KK-1203-0004 · Per, 8 Eki 2026
+SAAT YAĞIŞ (MM) SICAKLIK (°C) RÜZGÂR (KM/H) HAMLE (KM/H)
+13:00 0,0 19 18 34
+14:00 0,0 19 18 34
+15:00 0,0 19 18 34
+16:00 0,0 19 18 34
+17:00 0,0 19 18 34
+18:00 0,0 19 18 34
+TalkOlog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 4 / 6
+
+Demir Yapı A Ş · Kartal Konutları — B Blok KK-1203-0005 · Cum, 9 Eki 2026
+Cum, 9 Eki 2026 KK-1203-0005 v1 · dosyalandı · 2,5 sa kayıp · talebe hazır
+Şantiye şefi raporu görüşmede sesli olarak onayladı (saat 18:46).
+01 ÖZET
+4. kat döşeme betonu Usta Beton tarafından tamamlandı (yaklaşık 52 m³). Sabah 07:30–10:00 arası yağmur nedeniyle
+dış cephe işleri 2,5 saat durdu; ekip iç mekân duvar işlerine kaydırıldı. 3. kat elektrik tesisatı yaklaşık %60 tamamlandı.
+İş güvenliği bilgilendirmesi yapıldı; olay bildirilmedi.
+02 HAVA DURUMU VE GECİKMELER
+Sabah yağmurlu, öğleden sonra bulutlu Ölçülen: 11,2 mm yağış · 14–19 °C · rüzgâr 18 km/h · hamle 34 km/h
+ZAMAN DURUM İŞE ETKİSİ KAYIP SÜRE
+07:30–10:00 Yağmur Dış cephe işleri durdu; ekip iç mekâna kaydırıldı 2,5 sa
+03 ŞANTİYEDEKİ İŞGÜCÜ
+FİRMA İŞ KOLU ALAN İŞÇİ SAAT
+Usta Beton Beton 4. kat 8 64 sa
+Volt Elektrik Elektrik 3. kat 4 32 sa
+Akış Mekanik TEYİTLİ Mekanik 2. kat 3 24 sa
+Demir Yapı öz ekip Genel işçilik Şantiye geneli 5 40 sa
+Toplam · 4 firma 20 160 sa
+04 YAPILAN İŞLER
+- 4. kat: Döşeme betonu dökümü (Tamamlandı)
+- 3. kat: Elektrik tesisatı (Devam ediyor · yaklaşık %60)
+- Dış cephe: Sıva hazırlığı (Durdu)
+- Zemin kat: Kalıp sökümü yapıldı (Tamamlandı)
+05 DÖKÜM ALINTILARI
+arama 2:15–2:22 “yağmur yüzünden dış cephe iki buçuk saat durdu, ekibi içeri aldık”
+06 FOTOĞRAFLAR
+10 Eki 01:31 · L4 pour complete 17:05 · Rain at the south elevation
+07 ÖLÇÜLEN HAVA DURUMU (SAATLİK)
+SAAT YAĞIŞ (MM) SICAKLIK (°C) RÜZGÂR (KM/H) HAMLE (KM/H)
+TalkOlog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 5 / 6
+
+Demir Yapı A Ş · Kartal Konutları — B Blok KK-1203-0005 · Cum, 9 Eki 2026
+SAAT YAĞIŞ (MM) SICAKLIK (°C) RÜZGÂR (KM/H) HAMLE (KM/H)
+05:00 0,0 14 18 34
+06:00 0,0 14 18 34
+07:00 3,8 14 18 34
+08:00 3,8 14 18 34
+09:00 3,8 14 18 34
+10:00 0,0 14 18 34
+11:00 0,0 14 18 34
+12:00 0,0 14 18 34
+13:00 0,0 19 18 34
+14:00 0,0 19 18 34
+15:00 0,0 19 18 34
+16:00 0,0 19 18 34
+17:00 0,0 19 18 34
+18:00 0,0 19 18 34
+TalkOlog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 6 / 6
+

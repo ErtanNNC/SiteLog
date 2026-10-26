@@ -27,7 +27,7 @@ async function record(
   ctx: Ctx,
   convo: ConversationRow,
   input: {
-    type: MessageRow['type'];
+    type: NonNullable<MessageRow['type']>;
     body: string | null;
     payload: Record<string, unknown>;
     template_name?: string | null;

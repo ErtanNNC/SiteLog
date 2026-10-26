@@ -1,4 +1,4 @@
-import { progressSteps, waCopy, type ProgressFacts } from '@sitelog/shared';
+import { isVoiceSourceKind, progressSteps, waCopy, type ProgressFacts } from '@sitelog/shared';
 import type { Ctx } from '../context';
 import { contextOf } from '../router/context';
 import { sendFreeForm } from '../wa/send';
@@ -24,19 +24,27 @@ export { progressSteps, type ProgressFacts };
 /** True when the report has at least one voice note and every one of them is transcribed. */
 /** A voice note of the report has no transcript yet (its transcription will continue the pipeline). */
 export async function audioPending(ctx: Ctx, reportId: string): Promise<boolean> {
-  const audio = (await ctx.db.listReportSources(reportId)).filter((s) => s.kind === 'audio');
-  if (audio.length === 0) return false;
-  const ids = [...new Set(audio.map((s) => s.message_id))];
-  const done = new Set((await ctx.db.listTranscripts(ids)).map((t) => t.message_id));
+  const ids = await voiceNoteIds(ctx, reportId);
+  if (ids.length === 0) return false;
+  const done = new Set(
+    (await ctx.db.listTranscripts(ids)).flatMap((t) => [t.message_id, t.upload_id]),
+  );
   return ids.some((id) => !done.has(id));
 }
 
 export async function allAudioTranscribed(ctx: Ctx, reportId: string): Promise<boolean> {
-  const audio = (await ctx.db.listReportSources(reportId)).filter((s) => s.kind === 'audio');
-  if (audio.length === 0) return false;
-  const ids = new Set(audio.map((s) => s.message_id));
-  const done = await ctx.db.listTranscripts([...ids]);
-  return done.filter((t) => ids.has(t.message_id)).length >= ids.size;
+  const ids = await voiceNoteIds(ctx, reportId);
+  if (ids.length === 0) return false;
+  const done = new Set(
+    (await ctx.db.listTranscripts(ids)).flatMap((t) => [t.message_id, t.upload_id]),
+  );
+  return ids.every((id) => done.has(id));
+}
+
+/** The media ids of the report's voice notes (`audio` or `voice_note` sources). */
+async function voiceNoteIds(ctx: Ctx, reportId: string): Promise<string[]> {
+  const audio = (await ctx.db.listReportSources(reportId)).filter((s) => isVoiceSourceKind(s.kind));
+  return [...new Set(audio.flatMap((s) => (s.media_id ? [s.media_id] : [])))];
 }
 
 /**

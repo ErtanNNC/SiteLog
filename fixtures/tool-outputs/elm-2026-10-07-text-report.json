@@ -1,7 +1,10 @@
 {
   "languageDetected": ["en"],
   "summary": "Roof trusses set on Units 1–4 (all 24). Roof sheathing delivered at 14:00 (60 sheets). Dry; no weather impact. Toolbox talk on fall protection for truss setting; no incidents.",
-  "weather": { "conditionsText": "Dry, no weather issues", "periods": [] },
+  "weather": {
+    "conditionsText": "Dry, no weather issues",
+    "periods": []
+  },
   "manpower": [
     {
       "companyId": "00000000-0000-4000-8000-00000000d007",
@@ -14,7 +17,14 @@
       "totalHours": 48,
       "hoursBasis": "full_day_default",
       "confidence": 0.95,
-      "source": [{ "type": "text", "messageId": "e0000016-0000-4000-8000-000000001601" }]
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "e0000016-0000-4000-8000-000000001601",
+          "start": 0,
+          "end": 17.2
+        }
+      ]
     }
   ],
   "workPerformed": [
@@ -22,8 +32,18 @@
       "area": "Units 1–4",
       "activity": "Roof truss setting",
       "status": "complete",
-      "quantity": { "value": 24, "unit": "trusses" },
-      "source": [{ "type": "text", "messageId": "e0000016-0000-4000-8000-000000001601" }]
+      "quantity": {
+        "value": 24,
+        "unit": "trusses"
+      },
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "e0000016-0000-4000-8000-000000001601",
+          "start": 0,
+          "end": 17.2
+        }
+      ]
     }
   ],
   "deliveries": [
@@ -31,7 +51,14 @@
       "item": "Roof sheathing",
       "quantity": "60 sheets",
       "time": "14:00",
-      "source": [{ "type": "text", "messageId": "e0000016-0000-4000-8000-000000001601" }]
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "e0000016-0000-4000-8000-000000001601",
+          "start": 0,
+          "end": 17.2
+        }
+      ]
     }
   ],
   "equipment": [],
@@ -40,13 +67,27 @@
     "incidents": [],
     "noIncidentsStated": true,
     "visitors": [],
-    "source": [{ "type": "text", "messageId": "e0000016-0000-4000-8000-000000001601" }]
+    "source": [
+      {
+        "type": "voice_note",
+        "uploadId": "e0000016-0000-4000-8000-000000001601",
+        "start": 0,
+        "end": 17.2
+      }
+    ]
   },
   "issues": [],
   "nextWorkday": [
     {
       "item": "Roof sheathing on Units 1–4",
-      "source": [{ "type": "text", "messageId": "e0000016-0000-4000-8000-000000001601" }]
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "e0000016-0000-4000-8000-000000001601",
+          "start": 0,
+          "end": 17.2
+        }
+      ]
     }
   ],
   "newTerms": [],

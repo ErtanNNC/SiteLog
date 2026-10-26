@@ -20,14 +20,14 @@ Deno.test(
       reporterId: null,
       candidateReporterIds: [],
     });
-    assertEquals(resolveConversationTarget([{ id: 'r1', org_id: 'o1', status: 'verified' }]), {
+    assertEquals(resolveConversationTarget([{ id: 'r1', org_id: 'o1', status: 'active' }]), {
       orgId: 'o1',
       reporterId: 'r1',
       candidateReporterIds: [],
     });
     assertEquals(
       resolveConversationTarget([
-        { id: 'r1', org_id: 'o1', status: 'verified' },
+        { id: 'r1', org_id: 'o1', status: 'active' },
         { id: 'r2', org_id: 'o2', status: 'invited' },
       ]),
       { orgId: null, reporterId: null, candidateReporterIds: ['r1', 'r2'] },
@@ -36,7 +36,7 @@ Deno.test(
     assertEquals(
       resolveConversationTarget([
         { id: 'r1', org_id: 'o1', status: 'disabled' },
-        { id: 'r2', org_id: 'o2', status: 'verified' },
+        { id: 'r2', org_id: 'o2', status: 'active' },
       ]),
       { orgId: 'o2', reporterId: 'r2', candidateReporterIds: [] },
     );

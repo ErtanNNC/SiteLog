@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 2,
+  "reportDate": "2026-10-06",
+  "reportLanguage": "tr",
+  "units": "metric",
+  "languageDetected": ["tr"],
+  "summary": "8. kat döşeme betonu beton pompasıyla döküldü (yaklaşık 24 m³; 09:00'da 3 transmikser hazır beton teslim edildi). Usta Beton dökümü ve beton vibrasyonunu yaptı. Akış Mekanik 7. katta havalandırma kanalı montajı yaptı. Öz ekip döşemenin beton kürünü yaptı, ardından 6. katta temizlik yaptı. Pompa çalışırken güvenli mesafe konulu iş güvenliği bilgilendirmesi yapıldı; kaza olmadı.",
+  "weather": {
+    "observed": {
+      "precip": 0,
+      "tempMin": 15,
+      "tempMax": 22,
+      "wind": 11,
+      "gust": 24,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "Açık, hafif rüzgarlı; işe etkisi yok",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c001",
+      "companyNameHeard": "Usta Beton",
+      "companyName": "Usta Beton",
+      "trade": "Beton",
+      "area": "8. Kat",
+      "workers": 4,
+      "hoursPerWorker": 8,
+      "totalHours": 32,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a6",
+          "start": 15.0,
+          "end": 21.0
+        }
+      ]
+    },
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c003",
+      "companyNameHeard": "Akış Mekanik",
+      "companyName": "Akış Mekanik",
+      "trade": "Mekanik",
+      "area": "7. Kat",
+      "workers": 2,
+      "hoursPerWorker": 8,
+      "totalHours": 16,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a6",
+          "start": 21.0,
+          "end": 27.0
+        }
+      ]
+    },
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c004",
+      "companyNameHeard": "Öz ekip",
+      "companyName": "Demir Yapı öz ekip",
+      "trade": "Genel işçilik",
+      "area": "8. Kat",
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a6",
+          "start": 27.0,
+          "end": 33.0
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "8. Kat",
+      "activity": "Döşeme betonu dökümü",
+      "status": "complete",
+      "quantity": {
+        "value": 24,
+        "unit": "m³",
+        "heardAs": "yirmi dört metreküp"
+      },
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a6",
+          "start": 6.5,
+          "end": 15.0
+        }
+      ]
+    },
+    {
+      "area": "7. Kat",
+      "activity": "Havalandırma kanalı montajı",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a6",
+          "start": 21.0,
+          "end": 27.0
+        }
+      ]
+    },
+    {
+      "area": "8. Kat",
+      "activity": "Beton kürü",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a6",
+          "start": 27.0,
+          "end": 33.0
+        }
+      ]
+    },
+    {
+      "area": "6. Kat",
+      "activity": "Temizlik",
+      "status": "complete",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a6",
+          "start": 27.0,
+          "end": 33.0
+        }
+      ]
+    }
+  ],
+  "deliveries": [
+    {
+      "item": "Hazır beton (3 transmikser)",
+      "quantity": "24 m³",
+      "time": "09:00",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a6",
+          "start": 6.5,
+          "end": 15.0
+        }
+      ]
+    }
+  ],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Beton pompası çalışırken güvenli mesafe",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "voice_note",
+        "uploadId": "d1000000-0000-4000-8000-0000000000a6",
+        "start": 33.0,
+        "end": 39.5
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [],
+  "photos": [
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000c7",
+      "caption": "8. kat döküm",
+      "takenAt": "2026-10-06T09:45:00Z"
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000c8",
+      "takenAt": "2026-10-06T09:45:30Z"
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000c9",
+      "caption": "irsaliye",
+      "takenAt": "2026-10-06T09:46:10Z"
+    }
+  ],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": []
+}

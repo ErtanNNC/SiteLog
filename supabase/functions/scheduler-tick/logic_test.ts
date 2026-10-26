@@ -1,22 +1,33 @@
-import { assertEquals } from '@std/assert';
-import type { SiteDayWeather } from '@sitelog/shared';
+import { assertEquals, assertThrows } from '@std/assert';
+import { type CountryPack, deadlineInstant, type SiteDayWeather } from '@sitelog/shared';
+import { toCountryPack } from '@sitelog/shared/countries.ts';
+import { demoCountriesFor, demoPack } from '@sitelog/shared/demo/countries.ts';
 import {
   asSiteDayWeather,
+  claimArgs,
   dueStage,
   ladderFromSettings,
   missingNotification,
   mondayOf,
   orgIsBlocked,
-  pickReminderTarget,
+  type LadderReporter,
+  type LadderStep,
+  ladderVars,
+  type OrgInput,
+  type OrgSettingsInput,
+  planLadder,
+  planMissing,
   planSiteDay,
+  planTickJobs,
   reminderJob,
   retentionDue,
+  type SiteDayInput,
   siteDayPatchForStage,
+  type SiteInput,
+  siteLadderReporters,
+  siteReporterFirstName,
   weatherJobFor,
   weeklyDigestDue,
-  type OrgSettingsInput,
-  type SiteDayInput,
-  type SiteInput,
 } from './logic.ts';
 
 const settings: OrgSettingsInput = {
@@ -306,14 +317,54 @@ Deno.test('siteDayPatchForStage / missingNotification', () => {
   assertEquals(siteDayPatchForStage(2), { reminder_stage: 2, status: 'reminded' });
   assertEquals(siteDayPatchForStage(3), { reminder_stage: 3, status: 'reminded' });
   assertEquals(siteDayPatchForStage(4), { reminder_stage: 4, status: 'missing' });
+  // Spec §19 Q55: with no reminder sent, the notice does not mention any.
   assertEquals(missingNotification('Elm St. Townhomes', 'Priya'), {
     title: 'Elm St. Townhomes — no report',
-    body: 'Priya didn’t answer 2 reminders.',
+    body: 'Priya hasn’t sent today’s report, and the deadline has passed.',
+    // The panel renders this in the reader's language (EN/TR).
+    data: { key: 'missing_report', params: { site: 'Elm St. Townhomes', first: 'Priya' } },
+  });
+  assertEquals(missingNotification('Elm St. Townhomes', null).data, {
+    key: 'missing_report',
+    params: { site: 'Elm St. Townhomes', first: null },
   });
   assertEquals(
     missingNotification('Elm St. Townhomes', null).body,
-    'The site manager didn’t answer 2 reminders.',
+    'The site manager hasn’t sent today’s report, and the deadline has passed.',
   );
+  assertEquals(missingNotification('X', 'Priya').body.includes('reminder'), false);
+  // §13 once the ladder sent reminders (W2-06): "{first} didn't answer {n} reminders".
+  assertEquals(missingNotification('Elm St. Townhomes', 'Priya', 2), {
+    title: 'Elm St. Townhomes — no report',
+    body: 'Priya didn’t answer 2 reminders.',
+    data: {
+      key: 'missing_report',
+      params: { site: 'Elm St. Townhomes', first: 'Priya', reminders: 2 },
+    },
+  });
+  assertEquals(missingNotification('X', 'Priya', 1).body, 'Priya didn’t answer 1 reminder.');
+  // Nobody to name: the Q55 wording, the count kept for the panel.
+  assertEquals(
+    missingNotification('X', null, 2).body,
+    'The site manager hasn’t sent today’s report, and the deadline has passed.',
+  );
+});
+
+Deno.test('siteReporterFirstName: the primary active reporter, else any active one', () => {
+  const links = [
+    { site_id: 's1', reporter_id: 'r1', is_primary: false },
+    { site_id: 's1', reporter_id: 'r2', is_primary: true },
+    { site_id: 's2', reporter_id: 'r3', is_primary: true },
+    { site_id: 's2', reporter_id: 'r1', is_primary: false },
+  ];
+  const reporters = [
+    { id: 'r1', name: 'Marco Ruiz', status: 'active' },
+    { id: 'r2', name: 'Priya Natarajan', status: 'active' },
+    { id: 'r3', name: 'Dana Cole', status: 'opted_out' },
+  ];
+  assertEquals(siteReporterFirstName('s1', links, reporters), 'Priya');
+  assertEquals(siteReporterFirstName('s2', links, reporters), 'Marco');
+  assertEquals(siteReporterFirstName('s3', links, reporters), null);
 });
 
 Deno.test('asSiteDayWeather rejects malformed snapshots', () => {
@@ -342,38 +393,33 @@ Deno.test('billing grace: past_due orgs are blocked only after past_due_grace_da
   assertEquals(orgIsBlocked(org('paused', null), now), true);
 });
 
-Deno.test('pickReminderTarget prefers the primary verified reporter with a conversation', () => {
-  const links = [
-    { site_id: 's1', reporter_id: 'backup', is_primary: false },
-    { site_id: 's1', reporter_id: 'primary', is_primary: true },
-    { site_id: 's2', reporter_id: 'other', is_primary: true },
-  ];
-  const reporters = [
-    { id: 'primary', name: 'Priya Natarajan', status: 'verified' },
-    { id: 'backup', name: 'Luis Ortega', status: 'verified' },
-    { id: 'other', name: 'Sam', status: 'verified' },
-  ];
-  const conversations = [
-    { id: 'c-primary', reporter_id: 'primary' },
-    { id: 'c-backup', reporter_id: 'backup' },
-  ];
-  assertEquals(pickReminderTarget('s1', links, reporters, conversations), {
-    conversationId: 'c-primary',
-    reporterId: 'primary',
-    firstName: 'Priya',
+Deno.test('a lapsed trial with no card is past due from its end, then blocked (§19 Q235)', () => {
+  const trial = (ends: string, patch: Record<string, unknown> = {}) => ({
+    id: 'o',
+    timezone: 'America/Chicago',
+    billing_status: 'trialing',
+    past_due_since: null,
+    settings: { ...settings, past_due_grace_days: 14 },
+    trial_ends_at: ends,
+    billing_provider: 'stripe',
+    billing_subscription_id: null,
+    is_demo: false,
+    ...patch,
   });
-  // primary not verified yet → fall back to the verified backup
+  const now = new Date('2026-10-20T12:00:00Z');
+  // Ended yesterday: within its 14 grace days. Ended 15 days ago: blocked.
+  assertEquals(orgIsBlocked(trial('2026-10-19T12:00:00Z'), now), false);
+  assertEquals(orgIsBlocked(trial('2026-10-05T12:00:00Z'), now), true);
+  // Never a demo org, a manual org, or one with a subscription.
+  assertEquals(orgIsBlocked(trial('2026-10-05T12:00:00Z', { is_demo: true }), now), false);
   assertEquals(
-    pickReminderTarget(
-      's1',
-      links,
-      [{ ...reporters[0]!, status: 'invited' }, reporters[1]!],
-      conversations,
-    )?.reporterId,
-    'backup',
+    orgIsBlocked(trial('2026-10-05T12:00:00Z', { billing_provider: 'manual' }), now),
+    false,
   );
-  // no conversation for the only reporter → nobody to remind
-  assertEquals(pickReminderTarget('s2', links, reporters, conversations), null);
+  assertEquals(
+    orgIsBlocked(trial('2026-10-05T12:00:00Z', { billing_subscription_id: 'sub_1' }), now),
+    false,
+  );
 });
 
 Deno.test('weatherJobFor needs coordinates and is keyed per site, date and slot', () => {
@@ -412,3 +458,724 @@ Deno.test('retentionDue: from 03:00 UTC, once per UTC day', () => {
   assertEquals(retentionDue('2026-10-12', new Date('2026-10-12T23:00:00Z')), null);
   assertEquals(retentionDue('2026-10-12', new Date('2026-10-13T03:05:00Z')), '2026-10-13');
 });
+
+Deno.test(
+  'planTickJobs: weather, digest and retention; never a reminder (the ladder is planLadder)',
+  () => {
+    const org = {
+      id: 'org-1',
+      timezone: 'America/Chicago',
+      billing_status: 'active',
+      past_due_since: null,
+      settings,
+    };
+    const sd: SiteDayInput = {
+      id: 'sd-1',
+      site_id: 'site-1',
+      date: '2026-10-12',
+      status: 'pending',
+      deadline_at: '2026-10-12T22:30:00.000Z',
+      reminder_stage: 0,
+      reminders_paused: false,
+      weather: rainy,
+    };
+    const types = new Set<string>();
+    let digestRuns: Record<string, string> = {};
+    let retentionLastRun: string | null = null;
+    let prev: Date | null = null;
+    for (
+      let t = Date.parse('2026-10-12T11:00:00Z');
+      t <= Date.parse('2026-10-13T04:55:00Z');
+      t += 300_000
+    ) {
+      const now = new Date(t);
+      for (const j of planTickJobs({
+        sites: [site],
+        orgs: new Map([[org.id, org]]),
+        todaysSiteDays: [sd],
+        now,
+        prevTick: prev,
+        digestRuns,
+        retentionLastRun,
+      })) {
+        types.add(j.type);
+        if (j.type === 'weekly_digest') digestRuns = { ...digestRuns, [j.orgId]: j.runKey };
+        if (j.type === 'retention_cleanup') retentionLastRun = j.day;
+      }
+      prev = now;
+    }
+    assertEquals([...types].sort(), ['fetch_weather', 'retention_cleanup', 'weekly_digest']);
+  },
+);
+
+Deno.test(
+  'planMissing (W1-10): past deadline + offset only, pending or reminded, missing step on',
+  () => {
+    const org = {
+      id: 'org-1',
+      timezone: 'America/Chicago',
+      billing_status: 'active',
+      past_due_since: null,
+      settings,
+    };
+    const base: SiteDayInput = {
+      id: 'sd-1',
+      site_id: 'site-1',
+      date: '2026-10-12',
+      status: 'pending',
+      deadline_at: '2026-10-12T22:30:00.000Z',
+      reminder_stage: 0,
+      reminders_paused: true,
+      weather: null,
+    };
+    const plan = (sd: SiteDayInput, now: string, s = settings) =>
+      planMissing({
+        sites: [site],
+        orgs: new Map([[org.id, { ...org, settings: s }]]),
+        todaysSiteDays: [sd],
+        now: new Date(now),
+      }).map((m) => m.siteDayId);
+    assertEquals(plan(base, '2026-10-12T23:59:00Z'), []);
+    // Paused reminders do not stop the office-facing step.
+    assertEquals(plan(base, '2026-10-13T00:00:00Z'), ['sd-1']);
+    assertEquals(plan({ ...base, status: 'reminded', reminder_stage: 3 }, '2026-10-13T00:05:00Z'), [
+      'sd-1',
+    ]);
+    for (const status of ['processing', 'filed', 'missing', 'no_work', 'weather_day'] as const) {
+      assertEquals(plan({ ...base, status }, '2026-10-13T01:00:00Z'), [], status);
+    }
+    assertEquals(plan({ ...base, reminder_stage: 4 }, '2026-10-13T01:00:00Z'), []);
+    assertEquals(plan(base, '2026-10-13T01:00:00Z', { ...settings, missing_enabled: false }), []);
+    // An unknown site (another org's, or inactive) is skipped.
+    assertEquals(plan({ ...base, site_id: 'site-x' }, '2026-10-13T01:00:00Z'), []);
+    // W2-06 (docs/AUDIT_BACKLOG.md "Site-days created on non-working days…"): a Saturday
+    // site-day made by a stray upload or STOP is never escalated.
+    const saturday = { ...base, date: '2026-10-10', deadline_at: '2026-10-10T22:30:00.000Z' };
+    assertEquals(plan(saturday, '2026-10-11T01:00:00Z'), []);
+    assertEquals(
+      plan(saturday, '2026-10-11T01:00:00Z', { ...settings, working_days: [1, 2, 3, 4, 5, 6] }),
+      ['sd-1'],
+    );
+  },
+);
+
+// ── W2-06: the reminder ladder (planLadder → claim_site_day_reminder) ─────────────────────────────
+
+const US = demoPack('US');
+// The TR pack with Turkish on (§19 Q378 turned it off; its Turkish texts stay built).
+const TR = toCountryPack(demoCountriesFor(true).find((c) => c.code === 'TR')!);
+
+function orgOf(id: string, over: Partial<OrgInput> = {}): OrgInput {
+  return {
+    id,
+    timezone: 'America/Chicago',
+    billing_status: 'active',
+    past_due_since: null,
+    settings,
+    units: 'imperial',
+    ...over,
+  };
+}
+
+function rep(id: string, over: Partial<LadderReporter> = {}): LadderReporter {
+  return {
+    id,
+    org_id: 'org-1',
+    name: id,
+    status: 'active',
+    contact_pref: 'link',
+    message_channel: null,
+    locale: 'en-US',
+    ...over,
+  };
+}
+
+function dayOf(
+  date: string,
+  tz = 'America/Chicago',
+  over: Partial<SiteDayInput> = {},
+): SiteDayInput {
+  return {
+    id: `sd-${date}`,
+    site_id: 'site-1',
+    date,
+    status: 'pending',
+    deadline_at: deadlineInstant(date, '17:30', tz).toISOString(),
+    reminder_stage: 0,
+    reminders_paused: false,
+    weather: null,
+    ...over,
+  };
+}
+
+interface World {
+  sites: SiteInput[];
+  orgs: Map<string, OrgInput>;
+  packs: Map<string, CountryPack>;
+  days: SiteDayInput[];
+  links: Array<{ site_id: string; reporter_id: string; is_primary: boolean }>;
+  reporters: Map<string, LadderReporter>;
+  /** W3-17: reporters holding their own auto_call consent. */
+  autoCall?: Set<string>;
+}
+
+function world(over: Partial<World> = {}): World {
+  return {
+    sites: [site],
+    orgs: new Map([['org-1', orgOf('org-1')]]),
+    packs: new Map([['org-1', US]]),
+    days: [dayOf('2026-10-12')],
+    links: [{ site_id: 'site-1', reporter_id: 'priya', is_primary: true }],
+    reporters: new Map([['priya', rep('priya')]]),
+    ...over,
+  };
+}
+
+/** What a tick sent: "<local time> <reporter> <key>" (site time), plus the skips and the claims. */
+interface Sent {
+  at: string;
+  siteDayId: string;
+  reporter: string;
+  key: string;
+}
+
+/**
+ * Every 5-minute tick of a day through planLadder and planMissing, with the claim RPC's rules in
+ * TS (stage once, the daily link once, status pending/reminded, R1 → reminded); `onTick` may
+ * change the world (a filing). Times are UTC instants; `at` is the site's wall clock.
+ */
+function simulateLadder(
+  w: World,
+  fromIso: string,
+  toIso: string,
+  onTick: (now: Date, w: World) => void = () => {},
+): {
+  sent: Sent[];
+  skipped: Array<{ stage: string; reporter: string; reason: string }>;
+  missing: string[];
+  steps: LadderStep[];
+} {
+  const sent: Sent[] = [];
+  const skipped: Array<{ stage: string; reporter: string; reason: string }> = [];
+  const missing: string[] = [];
+  const allSteps: LadderStep[] = [];
+  const dailyLinkDone = new Set<string>();
+  for (let t = Date.parse(fromIso); t <= Date.parse(toIso); t += 300_000) {
+    const now = new Date(t);
+    onTick(now, w);
+    const steps = planLadder({
+      sites: w.sites,
+      orgs: w.orgs,
+      packs: w.packs,
+      todaysSiteDays: w.days,
+      links: w.links,
+      reporters: w.reporters,
+      dailyLinkDone,
+      now,
+      ...(w.autoCall ? { autoCall: w.autoCall } : {}),
+    });
+    for (const step of steps) {
+      const sd = w.days.find((d) => d.id === step.siteDayId)!;
+      // claim_site_day_reminder()'s guarded claim
+      if (sd.status !== 'pending' && sd.status !== 'reminded') continue;
+      if (step.stage === 'daily_link') {
+        if (dailyLinkDone.has(sd.id) || sd.reminder_stage >= 2) continue;
+        dailyLinkDone.add(sd.id);
+      } else {
+        const n = { heads_up: 1, reminder_1: 2, reminder_2: 3 }[step.stage];
+        if (sd.reminder_stage >= n) continue;
+        sd.reminder_stage = n;
+        if (n >= 2) sd.status = 'reminded';
+      }
+      allSteps.push(step);
+      const tz = w.sites.find((x) => x.id === step.siteId)!.timezone;
+      const args = claimArgs(step, () => ({}));
+      for (const m of args.messages) {
+        sent.push({
+          at: new Intl.DateTimeFormat('en-GB', {
+            timeZone: tz,
+            hour: '2-digit',
+            minute: '2-digit',
+          }).format(now),
+          siteDayId: sd.id,
+          reporter: m.reporterId,
+          key: m.key,
+        });
+      }
+      for (const c of args.calls) {
+        sent.push({
+          at: new Intl.DateTimeFormat('en-GB', {
+            timeZone: tz,
+            hour: '2-digit',
+            minute: '2-digit',
+          }).format(now),
+          siteDayId: sd.id,
+          reporter: c.reporterId,
+          key: `call (gives up ${c.giveUpAt})`,
+        });
+      }
+      for (const k of args.skipped)
+        skipped.push({ stage: step.stage, reporter: k.reporterId, reason: k.reason });
+    }
+    for (const mark of planMissing({ sites: w.sites, orgs: w.orgs, todaysSiteDays: w.days, now })) {
+      const sd = w.days.find((d) => d.id === mark.siteDayId)!;
+      sd.status = 'missing';
+      sd.reminder_stage = 4;
+      missing.push(now.toISOString());
+    }
+  }
+  return { sent, skipped, missing, steps: allSteps };
+}
+
+const line = (s: Sent) => `${s.at} ${s.reporter} ${s.key}`;
+
+Deno.test(
+  'planLadder: a whole day, each stage once (daily link, heads-up, R1, R2, then missing)',
+  () => {
+    const w = world({ days: [dayOf('2026-10-12', 'America/Chicago', { weather: rainy })] });
+    const r = simulateLadder(w, '2026-10-12T11:00:00Z', '2026-10-13T04:55:00Z');
+    assertEquals(r.sent.map(line), [
+      '16:55 priya weather_headsup',
+      '17:00 priya daily_link',
+      '17:45 priya reminder_1',
+      '18:30 priya reminder_2',
+    ]);
+    assertEquals(r.missing, ['2026-10-13T00:00:00.000Z']); // 19:00 Chicago
+    assertEquals([w.days[0]!.status, w.days[0]!.reminder_stage], ['missing', 4]);
+  },
+);
+
+Deno.test(
+  'planLadder: no heads-up without observed weather; a filing at 17:50 stops R2 and missing',
+  () => {
+    const w = world({ days: [dayOf('2026-10-12', 'America/Chicago', { weather: dry })] });
+    const r = simulateLadder(w, '2026-10-12T11:00:00Z', '2026-10-13T04:55:00Z', (now, w) => {
+      if (now.toISOString() === '2026-10-12T22:50:00.000Z') w.days[0]!.status = 'filed';
+    });
+    assertEquals(r.sent.map(line), ['17:00 priya daily_link', '17:45 priya reminder_1']);
+    assertEquals(r.missing, []);
+  },
+);
+
+Deno.test(
+  'planLadder: guards — paused, not waiting, non-working day, billing-blocked, paused site',
+  () => {
+    const at = new Date('2026-10-12T22:46:00Z'); // 17:46 Chicago: R1 due (daily link done)
+    const plan = (w: World) =>
+      planLadder({
+        sites: w.sites,
+        orgs: w.orgs,
+        packs: w.packs,
+        todaysSiteDays: w.days,
+        links: w.links,
+        reporters: w.reporters,
+        dailyLinkDone: new Set(w.days.map((d) => d.id)),
+        now: at,
+      }).map((s) => s.stage);
+    assertEquals(plan(world()), ['reminder_1']);
+    assertEquals(
+      plan(world({ days: [dayOf('2026-10-12', 'America/Chicago', { reminders_paused: true })] })),
+      [],
+    );
+    for (const status of ['processing', 'filed', 'missing', 'no_work', 'weather_day'] as const) {
+      assertEquals(
+        plan(world({ days: [dayOf('2026-10-12', 'America/Chicago', { status })] })),
+        [],
+        status,
+      );
+    }
+    // Saturday (docs/AUDIT_BACKLOG.md "Site-days created on non-working days…").
+    const saturday = dayOf('2026-10-10');
+    assertEquals(
+      planLadder({
+        ...world(),
+        todaysSiteDays: [saturday],
+        dailyLinkDone: new Set(),
+        now: new Date('2026-10-10T22:46:00Z'),
+      }),
+      [],
+    );
+    // Billing-blocked org (canceled), and a site the tick did not load (paused, or archived).
+    assertEquals(
+      plan(world({ orgs: new Map([['org-1', orgOf('org-1', { billing_status: 'canceled' })]]) })),
+      [],
+    );
+    assertEquals(plan(world({ sites: [] })), []);
+    // A stage already run is not planned again; the daily link only while it is not done.
+    assertEquals(
+      plan(
+        world({
+          days: [dayOf('2026-10-12', 'America/Chicago', { reminder_stage: 2, status: 'reminded' })],
+        }),
+      ),
+      [],
+    );
+  },
+);
+
+Deno.test(
+  'planLadder: targets are site_reporters, per reporter, primary first; a phone in two orgs gets each org’s',
+  () => {
+    // Priya's phone is a reporter in org 1 (site-1) and, as another reporter row, in org 2 (site-2).
+    const site2: SiteInput = { ...site, id: 'site-2', org_id: 'org-2', name: 'Harbor View' };
+    const w = world({
+      sites: [site, site2],
+      orgs: new Map([
+        ['org-1', orgOf('org-1')],
+        ['org-2', orgOf('org-2')],
+      ]),
+      packs: new Map([
+        ['org-1', US],
+        ['org-2', US],
+      ]),
+      days: [dayOf('2026-10-12'), { ...dayOf('2026-10-12'), id: 'sd-2', site_id: 'site-2' }],
+      links: [
+        { site_id: 'site-1', reporter_id: 'luis', is_primary: false },
+        { site_id: 'site-1', reporter_id: 'priya-a', is_primary: true },
+        { site_id: 'site-2', reporter_id: 'priya-b', is_primary: true },
+        // A link to another org's reporter is ignored (docs/AUDIT_BACKLOG.md, site_reporters).
+        { site_id: 'site-2', reporter_id: 'luis', is_primary: false },
+      ],
+      reporters: new Map([
+        ['priya-a', rep('priya-a')],
+        ['priya-b', rep('priya-b', { org_id: 'org-2' })],
+        ['luis', rep('luis')],
+      ]),
+    });
+    const r = simulateLadder(w, '2026-10-12T21:55:00Z', '2026-10-12T22:50:00Z');
+    assertEquals(
+      r.sent.map((s) => `${s.at} ${s.siteDayId} ${s.reporter} ${s.key}`),
+      [
+        '17:00 sd-2026-10-12 priya-a daily_link',
+        '17:00 sd-2026-10-12 luis daily_link',
+        '17:00 sd-2 priya-b daily_link',
+        '17:45 sd-2026-10-12 priya-a reminder_1',
+        '17:45 sd-2026-10-12 luis reminder_1',
+        '17:45 sd-2 priya-b reminder_1',
+      ],
+    );
+    assertEquals(
+      siteLadderReporters(site, w.links, w.reporters).map((x) => x.id),
+      ['priya-a', 'luis'],
+    );
+  },
+);
+
+Deno.test('planLadder: a reporter of two sites gets one message per site (F14)', () => {
+  const site2: SiteInput = { ...site, id: 'site-2', name: 'Riverside B' };
+  const w = world({
+    sites: [site, site2],
+    days: [dayOf('2026-10-12'), { ...dayOf('2026-10-12'), id: 'sd-2', site_id: 'site-2' }],
+    links: [
+      { site_id: 'site-1', reporter_id: 'priya', is_primary: true },
+      { site_id: 'site-2', reporter_id: 'priya', is_primary: true },
+    ],
+  });
+  const r = simulateLadder(w, '2026-10-12T22:00:00Z', '2026-10-12T22:00:00Z');
+  assertEquals(
+    r.sent.map((s) => `${s.siteDayId} ${s.key}`),
+    ['sd-2026-10-12 daily_link', 'sd-2 daily_link'],
+  );
+});
+
+Deno.test(
+  'planLadder: remind() per reporter — inactive skipped, call reporters get the daily link (Q76)',
+  () => {
+    const w = world({
+      links: [
+        { site_id: 'site-1', reporter_id: 'priya', is_primary: true },
+        { site_id: 'site-1', reporter_id: 'jorge', is_primary: false },
+        { site_id: 'site-1', reporter_id: 'dana', is_primary: false },
+      ],
+      reporters: new Map([
+        ['priya', rep('priya', { contact_pref: 'call' })],
+        ['jorge', rep('jorge', { status: 'invited' })],
+        ['dana', rep('dana', { status: 'opted_out' })],
+      ]),
+    });
+    const r = simulateLadder(w, '2026-10-12T22:00:00Z', '2026-10-12T22:45:00Z');
+    assertEquals(r.sent.map(line), ['17:00 priya daily_link', '17:45 priya reminder_1']);
+    assertEquals(r.skipped, [
+      { stage: 'daily_link', reporter: 'dana', reason: 'inactive' },
+      { stage: 'daily_link', reporter: 'jorge', reason: 'inactive' },
+      { stage: 'reminder_1', reporter: 'dana', reason: 'inactive' },
+      { stage: 'reminder_1', reporter: 'jorge', reason: 'inactive' },
+    ]);
+  },
+);
+
+Deno.test(
+  'planLadder W3-17: a call reporter with auto_call gets call_coming, the R1 call, the R2 call and message',
+  () => {
+    const kevin = rep('kevin', { contact_pref: 'call' });
+    const trunk = {
+      ...US,
+      voiceNumber: '+15550142290' as CountryPack['voiceNumber'],
+      outboundTrunkId: 'ST_abc123',
+    };
+    const calls = (w: World) =>
+      simulateLadder(w, '2026-10-12T22:00:00Z', '2026-10-12T23:35:00Z').sent.map(line);
+    const base = {
+      links: [{ site_id: 'site-1', reporter_id: 'kevin', is_primary: true }],
+      reporters: new Map([['kevin', kevin]]),
+      autoCall: new Set(['kevin']),
+    };
+    const expected = [
+      '17:00 kevin call_coming',
+      '17:45 kevin call (gives up 2026-10-12T23:15:00.000Z)',
+      '18:30 kevin reminder_2',
+      '18:30 kevin call (gives up 2026-10-13T00:00:00.000Z)',
+    ];
+    // A pack with an outbound trunk here (§19 Q125).
+    assertEquals(calls(world({ ...base, packs: new Map([['org-1', trunk]]) })), expected);
+    // A demo org without a trunk: the console telephony (§19 Q132).
+    assertEquals(
+      calls(world({ ...base, orgs: new Map([['org-1', orgOf('org-1', { is_demo: true })]]) })),
+      expected,
+    );
+    // A real org without a trunk: the messages (§19 Q38, Q76).
+    assertEquals(calls(world(base)), [
+      '17:00 kevin daily_link',
+      '17:45 kevin reminder_1',
+      '18:30 kevin reminder_2',
+    ]);
+    // No auto_call of their own (§19 Q131): the messages.
+    assertEquals(
+      calls(world({ ...base, autoCall: new Set(), packs: new Map([['org-1', trunk]]) })),
+      ['17:00 kevin daily_link', '17:45 kevin reminder_1', '18:30 kevin reminder_2'],
+    );
+    // "Don't call me today" (§19 Q129): the messages.
+    assertEquals(
+      calls(
+        world({
+          ...base,
+          packs: new Map([['org-1', trunk]]),
+          reporters: new Map([
+            [
+              'kevin',
+              rep('kevin', { contact_pref: 'call', no_calls_until: '2026-10-13T05:00:00Z' }),
+            ],
+          ]),
+        }),
+      ),
+      ['17:00 kevin daily_link', '17:45 kevin reminder_1', '18:30 kevin reminder_2'],
+    );
+    // second_call_enabled off: R2 is the message only.
+    assertEquals(
+      calls(
+        world({
+          ...base,
+          packs: new Map([['org-1', trunk]]),
+          orgs: new Map([
+            ['org-1', orgOf('org-1', { settings: { ...settings, second_call_enabled: false } })],
+          ]),
+        }),
+      ),
+      ['17:00 kevin call_coming', expected[1]!, '18:30 kevin reminder_2'],
+    );
+  },
+);
+
+Deno.test(
+  'planLadder W4-05: a changed call window (Settings → Field channels) moves the next R1 call',
+  () => {
+    const trunk = {
+      ...US,
+      voiceNumber: '+15550142290' as CountryPack['voiceNumber'],
+      outboundTrunkId: 'ST_abc123',
+    };
+    const withWindow = (start: string, end: string) =>
+      orgOf('org-1', {
+        settings: { ...settings, call_window_start: start, call_window_end: end },
+      });
+    const base = {
+      links: [{ site_id: 'site-1', reporter_id: 'kevin', is_primary: true }],
+      reporters: new Map([['kevin', rep('kevin', { contact_pref: 'call' })]]),
+      autoCall: new Set(['kevin']),
+      packs: new Map([['org-1', trunk]]),
+    };
+    const run = (w: World, onTick?: (now: Date, w: World) => void) =>
+      simulateLadder(w, '2026-10-12T22:00:00Z', '2026-10-12T23:35:00Z', onTick);
+
+    // The window ends at 17:30: no call at R1 (17:45) or R2, and the quiet hours skip their texts.
+    const early = run(
+      world({ ...base, orgs: new Map([['org-1', withWindow('07:00:00', '17:30:00')]]) }),
+    );
+    assertEquals(early.sent.map(line), ['17:00 kevin daily_link']);
+    assertEquals(
+      early.skipped.map((k) => `${k.stage} ${k.reason}`),
+      ['reminder_1 quiet_hours', 'reminder_2 quiet_hours'],
+    );
+
+    // The admin widens it to 20:00 at 17:10: the next tick reads it, and R1 is a call at 17:45.
+    const widened = run(
+      world({ ...base, orgs: new Map([['org-1', withWindow('07:00:00', '17:30:00')]]) }),
+      (now, w) => {
+        if (now.toISOString() === '2026-10-12T22:10:00.000Z')
+          w.orgs = new Map([['org-1', withWindow('07:00:00', '20:00:00')]]);
+      },
+    );
+    assertEquals(widened.sent.map(line), [
+      '17:00 kevin daily_link',
+      '17:45 kevin call (gives up 2026-10-12T23:15:00.000Z)',
+      '18:30 kevin reminder_2',
+      '18:30 kevin call (gives up 2026-10-13T00:00:00.000Z)',
+    ]);
+
+    // A window that opens at 18:00: R1 (17:45) is quiet, the first call moves to R2 (18:30).
+    const late = run(
+      world({ ...base, orgs: new Map([['org-1', withWindow('18:00:00', '20:00:00')]]) }),
+    );
+    assertEquals(late.sent.map(line), [
+      '18:30 kevin reminder_2',
+      '18:30 kevin call (gives up 2026-10-13T00:00:00.000Z)',
+    ]);
+  },
+);
+
+Deno.test('ladderVars: call_coming says the R1 time and carries the link (§19 Q130)', () => {
+  const vars = ladderVars('call_coming', {
+    siteName: 'Northgate',
+    link: 'https://field.example/r/abc123',
+    voiceNumber: null,
+    deadlineAt: new Date('2026-10-12T22:30:00Z'),
+    missingAt: new Date('2026-10-13T00:00:00Z'),
+    reminder1At: new Date('2026-10-12T22:45:00Z'),
+    tz: 'America/Chicago',
+    weather: null,
+    locale: 'en-US',
+    units: 'imperial',
+  });
+  assertEquals(vars, { time: '17:45', link: 'https://field.example/r/abc123' });
+});
+
+Deno.test(
+  'planLadder: quiet hours (Q77) — the stage is claimed, its messages skipped; notAfter is the window end',
+  () => {
+    const w = world({
+      orgs: new Map([
+        [
+          'org-1',
+          orgOf('org-1', {
+            settings: { ...settings, call_window_start: '07:00:00', call_window_end: '17:30:00' },
+          }),
+        ],
+      ]),
+    });
+    const r = simulateLadder(w, '2026-10-12T22:00:00Z', '2026-10-12T23:35:00Z');
+    assertEquals(r.sent.map(line), ['17:00 priya daily_link']);
+    assertEquals(r.skipped, [
+      { stage: 'reminder_1', reporter: 'priya', reason: 'quiet_hours' },
+      { stage: 'reminder_2', reporter: 'priya', reason: 'quiet_hours' },
+    ]);
+    // The 17:00 job may not go out after 17:30 Chicago (22:30Z).
+    assertEquals(r.steps[0]!.notAfter?.toISOString(), '2026-10-12T22:30:00.000Z');
+    // The default window (07:00–20:00) ends at 20:00 Chicago (01:00Z).
+    const d = simulateLadder(world(), '2026-10-12T22:00:00Z', '2026-10-12T22:00:00Z');
+    assertEquals(d.steps[0]!.notAfter?.toISOString(), '2026-10-13T01:00:00.000Z');
+  },
+);
+
+Deno.test('planLadder: after an outage the daily link, then only the latest stage', () => {
+  // The first tick at 17:46 (the plan's e2e clock): the daily link, then R1.
+  const first = simulateLadder(world(), '2026-10-12T22:46:00Z', '2026-10-12T22:46:00Z');
+  assertEquals(first.sent.map(line), ['17:46 priya daily_link', '17:46 priya reminder_1']);
+  const r = simulateLadder(world(), '2026-10-12T23:35:00Z', '2026-10-12T23:35:00Z'); // 18:35 Chicago
+  assertEquals(r.sent.map(line), ['18:35 priya daily_link', '18:35 priya reminder_2']);
+  // At 19:05 the missing step is due: no reminder, the office is told.
+  const late = simulateLadder(world(), '2026-10-13T00:05:00Z', '2026-10-13T00:05:00Z');
+  assertEquals(late.sent, []);
+  assertEquals(late.missing, ['2026-10-13T00:05:00.000Z']);
+});
+
+const allDays = { ...settings, working_days: [1, 2, 3, 4, 5, 6, 7] };
+
+for (const [tz, date, pack, expected] of [
+  // America/Chicago: spring forward Sun 2026-03-08 (UTC−5 after), fall back Sun 2026-11-01 (UTC−6).
+  ['America/Chicago', '2026-03-07', US, ['23:00', '23:45', '00:30', '01:00']],
+  ['America/Chicago', '2026-03-08', US, ['22:00', '22:45', '23:30', '00:00']],
+  ['America/Chicago', '2026-10-31', US, ['22:00', '22:45', '23:30', '00:00']],
+  ['America/Chicago', '2026-11-01', US, ['23:00', '23:45', '00:30', '01:00']],
+  // Europe/Istanbul: UTC+3 all year; the EU change days (Mar 29, Oct 25) move nothing.
+  ['Europe/Istanbul', '2026-03-28', TR, ['14:00', '14:45', '15:30', '16:00']],
+  ['Europe/Istanbul', '2026-03-29', TR, ['14:00', '14:45', '15:30', '16:00']],
+  ['Europe/Istanbul', '2026-10-24', TR, ['14:00', '14:45', '15:30', '16:00']],
+  ['Europe/Istanbul', '2026-10-25', TR, ['14:00', '14:45', '15:30', '16:00']],
+] as const) {
+  Deno.test(`planLadder DST: ${tz} ${date} — 17:00, 17:45, 18:30 and 19:00 at the site`, () => {
+    const s: SiteInput = { ...site, timezone: tz };
+    const w = world({
+      sites: [s],
+      orgs: new Map([['org-1', orgOf('org-1', { timezone: tz, settings: allDays })]]),
+      packs: new Map([['org-1', pack]]),
+      days: [dayOf(date, tz)],
+      reporters: new Map([['priya', rep('priya', { locale: pack === TR ? 'tr-TR' : 'en-US' })]]),
+    });
+    const start = new Date(deadlineInstant(date, '06:00', tz).getTime());
+    const end = new Date(deadlineInstant(date, '23:55', tz).getTime());
+    const r = simulateLadder(w, start.toISOString(), end.toISOString());
+    assertEquals(r.sent.map(line), [
+      '17:00 priya daily_link',
+      '17:45 priya reminder_1',
+      '18:30 priya reminder_2',
+    ]);
+    const utc = (i: number) => r.steps[i]!.deadlineAt; // all steps share the deadline
+    assertEquals(utc(0).toISOString(), deadlineInstant(date, '17:30', tz).toISOString());
+    assertEquals(r.missing.length, 1);
+    assertEquals(r.missing[0]!.slice(11, 16), expected[3]);
+    assertEquals(
+      r.steps.map((x) => x.stage),
+      ['daily_link', 'reminder_1', 'reminder_2'],
+    );
+    assertEquals(
+      [
+        deadlineInstant(date, '17:00', tz),
+        deadlineInstant(date, '17:45', tz),
+        deadlineInstant(date, '18:30', tz),
+      ].map((d) => d.toISOString().slice(11, 16)),
+      expected.slice(0, 3),
+    );
+  });
+}
+
+Deno.test(
+  'ladderVars: §9.2 variables per key; the heads-up in the reporter’s language and the org’s units',
+  () => {
+    const base = {
+      siteName: 'Elm St. Townhomes',
+      link: 'https://go.talkolog.com/r/ABCDEFGHJKMN',
+      voiceNumber: null,
+      deadlineAt: new Date('2026-10-12T22:30:00Z'),
+      missingAt: new Date('2026-10-13T00:00:00Z'),
+      tz: 'America/Chicago',
+      weather: rainy,
+      locale: 'en-US',
+      units: 'imperial' as const,
+    };
+    assertEquals(ladderVars('daily_link', base), { site: 'Elm St. Townhomes', link: base.link });
+    assertEquals(
+      ladderVars('daily_link', { ...base, voiceNumber: '+15550100000' }).number !== undefined,
+      true,
+    );
+    assertEquals(ladderVars('reminder_1', base), { site: 'Elm St. Townhomes', link: base.link });
+    assertEquals(ladderVars('reminder_2', base), { time: '19:00', link: base.link });
+    assertEquals(ladderVars('weather_headsup', base), {
+      deadline: '17:30',
+      weather_phrase: 'It rained this morning (0.4 in)',
+    });
+    assertEquals(
+      ladderVars('weather_headsup', { ...base, locale: 'es-US' }).weather_phrase,
+      'Llovió esta mañana (0.4 in)',
+    );
+    assertEquals(
+      ladderVars('weather_headsup', {
+        ...base,
+        locale: 'tr-TR',
+        units: 'metric',
+        tz: 'Europe/Istanbul',
+      }),
+      { deadline: '01:30', weather_phrase: 'Bu sabah yağmur yağdı (10,2 mm)' },
+    );
+    assertThrows(() => ladderVars('reminder_1', { ...base, link: null }));
+  },
+);

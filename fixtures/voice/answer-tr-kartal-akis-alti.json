@@ -1,0 +1,24 @@
+{
+  "id": "answer-tr-kartal-akis-alti",
+  "description": "Turkish. Emre Yıldız (tr) answers the Akış Mekanik headcount question of the Kartal call (W4-07): six people, a full day. The answer case fixtures/answers/tr-akis-alti.",
+  "kind": "answer",
+  "audio": null,
+  "mime": "audio/webm;codecs=opus",
+  "site": "Kartal Konutları — B Blok",
+  "reporter": {
+    "locale": "tr-TR",
+    "languages": ["tr"]
+  },
+  "transcriptionLanguage": "tr",
+  "expectedLanguage": "tr",
+  "goldenCase": null,
+  "durationS": 2.1,
+  "text": "Altı kişi, tam gün.",
+  "segments": [
+    {
+      "start": 0,
+      "end": 1.8,
+      "text": "Altı kişi, tam gün."
+    }
+  ]
+}

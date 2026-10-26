@@ -8,6 +8,7 @@ import type { Database } from '@sitelog/shared/db/types.ts';
 import { fromZonedTime } from 'date-fns-tz';
 import type {
   AuditLogRow,
+  CallRow,
   CompanyRow,
   EvidencePackRow,
   GlossaryTermRow,
@@ -16,6 +17,7 @@ import type {
   OrgMemberRow,
   OrgRow,
   OrgSettingsRow,
+  QuestionRow,
   ReportArchiveRow,
   ReportRow,
   ReportSourceRow,
@@ -23,34 +25,67 @@ import type {
   ReporterRow,
   SiteDayRow,
   SiteRecipientRow,
+  SiteOptionRow,
   SiteReporterRow,
   SiteRow,
   SubInvoiceRow,
   TranscriptRow,
-  UnknownSenderRow,
+  UnknownContactRow,
+  UploadRow,
   CurrentManpowerRow,
   CurrentWeatherRow,
   OpsCostOutlierRow,
+  OpsUnknownContactRow,
+  OpsOrgBillingRow,
   OpsDeadJobRow,
+  OpsOutboundCallShareRow,
   OpsQueueStatRow,
 } from '@sitelog/shared/db/types.ts';
 import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
-import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import { addDays, formatDateInTz, isoWeekOf, isoWeekRange } from '@sitelog/shared/format.ts';
 import { logoStoragePath, pdfStoragePath } from '@sitelog/shared/report/numbering.ts';
+import { invoiceUploadPath } from '@sitelog/shared/invoices.ts';
+import { mergeDemoPhoneCalls } from '../demoPhoneCalls';
+import { toCountryPack, type CountryPack } from '@sitelog/shared/countries.ts';
+import {
+  OFFICE_CALL_POLICY,
+  type OfficeCallStart,
+  type SettingsTestCallStart,
+} from '@sitelog/shared/voice-outbound.ts';
+import { TEAM_RPC_CODES } from '../types';
+import type { CountryRow } from '@sitelog/shared/db/types.ts';
+import type { OrgLocale } from '@sitelog/shared/locale.ts';
 import {
   officePhotoStoragePath,
   type OfficePhotoMime,
   type OfficePhotoUpload,
 } from '@sitelog/shared/report/photos.ts';
+import {
+  isVoiceSourceKind,
+  mediaOf,
+  sourceMediaId,
+  transcriptMediaId,
+} from '@sitelog/shared/report/media.ts';
 import { copy } from '@/copy/en';
+import { captureError } from '@/lib/sentry';
+import { signInEmailData } from '@/auth/emailLanguage';
+import type { PanelLanguage } from '@/i18n/language';
+import {
+  billingAlert,
+  billingPrice,
+  type BillingPrice,
+  type BillingStatus,
+} from '@sitelog/shared/billing.ts';
+import { translate } from '@/i18n/useCopy';
 import { functionsUrl } from '@/lib/env';
 import { rasterizeSvgLogo } from '@/lib/logo';
 import { randomUuid } from '@/lib/photos';
 import type { Db } from '@/lib/supabase';
-import { errorMessage, uniq } from '@/lib/utils';
+import { CodedError, errorMessage, uniq, uniqBy } from '@/lib/utils';
 import {
   assembleBilling,
+  pastDueSinceFrom,
   assembleGlossary,
   assembleHours,
   assembleNavBadges,
@@ -72,6 +107,7 @@ import {
 } from '../assemble';
 import {
   PDF_EXPORT_LIMIT,
+  TEAM_TEXTS_AGAIN_VERSION,
   type AddGlossaryTermInput,
   type AddInvoiceInput,
   type CreateOfficeReportInput,
@@ -81,6 +117,7 @@ import {
   type DataSource,
   type InviteReporterInput,
   type LinkUnknownSenderInput,
+  type OfficeCallNowInput,
   type PdfLink,
   type PdfLinkBatch,
   type PdfSelection,
@@ -90,6 +127,11 @@ import {
   type SaveReportPdfInput,
   type SourceUser,
   type UpdateOrgInput,
+  type SendTestMessageInput,
+  type SendTestMessageResult,
+  type CallMeNowInput,
+  type CallMeNowResult,
+  type UpdateReporterContactInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
   type UploadedPhoto,
@@ -97,11 +139,18 @@ import {
 import type {
   BillingData,
   ChangeEvent,
+  DemoPhoneData,
+  DemoPhoneEmail,
+  DemoPhoneMessage,
   OpsData,
+  OpsOrgBilling,
   OrgSettingsPatch,
   OrgSummary,
+  OrglessContacts,
   ReportFilters,
   SearchResult,
+  TeamReporterState,
+  TextDailyLinkResult,
 } from '../types';
 
 const SIGNED_URL_TTL = 600; // 10 minutes (§15)
@@ -109,6 +158,25 @@ const SIGNED_URL_TTL = 600; // 10 minutes (§15)
 const IN_CHUNK = 100;
 /** Rows per request when reading a whole filtered set, under PostgREST's max_rows (1000). */
 const ARCHIVE_ROWS_PER_REQUEST = 500;
+
+/**
+ * A site as the accounts role reads it (the `site_options` view: §2.2 gives accounts hours and
+ * invoices, so not the `sites` table): the rest of the row is what a site without it would have.
+ */
+function siteFromOption(o: SiteOptionRow): SiteRow {
+  return {
+    ...o,
+    address: null,
+    lat: null,
+    lng: null,
+    deadline: null,
+    working_hours: null,
+    active_since: null,
+    paused_at: null,
+    report_seq: 0,
+    created_at: '',
+  };
+}
 
 function chunks<T>(items: readonly T[], size: number): T[][] {
   const out: T[][] = [];
@@ -138,9 +206,22 @@ async function allPages<T>(
 async function inChunks<T>(
   ids: readonly string[],
   query: (part: string[]) => PromiseLike<T[]>,
+  size = IN_CHUNK,
 ): Promise<T[]> {
   if (!ids.length) return [];
-  return (await Promise.all(chunks(uniq(ids), IN_CHUNK).map((part) => query(part)))).flat();
+  return (await Promise.all(chunks(uniq(ids), size).map((part) => query(part)))).flat();
+}
+
+/**
+ * Ids per `or=(upload_id.in.(…),message_id.in.(…))` filter: the list appears twice in the URL,
+ * so half an IN_CHUNK keeps the request as short as one `.in()` list.
+ */
+const MEDIA_OR_CHUNK = IN_CHUNK / 2;
+
+/** `upload_id` or `message_id` in `ids`: a source's or a transcript's media id (report/media.ts). */
+function mediaIdFilter(ids: readonly string[]): string {
+  const list = ids.join(',');
+  return `upload_id.in.(${list}),message_id.in.(${list})`;
 }
 
 /** Site detail Photos tab: the newest photos of the site, one page under PostgREST max_rows. */
@@ -151,6 +232,7 @@ interface StripeInvoiceSummary {
   id: string;
   date: string;
   amount_cents: number;
+  currency: string;
   status: string | null;
   hosted_invoice_url: string | null;
   sites: number;
@@ -167,7 +249,8 @@ function toBillingInvoice(inv: StripeInvoiceSummary, tz: string): BillingData['i
     id: inv.id,
     date: formatDateInTz(new Date(inv.date), tz),
     sites: inv.sites,
-    amountCents: inv.amount_cents,
+    amountMinor: inv.amount_cents,
+    currency: inv.currency.toUpperCase(),
     status: inv.status === 'paid' ? 'paid' : inv.status === 'uncollectible' ? 'past_due' : 'open',
     url: inv.hosted_invoice_url ?? '',
   };
@@ -197,7 +280,7 @@ function emptyRows(org: OrgRow, settings: OrgSettingsRow): RowSet {
     glossary: [],
     messages: [],
     transcripts: [],
-    unknownSenders: [],
+    unknownContacts: [],
     siteDays: [],
     reports: [],
     versions: [],
@@ -245,28 +328,35 @@ export class SupabaseSource implements DataSource {
     return core.sites.map((s) => s.id);
   }
 
-  /** Rows most pages need; cheap for ≤ 50 sites. Some tables are hidden by RLS for `accounts`. */
+  /**
+   * Rows most pages need; cheap for ≤ 50 sites. Some tables are hidden by RLS for `accounts`,
+   * which reads the site names of Crew hours from `site_options` instead of `sites`.
+   */
   private async core(): Promise<Core> {
     const sb = this.sb;
-    const [org, settings, members, sites, companies] = await Promise.all([
+    const accounts = this.user.role === 'accounts';
+    const [org, settings, members, siteRows, companies] = await Promise.all([
       sb.from('orgs').select('*').eq('id', this.orgId).single(),
       sb.from('org_settings').select('*').eq('org_id', this.orgId).single(),
       sb.from('org_members').select('*').eq('org_id', this.orgId),
-      sb.from('sites').select('*').eq('org_id', this.orgId).order('name'),
+      accounts
+        ? sb
+            .from('site_options')
+            .select('*')
+            .eq('org_id', this.orgId)
+            .order('name')
+            .then((r) => unwrap(r).map(siteFromOption))
+        : sb.from('sites').select('*').eq('org_id', this.orgId).order('name').then(unwrap),
       sb.from('companies').select('*').eq('org_id', this.orgId).order('name'),
     ]);
-    const siteRows = unwrap(sites);
     const ids = siteRows.map((s) => s.id);
-    const [reporters, siteReporters, recipients] =
-      this.user.role === 'accounts'
-        ? [[], [], []]
-        : await Promise.all([
-            sb.from('reporters').select('*').eq('org_id', this.orgId).then(unwrap),
-            ids.length ? sb.from('site_reporters').select('*').in('site_id', ids).then(unwrap) : [],
-            ids.length
-              ? sb.from('site_recipients').select('*').in('site_id', ids).then(unwrap)
-              : [],
-          ]);
+    const [reporters, siteReporters, recipients] = accounts
+      ? [[], [], []]
+      : await Promise.all([
+          sb.from('reporters').select('*').eq('org_id', this.orgId).then(unwrap),
+          ids.length ? sb.from('site_reporters').select('*').in('site_id', ids).then(unwrap) : [],
+          ids.length ? sb.from('site_recipients').select('*').in('site_id', ids).then(unwrap) : [],
+        ]);
     return {
       org: unwrapOne<OrgRow>(org),
       settings: unwrapOne<OrgSettingsRow>(settings),
@@ -387,13 +477,18 @@ export class SupabaseSource implements DataSource {
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       let message = text;
+      let code: string | null = null;
       try {
-        const body = JSON.parse(text) as { error?: unknown };
+        const body = JSON.parse(text) as { error?: unknown; details?: unknown };
         if (typeof body.error === 'string' && body.error) message = body.error;
+        // HttpError's `details.code` (api-text-daily-link's 409 no_reporter / no_active_reporter).
+        const details = body.details as { code?: unknown } | null | undefined;
+        if (details && typeof details.code === 'string' && details.code) code = details.code;
       } catch {
         /* plain-text error */
       }
-      throw new Error(message || `${name} failed (${res.status})`);
+      message ||= `${name} failed (${res.status})`;
+      throw code ? new CodedError(code, message) : new Error(message);
     }
     const ct = res.headers.get('content-type') ?? '';
     return (ct.includes('application/json') ? await res.json() : await res.text()) as T;
@@ -417,38 +512,61 @@ export class SupabaseSource implements DataSource {
     const reports = await this.reportsForSiteDays(siteDays.map((d) => d.id));
     const today = formatDateInTz(now, core.org.timezone);
     const { start, sunday } = isoWeekRange(isoWeekOf(today));
-    const [versions, unknownSenders, glossary, invoices, manpower] = await Promise.all([
-      this.currentVersions(reports),
-      this.sb
-        .from('unknown_senders')
-        .select('*')
-        .eq('org_id', this.orgId)
-        .eq('status', 'pending')
-        .then(unwrap),
-      this.sb
-        .from('glossary_terms')
-        .select('*')
-        .eq('org_id', this.orgId)
-        .eq('status', 'needs_review')
-        .then(unwrap),
-      this.sb
-        .from('sub_invoices')
-        .select('*')
-        .eq('org_id', this.orgId)
-        .lte('period_start', sunday)
-        .gte('period_end', start)
-        .then(unwrap),
-      this.manpowerBetween(addDays(start, -7), addDays(sunday, 7)),
-    ]);
+    // Today's texts to reporters: the reminders (Elm St.'s "2 reminders sent") and the ones that
+    // did not arrive (F17 `undeliverable_sms`), from the day before the earliest site day (W1-16).
+    const since = fromZonedTime(`${addDays(dates[0]!, -1)}T00:00:00`, core.org.timezone);
+    const [versions, unknownContacts, glossary, invoices, manpower, messages, notifications] =
+      await Promise.all([
+        this.currentVersions(reports),
+        this.sb
+          .from('unknown_contacts')
+          .select('*')
+          .eq('org_id', this.orgId)
+          .eq('status', 'pending')
+          .then(unwrap),
+        this.sb
+          .from('glossary_terms')
+          .select('*')
+          .eq('org_id', this.orgId)
+          .eq('status', 'needs_review')
+          .then(unwrap),
+        this.sb
+          .from('sub_invoices')
+          .select('*')
+          .eq('org_id', this.orgId)
+          .lte('period_start', sunday)
+          .gte('period_end', start)
+          .then(unwrap),
+        this.manpowerBetween(addDays(start, -7), addDays(sunday, 7)),
+        this.sb
+          .from('messages')
+          .select('*')
+          .eq('org_id', this.orgId)
+          .eq('direction', 'out')
+          .gte('created_at', since.toISOString())
+          .order('created_at', { ascending: true })
+          .limit(1000)
+          .then(unwrap),
+        // Today's missing notices (spec §19 Q55), for "Office alerted at …" (RLS: admin and ops).
+        this.sb
+          .from('notifications')
+          .select('*')
+          .eq('org_id', this.orgId)
+          .eq('kind', 'missing_report')
+          .gte('created_at', since.toISOString())
+          .then(unwrap),
+      ]);
     const rows: RowSet = {
       ...this.rowsFrom(core),
       siteDays,
       reports,
       versions,
-      unknownSenders,
+      unknownContacts,
       glossary,
       invoices,
       manpower,
+      messages,
+      notifications: notifications as NotificationRow[],
     };
     return assembleOverview(rows, this.ctx());
   }
@@ -534,8 +652,10 @@ export class SupabaseSource implements DataSource {
         ),
         this.sitePhotos(siteId, reports, siteDays),
       ]);
+    const calls = await this.recentOutboundCalls(siteId);
     const rows: RowSet = {
       ...this.rowsFrom(core),
+      calls,
       siteDays: [...siteDays, ...photos.siteDays],
       reports: [...reports, ...photos.reports],
       versions,
@@ -544,6 +664,7 @@ export class SupabaseSource implements DataSource {
       questions,
       sources: photos.sources,
       messages: photos.messages,
+      uploads: photos.uploads,
       photoLists: photos.photoLists,
     };
     const detail = assembleSiteDetail(rows, this.ctx(), siteId, month);
@@ -561,8 +682,9 @@ export class SupabaseSource implements DataSource {
   /**
    * The Photos tab shows the site's photos from every report, not only the viewed month's
    * (§11.4): the newest SITE_PHOTO_LIMIT photo sources, plus the reports and site days (for the
-   * report number and date) and messages (for the storage path) that are not loaded yet, and the
-   * current versions' data.photos (which of them each report shows, with what caption).
+   * report number and date) and the files (uploads, else the WhatsApp messages: the storage
+   * path) that are not loaded yet, and the current versions' data.photos (which of them each
+   * report shows, with what caption).
    */
   private async sitePhotos(
     siteId: string,
@@ -573,6 +695,7 @@ export class SupabaseSource implements DataSource {
     reports: ReportRow[];
     siteDays: SiteDayRow[];
     messages: MessageRow[];
+    uploads: UploadRow[];
     photoLists: NonNullable<RowSet['photoLists']>;
   }> {
     const sources: ReportSourceRow[] = unwrap(
@@ -585,17 +708,14 @@ export class SupabaseSource implements DataSource {
         .limit(SITE_PHOTO_LIMIT),
     ).map(({ reports: _site, ...s }) => s);
     if (!sources.length)
-      return { sources, reports: [], siteDays: [], messages: [], photoLists: [] };
+      return { sources, reports: [], siteDays: [], messages: [], uploads: [], photoLists: [] };
     const haveReport = new Set(loadedReports.map((r) => r.id));
-    const [reports, messages] = await Promise.all([
+    const [reports, { messages, uploads }] = await Promise.all([
       inChunks(
         sources.map((s) => s.report_id).filter((id) => !haveReport.has(id)),
         (part) => this.sb.from('reports').select('*').in('id', part).then(unwrap),
       ),
-      inChunks(
-        sources.map((s) => s.message_id),
-        (part) => this.sb.from('messages').select('*').in('id', part).then(unwrap),
-      ),
+      this.sourceFiles(sources),
     ]);
     const haveDay = new Set(loadedSiteDays.map((d) => d.id));
     const current = new Map(
@@ -606,28 +726,68 @@ export class SupabaseSource implements DataSource {
         reports.map((r) => r.site_day_id).filter((id) => !haveDay.has(id)),
         (part) => this.sb.from('site_days').select('*').in('id', part).then(unwrap),
       ),
-      // Only the photos column of each version, not the whole report.
+      // Only the photos of each version (and the data version they are in), not the whole report.
       inChunks(uniq(sources.map((s) => s.report_id)), (part) =>
         this.sb
           .from('report_versions')
-          .select('report_id, version, photos:data->photos')
+          .select('report_id, version, photos:data->photos, schemaVersion:data->schemaVersion')
           .in('report_id', part)
           .then(unwrap),
       ),
     ]);
-    const photoLists = (
-      lists as unknown as Array<{ report_id: string; version: number; photos: unknown }>
-    ).filter((v) => current.get(v.report_id) === v.version);
-    return { sources, reports, siteDays, messages, photoLists };
+    const photoLists = (lists as unknown as NonNullable<RowSet['photoLists']>).filter(
+      (v) => current.get(v.report_id) === v.version,
+    );
+    return { sources, reports, siteDays, messages, uploads, photoLists };
   }
 
   /**
-   * The archive's text search (§P6 "report text + transcripts") as a PostgREST `or` filter over
-   * report_archive: report number, site name, project code and the current version's summary (a
-   * substring, as in the demo), or a transcript of the report matching it (full text). `null`
-   * without a query; `''` when the query has nothing left to search for.
+   * The files of report sources (report/media.ts): the uploads of their media ids (upload_id,
+   * else message_id: one UUID for media the migration backfilled) and the messages of the sources
+   * that have one (WhatsApp media without an upload, and the WhatsApp thread's ids).
    */
-  private async archiveTextFilter(query: string | null | undefined): Promise<string | null> {
+  private async sourceFiles(
+    sources: ReadonlyArray<Pick<ReportSourceRow, 'upload_id' | 'message_id'>>,
+  ): Promise<{ messages: MessageRow[]; uploads: UploadRow[] }> {
+    const [uploads, messages] = await Promise.all([
+      inChunks(
+        sources.flatMap((s) => {
+          const id = sourceMediaId(s);
+          return id ? [id] : [];
+        }),
+        (part) => this.sb.from('uploads').select('*').in('id', part).then(unwrap),
+      ),
+      inChunks(
+        sources.flatMap((s) => (s.message_id ? [s.message_id] : [])),
+        (part) => this.sb.from('messages').select('*').in('id', part).then(unwrap),
+      ),
+    ]);
+    return { messages: messages as MessageRow[], uploads: uploads as UploadRow[] };
+  }
+
+  /** The report_sources rows (selected columns) of these media ids: by upload_id or message_id. */
+  private sourcesOfMedia<T>(ids: readonly string[], columns: string): Promise<T[]> {
+    return inChunks(
+      ids,
+      (part) =>
+        this.sb
+          .from('report_sources')
+          .select(columns)
+          .or(mediaIdFilter(part))
+          .then((r) => unwrap(r) as unknown as T[]),
+      MEDIA_OR_CHUNK,
+    );
+  }
+
+  /**
+   * The archive's text search (§P6 "report text + transcripts"): the query as a literal
+   * substring (`safe`) and the reports whose transcripts match it (full text, at most IN_CHUNK
+   * ids, so a request URL stays well under proxy limits). `null` without a query; `safe: ''` when
+   * the query has nothing left to search for.
+   */
+  private async archiveText(
+    query: string | null | undefined,
+  ): Promise<{ safe: string; ids: string[] } | null> {
     const text = query?.trim();
     if (!text) return null;
     // `,` `(` `)` structure an `or` filter, `"` `\` quote in it, `%` `*` are ilike wildcards.
@@ -635,28 +795,41 @@ export class SupabaseSource implements DataSource {
       .replace(/[,()"\\%*]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    if (!safe) return '';
+    if (!safe) return { safe: '', ids: [] };
     const tr = unwrap(
       await this.sb
         .from('transcripts')
-        .select('message_id')
+        .select('message_id, upload_id')
         .textSearch('text', safe, { type: 'websearch', config: 'english' })
         .limit(IN_CHUNK),
     );
-    const srcs = await inChunks(
-      tr.map((t) => t.message_id),
-      (part) =>
-        this.sb.from('report_sources').select('report_id').in('message_id', part).then(unwrap),
+    // A transcript's voice note: its upload, else its WhatsApp message (report/media.ts).
+    const srcs = await this.sourcesOfMedia<{ report_id: string }>(
+      tr.flatMap((t) => {
+        const id = transcriptMediaId(t);
+        return id ? [id] : [];
+      }),
+      'report_id',
     );
-    // At most IN_CHUNK ids, so the request URL stays well under proxy limits.
-    const ids = uniq(srcs.map((x) => x.report_id)).slice(0, IN_CHUNK);
-    const like = `ilike.%${safe}%`;
+    return { safe, ids: uniq(srcs.map((x) => x.report_id)).slice(0, IN_CHUNK) };
+  }
+
+  /**
+   * The archive's text search as a PostgREST `or` filter over report_archive: report number, site
+   * name, project code and the current version's summary (a substring, as in the demo), or a
+   * transcript of the report matching it. `null` without a query; `''` when the query has nothing
+   * left to search for.
+   */
+  private archiveTextFilter(text: { safe: string; ids: string[] } | null): string | null {
+    if (!text) return null;
+    if (!text.safe) return '';
+    const like = `ilike.%${text.safe}%`;
     return [
       `report_no.${like}`,
       `site_name.${like}`,
       `project_code.${like}`,
       `summary.${like}`,
-      ...(ids.length ? [`id.in.(${ids.join(',')})`] : []),
+      ...(text.ids.length ? [`id.in.(${text.ids.join(',')})`] : []),
     ].join(',');
   }
 
@@ -695,6 +868,9 @@ export class SupabaseSource implements DataSource {
     if (filters.late) q = q.eq('is_late', true);
     if (filters.hasWeatherDelay) q = q.or('lost_hours.gt.0,kind.eq.weather_day');
     if (filters.incident) q = q.eq('has_incident', true);
+    // P6 Channel: Link = the web recorder or SMS (field_channel web, sms), Call = voice.
+    if (filters.channel === 'link') q = q.in('channel', ['web', 'sms']);
+    else if (filters.channel === 'call') q = q.eq('channel', 'voice');
     if (text === '') q = q.in('id', []);
     else if (text) q = q.or(text);
     return q;
@@ -709,54 +885,77 @@ export class SupabaseSource implements DataSource {
       .order('id', { ascending: true });
   }
 
-  /** Lost weather hours over every report matching the filters, not just the page shown. */
-  private async archiveWeatherHours(filters: ReportFilters, text: string | null): Promise<number> {
-    let total = 0;
-    for (let from = 0; ; from += ARCHIVE_ROWS_PER_REQUEST) {
-      const rows = unwrap(
-        await this.archive('id, lost_hours', filters, text)
-          .gt('lost_hours', 0)
-          .order('id', { ascending: true })
-          .range(from, from + ARCHIVE_ROWS_PER_REQUEST - 1),
-      ) as unknown as Array<Pick<ReportArchiveRow, 'id' | 'lost_hours'>>;
-      total += rows.reduce((a, r) => a + Number(r.lost_hours), 0);
-      if (rows.length < ARCHIVE_ROWS_PER_REQUEST) break;
-    }
-    return Math.round(total * 100) / 100;
+  /**
+   * Lost weather hours over every report matching the filters, not just the page shown: one
+   * request, summed in SQL over report_archive with the same filters
+   * (`report_archive_weather_hours`, 20261016000280; audit "'X h lost to weather in this set'
+   * sums only the current page").
+   */
+  private async archiveWeatherHours(
+    filters: ReportFilters,
+    text: { safe: string; ids: string[] } | null,
+  ): Promise<number> {
+    if (text && !text.safe) return 0;
+    const status = filters.status && filters.status !== 'all' ? filters.status : null;
+    const total = await this.rpc('report_archive_weather_hours', {
+      p_org: this.orgId,
+      p_site: filters.siteId ?? null,
+      p_from: filters.from ?? null,
+      p_to: filters.to ?? null,
+      p_status: status,
+      p_edited: !!filters.edited,
+      p_late: !!filters.late,
+      p_has_weather_delay: !!filters.hasWeatherDelay,
+      p_incident: !!filters.incident,
+      p_channel: filters.channel ?? null,
+      p_text: text?.safe ?? null,
+      p_ids: text?.ids.length ? text.ids : null,
+    });
+    return Math.round(Number(total ?? 0) * 100) / 100;
   }
 
   /**
-   * The versions an archive page needs, without their data: the current one (its PDF) and
-   * version 1 (who wrote it: a typed report stays the office's after an edit, it does not become
-   * the site manager's). assembleReportItems reads only these columns.
+   * The versions an archive page needs, without their data: the current one (its PDF and its
+   * photo list, for the "No photo" flag) and version 1 (who wrote it: a typed report stays the
+   * office's after an edit, it does not become the site manager's). assembleReportItems reads
+   * only these columns; the photo lists go to RowSet.photoLists.
    */
-  private async archiveVersions(reports: ReportRow[]): Promise<ReportVersionRow[]> {
+  private async archiveVersions(
+    reports: ReportRow[],
+  ): Promise<{ versions: ReportVersionRow[]; photoLists: NonNullable<RowSet['photoLists']> }> {
     const cur = new Map(reports.map((r) => [r.id, r.current_version]));
-    const rows = await inChunks(
+    const rows = (await inChunks(
       reports.map((r) => r.id),
       (part) =>
         this.sb
           .from('report_versions')
-          .select('report_id, version, author, pdf_path')
+          .select('report_id, version, author, pdf_path, photos:data->photos')
           .in('report_id', part)
           .then(unwrap),
-    );
-    return rows.filter(
-      (v) => v.version === 1 || cur.get(v.report_id) === v.version,
-    ) as ReportVersionRow[];
+    )) as unknown as Array<
+      Pick<ReportVersionRow, 'report_id' | 'version' | 'author' | 'pdf_path'> & { photos: unknown }
+    >;
+    const kept = rows.filter((v) => v.version === 1 || cur.get(v.report_id) === v.version);
+    return {
+      versions: kept.map(({ photos: _photos, ...v }) => v as ReportVersionRow),
+      photoLists: kept
+        .filter((v) => cur.get(v.report_id) === v.version)
+        .map((v) => ({ report_id: v.report_id, version: v.version, photos: v.photos })),
+    };
   }
 
   async listReports(filters: ReportFilters) {
     const sb = this.sb;
     const pageSize = filters.pageSize ?? PAGE_SIZE;
     const page = Math.max(1, filters.page ?? 1);
-    const [core, text] = await Promise.all([this.core(), this.archiveTextFilter(filters.q)]);
+    const [core, search] = await Promise.all([this.core(), this.archiveText(filters.q)]);
+    const text = this.archiveTextFilter(search);
     const [res, weatherHours] = await Promise.all([
       this.archiveOrdered(this.archive('*', filters, text, { count: 'exact' })).range(
         (page - 1) * pageSize,
         page * pageSize - 1,
       ),
-      this.archiveWeatherHours(filters, text),
+      this.archiveWeatherHours(filters, search),
     ]);
     if (res.error) {
       // A page past the last one (a stale or typed URL): PostgREST answers 416. Return it empty
@@ -783,18 +982,19 @@ export class SupabaseSource implements DataSource {
     );
     const incidentIds = new Set(raw.filter((r) => r.has_incident).map((r) => r.id));
     const ids = reports.map((r) => r.id);
-    const [manpower, weatherEvents, versions] = ids.length
+    const [manpower, weatherEvents, archived] = ids.length
       ? await Promise.all([
           sb.from('current_manpower').select('*').in('report_id', ids).then(unwrap),
           sb.from('current_weather').select('*').in('report_id', ids).then(unwrap),
           this.archiveVersions(reports),
         ])
-      : [[], [], []];
+      : [[], [], { versions: [], photoLists: [] }];
     const rows: RowSet = {
       ...this.rowsFrom(core),
       siteDays,
       reports,
-      versions,
+      versions: archived.versions,
+      photoLists: archived.photoLists,
       manpower,
       weatherEvents,
     };
@@ -834,41 +1034,117 @@ export class SupabaseSource implements DataSource {
         .then(unwrap),
       sb.from('current_weather').select('*').eq('report_id', reportId).then(unwrap),
     ]);
-    const messageIds = sources.map((s) => s.message_id);
-    const srcMessages: MessageRow[] = messageIds.length
-      ? unwrap(await sb.from('messages').select('*').in('id', messageIds))
-      : [];
-    const audioMsg = srcMessages.find((m) => m.type === 'audio');
+    // The sources' files: uploads first, WhatsApp messages as the fallback (report/media.ts); and
+    // the spoken answers' clips of its questions (§19 Q93: P7 plays them from the answer).
+    const questionIds = (questions as QuestionRow[]).map((q) => q.id);
+    const [{ messages: srcMessages, uploads: sourceUploads }, answerUploads] = await Promise.all([
+      this.sourceFiles(sources),
+      inChunks(questionIds, (part) =>
+        sb.from('uploads').select('*').in('question_id', part).then(unwrap),
+      ) as Promise<UploadRow[]>,
+    ]);
+    const uploads = uniqBy([...sourceUploads, ...answerUploads], (u) => u.id);
+    const uploadById = new Map(uploads.map((u) => [u.id, u]));
+    const msgById = new Map(srcMessages.map((m) => [m.id, m]));
+    // Every voice note of the report (W1-17: each clip plays), and its WhatsApp thread if any.
+    const voiceFiles = uniqBy(
+      sources
+        .filter((s) => isVoiceSourceKind(s.kind))
+        .flatMap((s) => {
+          const f = mediaOf(s, uploadById, msgById);
+          return f ? [f] : [];
+        }),
+      (f) => f.id,
+    );
+    const convoId = voiceFiles.find((f) => f.conversationId)?.conversationId ?? null;
     const dayStart = fromZonedTime(`${siteDay.date}T00:00:00`, site.timezone).toISOString();
     const dayEnd = fromZonedTime(
       `${addDays(siteDay.date, 1)}T00:00:00`,
       site.timezone,
     ).toISOString();
-    const [convoMessages, transcripts, siteReports] = await Promise.all([
-      audioMsg?.conversation_id
+    const reporterId = report.reporter_id;
+    const callIds = uniq(sources.flatMap((s) => (s.call_id ? [s.call_id] : [])));
+    const [convoMessages, siteReports, calls, texts, linkAudit] = await Promise.all([
+      convoId
         ? sb
             .from('messages')
             .select('*')
-            .eq('conversation_id', audioMsg.conversation_id)
+            .eq('conversation_id', convoId)
             .gte('created_at', dayStart)
             .lt('created_at', dayEnd)
             .order('created_at')
             .then(unwrap)
         : Promise.resolve([] as MessageRow[]),
-      audioMsg
-        ? sb.from('transcripts').select('*').eq('message_id', audioMsg.id).then(unwrap)
-        : Promise.resolve([] as TranscriptRow[]),
       sb
         .from('reports')
         .select('id, site_day_id, status, site_id, site_days!reports_site_day_id_fkey(date)')
         .eq('site_id', site.id)
         .in('status', ['filed', 'signed_off'])
         .then(unwrap),
+      // The report's calls, and the reporter's other calls that day (a missed reminder call).
+      sb
+        .from('calls')
+        .select('*')
+        .or(
+          [
+            `report_id.eq.${reportId}`,
+            ...(callIds.length ? [`id.in.(${callIds.join(',')})`] : []),
+            ...(reporterId
+              ? [
+                  `and(reporter_id.eq.${reporterId},created_at.gte.${dayStart},created_at.lt.${dayEnd})`,
+                ]
+              : []),
+          ].join(','),
+        )
+        .then(unwrap),
+      // The reporter's texts that day (any message channel; SMS since W1-08).
+      reporterId
+        ? sb
+            .from('messages')
+            .select('*')
+            .eq('reporter_id', reporterId)
+            .not('channel', 'is', null)
+            .gte('created_at', dayStart)
+            .lt('created_at', dayEnd)
+            .order('created_at')
+            .then(unwrap)
+        : Promise.resolve([] as MessageRow[]),
+      // The reporter's link openings that day (field-api audits them on the link, not the report).
+      reporterId
+        ? sb
+            .from('audit_log')
+            .select('*')
+            .eq('org_id', this.orgId)
+            .eq('actor_id', reporterId)
+            .eq('action', 'link.opened')
+            .gte('created_at', dayStart)
+            .lt('created_at', dayEnd)
+            .then(unwrap)
+        : Promise.resolve([] as AuditLogRow[]),
     ]);
-    const messages = [
-      ...srcMessages,
-      ...convoMessages.filter((m) => !srcMessages.some((s) => s.id === m.id)),
-    ];
+    // Transcripts of every clip: voice notes by upload (or WhatsApp message), calls by call.
+    const answered = (calls as CallRow[]).filter((c) => c.status === 'completed');
+    const transcripts = await inChunks(
+      [
+        ...voiceFiles.map((f) => `v:${f.id}`),
+        ...answerUploads.map((u) => `v:${u.id}`),
+        ...answered.map((c) => `c:${c.id}`),
+      ],
+      (part) => {
+        const voice = part.filter((x) => x.startsWith('v:')).map((x) => x.slice(2));
+        const call = part.filter((x) => x.startsWith('c:')).map((x) => x.slice(2));
+        const or = [
+          ...(voice.length ? [mediaIdFilter(voice)] : []),
+          ...(call.length ? [`call_id.in.(${call.join(',')})`] : []),
+        ].join(',');
+        return sb.from('transcripts').select('*').or(or).then(unwrap);
+      },
+      MEDIA_OR_CHUNK,
+    );
+    const messages = uniqBy(
+      [...srcMessages, ...convoMessages, ...(texts as MessageRow[])],
+      (m) => m.id,
+    );
     const otherReports = (
       siteReports as unknown as Array<{
         id: string;
@@ -901,19 +1177,44 @@ export class SupabaseSource implements DataSource {
       versions,
       sources: sources as ReportSourceRow[],
       messages,
+      uploads,
       transcripts,
+      calls: calls as CallRow[],
       questions,
-      audit: audit as AuditLogRow[],
+      audit: uniqBy([...(audit as AuditLogRow[]), ...(linkAudit as AuditLogRow[])], (a) => a.id),
       weatherEvents,
     };
     const detail = assembleReportDetail(rows, this.ctx(), reportId, version);
     const viewed = versions.find((v) => v.version === detail.version);
-    const [audioUrl, pdfUrl, photoUrls] = await Promise.all([
-      this.signedUrl('audio', detail.audio?.storagePath),
+    // Signed URLs (10 min) for every clip: voice notes in `audio`, call recordings in `calls`.
+    const [audioUrls, callUrls, pdfUrl, photoUrls] = await Promise.all([
+      this.signedUrls(
+        'audio',
+        [...detail.clips, ...detail.answerClips].flatMap((c) =>
+          c.bucket === 'audio' && c.storagePath ? [c.storagePath] : [],
+        ),
+      ),
+      this.signedUrls(
+        'calls',
+        detail.clips.flatMap((c) => (c.bucket === 'calls' && c.storagePath ? [c.storagePath] : [])),
+      ),
       this.signedUrl('pdfs', viewed?.pdf_path),
       Promise.all(detail.photos.map((p) => this.signedUrl('photos', p.storagePath))),
     ]);
-    if (detail.audio) detail.audio.url = audioUrl;
+    detail.clips = detail.clips.map((c) => ({
+      ...c,
+      url: c.storagePath
+        ? ((c.bucket === 'calls' ? callUrls : audioUrls).get(c.storagePath) ?? null)
+        : null,
+    }));
+    detail.answerClips = detail.answerClips.map((c) => ({
+      ...c,
+      url: c.storagePath ? (audioUrls.get(c.storagePath) ?? null) : null,
+    }));
+    if (detail.audio)
+      detail.audio.url = detail.audio.storagePath
+        ? (audioUrls.get(detail.audio.storagePath) ?? null)
+        : null;
     detail.pdfUrl = pdfUrl;
     detail.photos = detail.photos.map((p, i) => ({ ...p, url: photoUrls[i] ?? null }));
     return detail;
@@ -939,26 +1240,53 @@ export class SupabaseSource implements DataSource {
       inChunks(reportIds, (part) =>
         this.sb.from('reports').select('*').in('id', part).then(unwrap),
       ),
+      // Voice notes: WhatsApp `audio` or v1.2 `voice_note` (report/media.ts).
       inChunks(reportIds, (part) =>
         this.sb
           .from('report_sources')
           .select('*')
-          .eq('kind', 'audio')
+          .in('kind', ['audio', 'voice_note'])
           .in('report_id', part)
           .then(unwrap),
       ),
     ]);
-    const transcripts = await inChunks(
-      sources.map((s) => s.message_id),
-      (part) => this.sb.from('transcripts').select('*').in('message_id', part).then(unwrap),
-    );
+    // The calls and answered questions the crew lines cite (W3-06: call and answer evidence).
+    const cited = (key: 'callId' | 'questionId', type: 'call' | 'answer') =>
+      this.user.role === 'accounts'
+        ? []
+        : [
+            ...new Set(
+              manpower.flatMap((m) => {
+                const src = m.source as Record<string, unknown> | null;
+                const id = src && src.type === type ? src[key] : null;
+                return typeof id === 'string' ? [id] : [];
+              }),
+            ),
+          ];
+    const [transcripts, callTranscripts, questions] = await Promise.all([
+      inChunks(
+        sources.flatMap((s) => {
+          const id = sourceMediaId(s);
+          return id ? [id] : [];
+        }),
+        (part) => this.sb.from('transcripts').select('*').or(mediaIdFilter(part)).then(unwrap),
+        MEDIA_OR_CHUNK,
+      ),
+      inChunks(cited('callId', 'call'), (part) =>
+        this.sb.from('transcripts').select('*').in('call_id', part).then(unwrap),
+      ),
+      inChunks(cited('questionId', 'answer'), (part) =>
+        this.sb.from('questions').select('*').in('id', part).then(unwrap),
+      ),
+    ]);
     const rows: RowSet = {
       ...this.rowsFrom(core),
       manpower,
       invoices,
       reports,
       sources,
-      transcripts,
+      transcripts: [...transcripts, ...callTranscripts],
+      questions,
     };
     return assembleHours(rows, this.ctx(), week, siteId);
   }
@@ -1002,21 +1330,41 @@ export class SupabaseSource implements DataSource {
   async getTeam() {
     const core = await this.core();
     const today = formatDateInTz(this.now(), core.org.timezone);
-    const [siteDays, unknownSenders] = await Promise.all([
+    const [siteDays, unknownContacts] = await Promise.all([
       this.siteDays(this.siteIds(core), addDays(today, -30), today),
       this.sb
-        .from('unknown_senders')
+        .from('unknown_contacts')
         .select('*')
         .eq('org_id', this.orgId)
         .eq('status', 'pending')
         .then(unwrap),
     ]);
+    const [country, states, calls] = await Promise.all([
+      this.sb.from('countries').select('*').eq('code', core.org.country).single().then(unwrapOne),
+      this.rpc('team_reporter_states', { p_org_id: this.orgId }),
+      this.recentOutboundCalls(),
+    ]);
     const rows: RowSet = {
       ...this.rowsFrom(core),
       siteDays,
-      unknownSenders: unknownSenders as UnknownSenderRow[],
+      unknownContacts: unknownContacts as UnknownContactRow[],
+      calls,
     };
-    return assembleTeam(rows, this.ctx());
+    return assembleTeam(rows, this.ctx(), {
+      pack: toCountryPack(country as CountryRow),
+      states: (states ?? []).map((x) => ({
+        reporterId: x.reporter_id,
+        optOutMethod:
+          x.opt_out_method === 'sms_keyword' || x.opt_out_method === 'provider_opt_out'
+            ? x.opt_out_method
+            : null,
+        devices: x.devices,
+        consents: x.consents ?? [],
+        welcome: Array.isArray(x.welcome)
+          ? (x.welcome as unknown as TeamReporterState['welcome'])
+          : [],
+      })),
+    });
   }
 
   async getGlossary() {
@@ -1032,7 +1380,21 @@ export class SupabaseSource implements DataSource {
   }
 
   async getSettings() {
-    const data = assembleSettings(this.rowsFrom(await this.core()));
+    const core = await this.core();
+    // W4-05: the org's pack for Settings → Field channels (countries is readable by every office
+    // user); a row this build cannot parse leaves the card empty rather than failing the page.
+    const country = await this.sb
+      .from('countries')
+      .select('*')
+      .eq('code', core.org.country)
+      .maybeSingle();
+    let pack: CountryPack | null = null;
+    try {
+      pack = country.data ? toCountryPack(country.data as CountryRow) : null;
+    } catch (err) {
+      console.warn(`[settings] country pack ${core.org.country} is not understood`, err);
+    }
+    const data = assembleSettings(this.rowsFrom(core), pack);
     data.org.logoUrl = await this.signedUrl('logos', data.org.logoPath);
     return data;
   }
@@ -1043,7 +1405,11 @@ export class SupabaseSource implements DataSource {
    */
   async getBilling() {
     const core = await this.core();
-    const data = assembleBilling(this.rowsFrom(core), this.ctx());
+    const rows = this.rowsFrom(core);
+    rows.audit = [...rows.audit, ...(await this.pastDueAudit())];
+    const data = assembleBilling(rows, this.ctx());
+    // A manual org (§19 Q236) has no provider pages: nothing to ask api-billing.
+    if (data.plan.provider === 'manual') return data;
     const call = <T>(action: 'status' | 'invoices') =>
       this.callFunction<T>('api-billing', { orgId: this.orgId, action }).catch(() => null);
     const [status, invoices] = await Promise.all([
@@ -1064,6 +1430,41 @@ export class SupabaseSource implements DataSource {
         .map((i) => toBillingInvoice(i, core.org.timezone));
     }
     return data;
+  }
+
+  /** The latest audited move to past_due (the start of arrears scheduler-tick reads). */
+  private async pastDueAudit(): Promise<AuditLogRow[]> {
+    const res = await this.sb
+      .from('audit_log')
+      .select('*')
+      .eq('org_id', this.orgId)
+      .eq('action', 'billing.status_changed')
+      .eq('diff->>to', 'past_due')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    return res.error ? [] : ((res.data ?? []) as AuditLogRow[]);
+  }
+
+  /**
+   * The admin banner (F23, §19 Q235): the org row, its grace days and the start of arrears, no
+   * provider call (it runs on every page).
+   */
+  async getBillingAlert() {
+    const [org, settings, audit] = await Promise.all([
+      this.sb
+        .from('orgs')
+        .select('billing_status, billing_provider, billing_subscription_id, trial_ends_at, is_demo')
+        .eq('id', this.orgId)
+        .single(),
+      this.sb.from('org_settings').select('past_due_grace_days').eq('org_id', this.orgId).single(),
+      this.pastDueAudit(),
+    ]);
+    if (org.error || !org.data) return null;
+    return billingAlert(
+      { ...org.data, past_due_since: pastDueSinceFrom(audit) },
+      this.now(),
+      settings.data?.past_due_grace_days ?? 14,
+    );
   }
 
   async getBillingCheckoutUrl() {
@@ -1119,7 +1520,7 @@ export class SupabaseSource implements DataSource {
       ),
       count(
         sb
-          .from('unknown_senders')
+          .from('unknown_contacts')
           .select('id', { count: 'exact', head: true })
           .eq('org_id', this.orgId)
           .eq('status', 'pending'),
@@ -1193,10 +1594,12 @@ export class SupabaseSource implements DataSource {
         .limit(5)
         .then(unwrap),
       this.user.role === 'accounts'
-        ? Promise.resolve([] as Array<Pick<TranscriptRow, 'id' | 'message_id' | 'text'>>)
+        ? Promise.resolve(
+            [] as Array<Pick<TranscriptRow, 'id' | 'message_id' | 'upload_id' | 'text'>>,
+          )
         : sb
             .from('transcripts')
-            .select('id, message_id, text')
+            .select('id, message_id, upload_id, text')
             .textSearch('text', needle.replace(/[,()]/g, ' '), {
               type: 'websearch',
               config: 'english',
@@ -1225,17 +1628,18 @@ export class SupabaseSource implements DataSource {
     for (const c of companies)
       out.push({ kind: 'company', id: c.id, title: c.name, subtitle: c.trade, href: '/hours' });
     if (transcripts.length) {
-      const srcs = unwrap(
-        await sb
-          .from('report_sources')
-          .select('report_id, message_id')
-          .in(
-            'message_id',
-            transcripts.map((t) => t.message_id),
-          ),
+      const srcs = await this.sourcesOfMedia<
+        Pick<ReportSourceRow, 'report_id' | 'message_id' | 'upload_id'>
+      >(
+        transcripts.flatMap((t) => {
+          const id = transcriptMediaId(t);
+          return id ? [id] : [];
+        }),
+        'report_id, message_id, upload_id',
       );
       for (const t of transcripts) {
-        const src = srcs.find((s) => s.message_id === t.message_id);
+        const id = transcriptMediaId(t);
+        const src = srcs.find((s) => id !== null && sourceMediaId(s) === id);
         const i = t.text.toLowerCase().indexOf(needle.toLowerCase());
         const snippet =
           i >= 0
@@ -1271,7 +1675,7 @@ export class SupabaseSource implements DataSource {
 
   /** Current-version PDFs of explicit reports or of every report matching archive filters. */
   async getPdfUrls(selection: PdfSelection): Promise<PdfLinkBatch> {
-    type Picked = Pick<ReportRow, 'id' | 'report_no' | 'current_version'>;
+    type Picked = Pick<ReportRow, 'id' | 'report_no' | 'current_version'> & { date: string };
     let reports: Picked[];
     let total: number;
     if ('reportIds' in selection) {
@@ -1283,18 +1687,37 @@ export class SupabaseSource implements DataSource {
           chunks(wanted, IN_CHUNK).map((part) =>
             this.sb
               .from('reports')
-              .select('id, report_no, current_version')
+              .select('id, report_no, current_version, site_day_id')
               .in('id', part)
               .then(unwrap),
           ),
         )
       ).flat();
-      const byId = new Map(found.map((r) => [r.id, r]));
+      // The report date names the file (§12, D33).
+      const days = (
+        await Promise.all(
+          chunks(uniq(found.map((r) => r.site_day_id)), IN_CHUNK).map((part) =>
+            this.sb.from('site_days').select('id, date').in('id', part).then(unwrap),
+          ),
+        )
+      ).flat();
+      const dateOf = new Map(days.map((d) => [d.id, d.date]));
+      const byId = new Map(
+        found.map((r) => [
+          r.id,
+          {
+            id: r.id,
+            report_no: r.report_no,
+            current_version: r.current_version,
+            date: dateOf.get(r.site_day_id) ?? '',
+          },
+        ]),
+      );
       reports = wanted.map((id) => byId.get(id)).filter((r): r is Picked => !!r);
     } else {
-      const text = await this.archiveTextFilter(selection.filters.q);
+      const text = this.archiveTextFilter(await this.archiveText(selection.filters.q));
       const res = await this.archiveOrdered(
-        this.archive('id, report_no, current_version', selection.filters, text, {
+        this.archive('id, report_no, current_version, date', selection.filters, text, {
           count: 'exact',
         }),
       ).range(0, PDF_EXPORT_LIMIT - 1);
@@ -1333,8 +1756,14 @@ export class SupabaseSource implements DataSource {
     for (const r of reports) {
       const path = pathOf(r);
       const url = path ? urlByPath.get(path) : undefined;
-      if (url) files.push({ reportId: r.id, reportNo: r.report_no, url });
-      else missing.push({ reportId: r.id, reportNo: r.report_no });
+      const link = {
+        reportId: r.id,
+        reportNo: r.report_no,
+        date: r.date,
+        version: r.current_version,
+      };
+      if (url) files.push({ ...link, url });
+      else missing.push(link);
     }
     return { files, missing, total, capped: total > PDF_EXPORT_LIMIT };
   }
@@ -1358,16 +1787,36 @@ export class SupabaseSource implements DataSource {
   }
   async createReportVersion(
     reportId: string,
-    data: DailyReportData,
+    data: StoredReportData,
     changeNote: string,
     photos: OfficePhotoUpload[] = [],
+    baseVersion?: number,
   ) {
-    const res = (await this.rpc('create_report_version', {
-      p_report_id: reportId,
-      p_data: data as never,
-      p_change_note: changeNote,
-      ...(photos.length ? { p_photos: photos as never } : {}),
-    })) as { version?: number } | null;
+    let res: { version?: number } | null;
+    try {
+      res = (await this.rpc(
+        'create_report_version',
+        baseVersion === undefined
+          ? {
+              p_report_id: reportId,
+              p_data: data as never,
+              p_change_note: changeNote,
+              ...(photos.length ? { p_photos: photos as never } : {}),
+            }
+          : {
+              p_report_id: reportId,
+              p_data: data as never,
+              p_change_note: changeNote,
+              p_photos: photos as never,
+              p_base_version: baseVersion,
+            },
+      )) as { version?: number } | null;
+    } catch (err) {
+      // §19 Q106: a newer version (the reporter's change, photos added) is never overwritten.
+      if (errorMessage(err) === 'version_changed')
+        throw new CodedError('version_changed', translate('report.editMode.versionChanged'));
+      throw err;
+    }
     return { version: res?.version ?? 0 };
   }
   async createOfficeReport(input: CreateOfficeReportInput): Promise<CreateOfficeReportResult> {
@@ -1432,6 +1881,20 @@ export class SupabaseSource implements DataSource {
   async markNoWork(siteDayId: string) {
     await this.rpc('mark_no_work', { p_site_day_id: siteDayId });
   }
+  async textDailyLink(
+    siteId: string,
+    requestId: string,
+    reporterId?: string,
+  ): Promise<TextDailyLinkResult> {
+    const res = await this.callFunction<TextDailyLinkResult>('api-text-daily-link', {
+      siteId,
+      requestId,
+      ...(reporterId ? { reporterId } : {}),
+    });
+    return res.sent
+      ? { sent: true, channel: res.channel }
+      : { sent: false, reason: res.reason, detail: res.detail ?? null };
+  }
   async resolveUnknownCompany(input: ResolveUnknownCompanyInput) {
     await this.rpc('resolve_unknown_company', {
       p_report_id: input.reportId,
@@ -1448,17 +1911,16 @@ export class SupabaseSource implements DataSource {
       p_company_id: input.companyId ?? null,
     });
   }
+  /** W3-08: the audited `add_glossary_term` (the same phrase, kind and scope updates its row). */
   async addGlossaryTerm(input: AddGlossaryTermInput) {
-    const { error } = await this.sb.from('glossary_terms').insert({
-      org_id: this.orgId,
-      heard: input.heard.trim(),
-      official: input.official.trim(),
-      kind: input.kind,
-      language: input.language ?? 'en',
-      scope_site_id: input.scopeSiteId ?? null,
-      status: 'confirmed',
+    await this.rpc('add_glossary_term', {
+      p_org_id: this.orgId,
+      p_heard: input.heard.trim(),
+      p_official: input.official.trim(),
+      p_kind: input.kind,
+      p_language: input.language ?? 'en',
+      p_scope_site_id: input.scopeSiteId ?? null,
     });
-    if (error) throw new Error(error.message);
   }
   async saveSettings(patch: OrgSettingsPatch) {
     const { error } = await this.sb
@@ -1480,7 +1942,8 @@ export class SupabaseSource implements DataSource {
   async addInvoice(input: AddInvoiceInput) {
     let file_path: string | null = null;
     if (input.file) {
-      file_path = `${this.orgId}/${Date.now()}-${input.file.name}`;
+      // Safe characters only, the org's folder first (audit :878; packages/shared/src/invoices.ts).
+      file_path = invoiceUploadPath(this.orgId, input.file.name, randomUuid());
       const up = await this.sb.storage.from('invoices').upload(file_path, input.file);
       if (up.error) throw new Error(up.error.message);
     }
@@ -1506,18 +1969,27 @@ export class SupabaseSource implements DataSource {
     if (error) throw new Error(error.message);
   }
   async inviteReporter(input: InviteReporterInput) {
-    await this.callFunction('api-invite-reporter', {
-      orgId: this.orgId,
-      name: input.name,
-      phone: input.phone,
-      role: input.role,
-      siteIds: input.siteIds,
-      languages: input.languages,
-    });
+    const result = await this.callFunction<{ reporter?: { status?: ReporterStatus } }>(
+      'api-invite-reporter',
+      {
+        orgId: this.orgId,
+        name: input.name,
+        phone: input.phone,
+        role: input.role,
+        siteIds: input.siteIds,
+        languages: input.languages,
+        ...(input.locale ? { locale: input.locale } : {}),
+        ...(input.contactPref ? { contactPref: input.contactPref } : {}),
+        smsAttested: input.smsAttested,
+      },
+    );
+    return { status: result?.reporter?.status ?? ('invited' as const) };
   }
   async linkUnknownSender(input: LinkUnknownSenderInput) {
-    await this.callFunction('api-link-unknown-sender', {
-      unknownSenderId: input.unknownSenderId,
+    // D38 (W1-16): api-link-unknown-contact links callers and texters too, with F3 consent
+    // pending; api-link-unknown-sender stays deployed until the demo, then is deleted.
+    await this.callFunction('api-link-unknown-contact', {
+      unknownContactId: input.unknownSenderId,
       siteId: input.siteId,
       name: input.name,
       role: input.role ?? 'backup',
@@ -1544,19 +2016,91 @@ export class SupabaseSource implements DataSource {
     });
   }
   async ignoreUnknownSender(unknownSenderId: string) {
+    // unknown_contacts: the panel may update only status (20261014000003).
     const { error } = await this.sb
-      .from('unknown_senders')
+      .from('unknown_contacts')
       .update({ status: 'ignored' })
       .eq('id', unknownSenderId);
     if (error) throw new Error(error.message);
   }
-  async addOfficeUser(input: { email: string; role: MemberRole; name?: string }) {
-    // Supabase invite (magic link) is sent by the api-billing-adjacent admin function in production;
-    // the org_members row is created on first sign-in (§F20). Until then we store the pending role.
+  /** Team → Edit (W4-03): one audited RPC; its refusals come back as CodedErrors. */
+  async updateReporterContact(input: UpdateReporterContactInput) {
+    const data = await this.teamRpc('update_reporter_contact', {
+      p_reporter_id: input.reporterId,
+      p_contact_pref: input.contactPref,
+      p_message_channel: input.messageChannel,
+      p_locale: input.locale,
+      p_attested: input.attested,
+    });
+    return { changed: (data as { changed?: boolean } | null)?.changed === true };
+  }
+  async revokeReporterDevices(reporterId: string) {
+    const data = await this.teamRpc('revoke_reporter_devices', { p_reporter_id: reporterId });
+    return { devices: Number((data as { devices?: number } | null)?.devices ?? 0) };
+  }
+  async clearReporterOptOut(reporterId: string, attested: boolean) {
+    await this.teamRpc('clear_reporter_opt_out', {
+      p_reporter_id: reporterId,
+      p_text_version: TEAM_TEXTS_AGAIN_VERSION,
+      p_attested: attested,
+    });
+  }
+  /** Team → Call now (W4-04): office_call_start(); a refusal is a CodedError with its reason. */
+  async officeCallNow(input: OfficeCallNowInput) {
+    const { data, error } = await this.sb.rpc('office_call_start', {
+      p_reporter_id: input.reporterId,
+      p_site_id: input.siteId,
+      p_text_version: OFFICE_CALL_POLICY.attestVersion,
+      p_attested: input.attested,
+    });
+    if (error) throw new Error(error.message);
+    const res = data as unknown as OfficeCallStart;
+    if (res.status === 'refused') throw new CodedError(res.reason, res.reason);
+    return { callId: res.callId };
+  }
+  /**
+   * W4-04: the org's outbound calls of the last 36 hours (Team's and Site detail's call progress
+   * picks today's in the site's or org's time zone). RLS: admin, pm, ops.
+   */
+  private async recentOutboundCalls(siteId?: string): Promise<CallRow[]> {
+    let q = this.sb
+      .from('calls')
+      .select('id, reporter_id, site_id, direction, purpose, status, outcome, attempt, created_at')
+      .eq('org_id', this.orgId)
+      .eq('direction', 'outbound')
+      .gte('created_at', new Date(this.now().getTime() - 36 * 3_600_000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (siteId) q = q.eq('site_id', siteId);
+    const res = await q;
+    // Team still shows without the progress when calls cannot be read (an accounts user, say).
+    return res.error ? [] : ((res.data ?? []) as unknown as CallRow[]);
+  }
+  /** Team's RPCs raise their refusal as the message (`attestation_required`, …): a CodedError. */
+  private async teamRpc<K extends keyof Database['public']['Functions']>(
+    fn: K,
+    args: Database['public']['Functions'][K]['Args'],
+  ) {
+    const { data, error } = await this.sb.rpc(fn, args as never);
+    if (error) {
+      const code = TEAM_RPC_CODES.find((c) => error.message === c);
+      throw code ? new CodedError(code, error.message) : new Error(error.message);
+    }
+    return data;
+  }
+  async addOfficeUser(input: {
+    email: string;
+    role: MemberRole;
+    name?: string;
+    uiLocale?: OrgLocale | null;
+  }) {
+    // api-invite-office-user (F24): Supabase's invite email (magic link) and the org_members row,
+    // with the panel language (null = the company's).
     await this.callFunction('api-invite-office-user', {
       orgId: this.orgId,
       email: input.email,
       role: input.role,
+      uiLocale: input.uiLocale ?? null,
     });
   }
   async changeMemberRole(userId: string, role: MemberRole) {
@@ -1582,6 +2126,50 @@ export class SupabaseSource implements DataSource {
       p_timezone: input.timezone,
       p_address: input.address ?? null,
       p_license_no: input.licenseNo ?? null,
+      ...(input.locale ? { p_locale: input.locale } : {}),
+      ...(input.units ? { p_units: input.units } : {}),
+    });
+  }
+  /** W4-05 (§19 Q232): api-test-message; a 429 is a `CodedError` `rate_limited`. */
+  /**
+   * W4-05 (§19 Q232, Q350): settings_test_call_start(); a refusal is a CodedError with its reason
+   * (`rate_limited`, `call_live`, `no_trunk`, `invalid_phone`, `attestation_required`).
+   */
+  async callMeNow(input: CallMeNowInput): Promise<CallMeNowResult> {
+    const { data, error } = await this.sb.rpc('settings_test_call_start', {
+      p_org_id: this.orgId,
+      p_phone_e164: input.phone,
+      p_language: input.language,
+      p_attested: true,
+    });
+    if (error) throw new Error(error.message);
+    const res = data as unknown as SettingsTestCallStart;
+    if (res.status === 'refused') throw new CodedError(res.reason, res.reason);
+    return { callId: res.callId, telephony: res.telephony };
+  }
+  /**
+   * §19 Q340: GoTrue keeps `signInWithOtp`'s `data` only for a new user, so the panel writes the
+   * chosen language into the user's metadata itself (`auth.updateUser`), once per change: the
+   * session's metadata already saying so writes nothing.
+   */
+  async saveEmailLanguage(language: PanelLanguage): Promise<{ updated: boolean }> {
+    const data = signInEmailData(language);
+    const { data: current, error: sessionError } = await this.sb.auth.getSession();
+    if (sessionError) throw sessionError;
+    const session = current.session;
+    if (!session) return { updated: false };
+    const meta = (session.user.user_metadata ?? {}) as Record<string, unknown>;
+    if (meta.ui_locale === data.ui_locale) return { updated: false };
+    const { error } = await this.sb.auth.updateUser({ data });
+    if (error) throw error;
+    return { updated: true };
+  }
+  async sendTestMessage(input: SendTestMessageInput): Promise<SendTestMessageResult> {
+    return this.callFunction<SendTestMessageResult>('api-test-message', {
+      orgId: this.orgId,
+      phone: input.phone,
+      language: input.language,
+      attested: true,
     });
   }
   async createSite(input: CreateSiteInput): Promise<CreateSiteResult> {
@@ -1620,10 +2208,9 @@ export class SupabaseSource implements DataSource {
         result.inviteError = errorMessage(err, copy.errors.generic);
       }
     }
-    // A running subscription bills one unit per active site (as after pause / resume).
-    await this.callFunction('api-billing', { action: 'sync', orgId: this.orgId }).catch(
-      () => undefined,
-    );
+    // A running subscription bills one unit per active site (as after pause / resume); the
+    // database also queued a `billing_sync` job that retries a failed sync (W4-10).
+    await this.syncBillingQuantity();
     return result;
   }
   async updateSite(siteId: string, patch: UpdateSitePatch) {
@@ -1636,30 +2223,41 @@ export class SupabaseSource implements DataSource {
     if (patch.timezone !== undefined) row.timezone = patch.timezone;
     if (patch.deadline !== undefined) row.deadline = patch.deadline ?? null;
     if (patch.workingHours !== undefined) row.working_hours = patch.workingHours ?? null;
-    const { error } = await this.sb.from('sites').update(row).eq('id', siteId);
+    // Admin only (RLS sites_admin_update): a refused write matches no row, so say so (W4-10).
+    const { data, error } = await this.sb.from('sites').update(row).eq('id', siteId).select('id');
     if (error) throw new Error(error.message);
+    if (!data || data.length === 0) throw new Error(copy.errors.notAllowed);
   }
   async setOrgLogo(file: File | null, orgId?: string) {
     await uploadOrgLogo(this.sb, orgId ?? this.orgId, file);
   }
+  /**
+   * Pause and resume are admin only (§2.2 billing; RLS `sites_admin_update`). The update reads the
+   * row back, so a refused write (no row) fails instead of reporting success (docs/AUDIT_BACKLOG.md
+   * "Site settings drawer … open to pm/ops"). The quantity sync follows at once; if it fails, the
+   * `billing_sync` job the database queued does it (W4-10, 20261017000450).
+   */
   async pauseSite(siteId: string) {
-    const { error } = await this.sb
-      .from('sites')
-      .update({ status: 'paused', paused_at: new Date().toISOString() })
-      .eq('id', siteId);
-    if (error) throw new Error(error.message);
-    await this.callFunction('api-billing', { action: 'sync', orgId: this.orgId }).catch(
-      () => undefined,
-    );
+    await this.setSiteStatus(siteId, { status: 'paused', paused_at: new Date().toISOString() });
   }
   async resumeSite(siteId: string) {
-    const { error } = await this.sb
-      .from('sites')
-      .update({ status: 'active', paused_at: null })
-      .eq('id', siteId);
+    await this.setSiteStatus(siteId, { status: 'active', paused_at: null });
+  }
+  private async setSiteStatus(
+    siteId: string,
+    patch: { status: 'paused' | 'active'; paused_at: string | null },
+  ) {
+    const { data, error } = await this.sb.from('sites').update(patch).eq('id', siteId).select('id');
     if (error) throw new Error(error.message);
+    if (!data || data.length === 0) throw new Error(copy.errors.notAllowed);
+    await this.syncBillingQuantity();
+  }
+  /** api-billing `sync`; a failure is left to the queued `billing_sync` job (W4-10). */
+  private async syncBillingQuantity() {
     await this.callFunction('api-billing', { action: 'sync', orgId: this.orgId }).catch(
-      () => undefined,
+      (err: unknown) => {
+        captureError(err, { where: 'api-billing sync', retry: 'billing_sync job' });
+      },
     );
   }
   async requestEvidencePack(input: RequestEvidencePackInput) {
@@ -1694,15 +2292,17 @@ export class SupabaseSource implements DataSource {
     return !error && data === true;
   }
   async getOps(): Promise<OpsData> {
-    const [queue, dead, outliers] = await Promise.all([
+    const [queue, dead, outliers, calls] = await Promise.all([
       this.rpc('ops_queue_stats', {}),
       this.rpc('ops_dead_jobs', { p_limit: 100 }),
       this.rpc('ops_cost_outliers', { p_days: 30 }),
+      this.rpc('ops_outbound_call_share', { p_weeks: 8 }),
     ]);
     return toOpsData(
       (queue ?? []) as OpsQueueStatRow[],
       (dead ?? []) as OpsDeadJobRow[],
       (outliers ?? []) as OpsCostOutlierRow[],
+      (calls ?? []) as OpsOutboundCallShareRow[],
     );
   }
   async retryDeadJob(jobId: number) {
@@ -1711,8 +2311,234 @@ export class SupabaseSource implements DataSource {
   async discardDeadJob(jobId: number) {
     await this.rpc('ops_discard_job', { p_job_id: jobId });
   }
+  async getOrglessContacts(): Promise<OrglessContacts> {
+    const [contacts, orgs] = await Promise.all([
+      this.rpc('ops_unknown_contacts', { p_limit: 200 }),
+      this.rpc('ops_real_orgs', {}),
+    ]);
+    return {
+      contacts: ((contacts ?? []) as OpsUnknownContactRow[]).map((c) => ({
+        id: c.id,
+        phone: c.phone_e164,
+        channel: c.channel,
+        snippet: c.snippet,
+        createdAt: c.created_at,
+      })),
+      orgs: (orgs ?? []) as OrglessContacts['orgs'],
+    };
+  }
+  async assignUnknownContact(contactId: string, orgId: string) {
+    await this.rpc('ops_assign_unknown_contact', { p_id: contactId, p_org_id: orgId });
+  }
+  async ignoreOrglessContact(contactId: string) {
+    await this.rpc('ops_ignore_unknown_contact', { p_id: contactId });
+  }
+  async getOpsOrgBilling(): Promise<OpsOrgBilling[]> {
+    const rows = ((await this.rpc('ops_org_billing', {})) ?? []) as OpsOrgBillingRow[];
+    return rows.map((r) => ({
+      orgId: r.id,
+      orgName: r.name,
+      country: r.country,
+      isDemo: r.is_demo,
+      provider: r.billing_provider === 'manual' ? 'manual' : 'stripe',
+      status: r.billing_status,
+      trialEndsAt: r.trial_ends_at,
+      hasSubscription: r.has_subscription,
+      price: billingPrice(r),
+      activeSites: Number(r.active_sites),
+    }));
+  }
+  async setOrgPrice(orgId: string, price: BillingPrice | null) {
+    await this.rpc('ops_set_org_price', {
+      p_org_id: orgId,
+      p_price_minor: price?.minor ?? null,
+      p_currency: price?.currency ?? null,
+    });
+  }
+  async setOrgBillingStatus(orgId: string, status: BillingStatus) {
+    await this.rpc('ops_set_org_billing_status', { p_org_id: orgId, p_status: status });
+  }
 
   // ─── Realtime ───
+
+  // ─── Demo phone (/dev/phone, §11.1) ───
+
+  async getDemoPhone(): Promise<DemoPhoneData> {
+    const org = unwrapOne(
+      await this.sb.from('orgs').select('is_demo, country').eq('id', this.orgId).maybeSingle(),
+    ) as { is_demo: boolean; country: string };
+    const country = unwrapOne(
+      await this.sb
+        .from('countries')
+        .select('code, two_way_sms, message_channels')
+        .eq('code', org.country)
+        .maybeSingle(),
+    ) as { code: string; two_way_sms: boolean; message_channels: string[] };
+    const reporters = unwrap(
+      await this.sb
+        .from('reporters')
+        .select('id, name, phone_e164, status')
+        .eq('org_id', this.orgId)
+        .order('name'),
+    ) as Array<{ id: string; name: string; phone_e164: string; status: string }>;
+    // Per reporter, one request: the thread's newest text (its last line) and the exact count of
+    // its texts, so neither a long thread nor a busy org reads low (no capped org-wide page).
+    const threads = await Promise.all(
+      reporters.map(async (r) => {
+        const res = await this.sb
+          .from('messages')
+          .select('body, created_at', { count: 'exact' })
+          .eq('org_id', this.orgId)
+          .eq('reporter_id', r.id)
+          .in('channel', ['sms', 'push', 'whatsapp'])
+          .order('created_at', { ascending: false })
+          .limit(1);
+        const rows = unwrap(res) as Array<{ body: string | null; created_at: string }>;
+        return { count: res.count ?? rows.length, last: rows[0] ?? null };
+      }),
+    );
+    return {
+      orgIsDemo: org.is_demo,
+      pack: {
+        code: country.code,
+        twoWaySms: country.two_way_sms,
+        whatsapp: country.message_channels.includes('whatsapp'),
+      },
+      reporters: reporters
+        .map((r, i) => {
+          const { count, last } = threads[i]!;
+          return {
+            id: r.id,
+            name: r.name,
+            phone: r.phone_e164,
+            status: r.status,
+            count,
+            lastAt: last?.created_at ?? null,
+            lastBody: last?.body ?? null,
+          };
+        })
+        .sort(
+          (a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? '') || a.name.localeCompare(b.name),
+        ),
+    };
+  }
+
+  async getDemoPhoneThread(reporterId: string): Promise<DemoPhoneMessage[]> {
+    // The newest 500, oldest first on the page: a long thread drops its oldest texts, never the
+    // welcome that just arrived.
+    const rows = unwrap(
+      await this.sb
+        .from('messages')
+        .select('id, direction, body, status, copy_key, provider, channel, created_at')
+        .eq('org_id', this.orgId)
+        .eq('reporter_id', reporterId)
+        // W2-14: pushes to the installed app share the thread, labelled by channel; W2-15 the
+        // WhatsApp messages (Twilio's; v1.0 Meta rows have no channel and stay out).
+        .in('channel', ['sms', 'push', 'whatsapp'])
+        .order('created_at', { ascending: false })
+        .limit(500),
+    ) as Array<{
+      id: string;
+      direction: 'in' | 'out';
+      body: string | null;
+      status: string;
+      copy_key: string | null;
+      provider: string | null;
+      channel: 'sms' | 'push' | 'whatsapp';
+      created_at: string;
+    }>;
+    // W3-17 (§19 Q132): a demo org's outbound calls ring here (console telephony).
+    const calls = unwrap(
+      await this.sb
+        .from('calls')
+        .select('id, status, outcome, purpose, attempt, created_at')
+        .eq('org_id', this.orgId)
+        .eq('reporter_id', reporterId)
+        .eq('direction', 'outbound')
+        .order('created_at', { ascending: false })
+        .limit(100),
+    ) as Array<{
+      id: string;
+      status: string;
+      outcome: string | null;
+      purpose: string | null;
+      attempt: number | null;
+      created_at: string;
+    }>;
+    return mergeDemoPhoneCalls(
+      rows.reverse().map((m) => ({
+        id: m.id,
+        direction: m.direction,
+        body: m.body ?? '',
+        status: m.status,
+        copyKey: m.copy_key,
+        provider: m.provider,
+        channel: m.channel,
+        at: m.created_at,
+      })),
+      calls,
+    );
+  }
+
+  async getDemoPhoneEmails(): Promise<DemoPhoneEmail[]> {
+    const rows = unwrap(
+      await this.sb
+        .from('console_emails')
+        .select('id, kind, recipients, subject, body_text, attachments, created_at')
+        .eq('org_id', this.orgId)
+        .order('created_at', { ascending: false })
+        .limit(100),
+    ) as Array<{
+      id: string;
+      kind: string;
+      recipients: string[];
+      subject: string;
+      body_text: string;
+      attachments: Array<{ filename: string; bytes: number }>;
+      created_at: string;
+    }>;
+    return rows.map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      recipients: e.recipients,
+      subject: e.subject,
+      body: e.body_text,
+      attachments: e.attachments,
+      at: e.created_at,
+    }));
+  }
+
+  async sendDemoPhoneReply(
+    reporterId: string,
+    body: string,
+    channel: 'sms' | 'whatsapp' = 'sms',
+  ): Promise<void> {
+    // The same handler as an inbound SMS or WhatsApp message; the function checks admin, demo
+    // org, and a two-way pack (texts) or a pack that lists WhatsApp (W2-16).
+    await this.callFunction('sms-webhook/demo-reply', {
+      reporterId,
+      body,
+      ...(channel === 'whatsapp' ? { channel } : {}),
+    });
+  }
+
+  subscribeDemoPhone(onChange: () => void): () => void {
+    const filter = `org_id=eq.${this.orgId}`;
+    const channel: RealtimeChannel = this.sb
+      .channel(`demo-phone:${this.orgId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter }, () =>
+        onChange(),
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'console_emails', filter },
+        () => onChange(),
+      )
+      .subscribe();
+    return () => {
+      void this.sb.removeChannel(channel);
+    };
+  }
 
   subscribe(onChange: (event: ChangeEvent) => void): () => void {
     const channel: RealtimeChannel = this.sb
@@ -1735,10 +2561,10 @@ export class SupabaseSource implements DataSource {
         {
           event: '*',
           schema: 'public',
-          table: 'unknown_senders',
+          table: 'unknown_contacts',
           filter: `org_id=eq.${this.orgId}`,
         },
-        (p) => onChange({ table: 'unknown_senders', id: idOf(p.new) }),
+        (p) => onChange({ table: 'unknown_contacts', id: idOf(p.new) }),
       )
       .on(
         'postgres_changes',
@@ -1802,6 +2628,7 @@ function toOpsData(
   queue: OpsQueueStatRow[],
   dead: OpsDeadJobRow[],
   outliers: OpsCostOutlierRow[],
+  calls: OpsOutboundCallShareRow[] = [],
 ): OpsData {
   const record = (v: unknown): Record<string, unknown> =>
     v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -1845,22 +2672,48 @@ function toOpsData(
         waTemplates: num(detail.waTemplates),
       };
     }),
+    outboundCalls: calls.map((c) => ({
+      orgId: c.org_id,
+      orgName: c.org_name,
+      isDemo: c.is_demo,
+      weekStart: String(c.week_start).slice(0, 10),
+      callDays: Number(c.call_days),
+      filedByCall: Number(c.filed_by_call),
+    })),
   };
 }
 
-/** Org memberships of a user (used by the AuthProvider before any org is selected). */
+/**
+ * Org memberships of a user (used by the AuthProvider before any org is selected). Each carries
+ * the org's `locale` (§6.3): with no language chosen, it decides the panel's language (§11.2), so
+ * a tr-TR org (Demir Yapı A.Ş., §18.2) opens the panel in Turkish before the shell mounts.
+ */
 export async function fetchOrgs(sb: Db, userId: string): Promise<OrgSummary[]> {
   const members = unwrap(
     await sb
       .from('org_members')
-      .select('org_id, role, orgs(id, name, timezone)')
+      .select(
+        'org_id, role, ui_locale, orgs(id, name, timezone, locale, country, is_demo, price_per_site_minor, price_currency)',
+      )
       .eq('user_id', userId),
   ) as unknown as Array<{
     org_id: string;
     role: MemberRole;
-    orgs: { id: string; name: string; timezone: string } | null;
+    ui_locale: string | null;
+    orgs: Pick<
+      OrgRow,
+      | 'id'
+      | 'name'
+      | 'timezone'
+      | 'locale'
+      | 'country'
+      | 'is_demo'
+      | 'price_per_site_minor'
+      | 'price_currency'
+    > | null;
   }>;
-  const sites = unwrap(await sb.from('sites').select('org_id, status'));
+  // site_options: an accounts user cannot read `sites`, and every member counts active sites.
+  const sites = unwrap(await sb.from('site_options').select('org_id, status'));
   return members
     .filter((m) => m.orgs)
     .map((m) => ({
@@ -1869,7 +2722,16 @@ export async function fetchOrgs(sb: Db, userId: string): Promise<OrgSummary[]> {
       timezone: m.orgs!.timezone,
       role: m.role,
       activeSites: sites.filter((s) => s.org_id === m.org_id && s.status === 'active').length,
+      locale: m.orgs!.locale,
+      country: m.orgs!.country,
+      demoOrg: m.orgs!.is_demo,
+      uiLocale: isOrgLocale(m.ui_locale) ? m.ui_locale : null,
+      price: billingPrice(m.orgs!),
     }));
+}
+
+function isOrgLocale(v: string | null): v is OrgLocale {
+  return v === 'en-US' || v === 'tr-TR';
 }
 
 function idOf(row: unknown): string | null {

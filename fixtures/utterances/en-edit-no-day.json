@@ -1,0 +1,21 @@
+{
+  "id": "en-edit-no-day",
+  "description": "English SMS EDIT with no day: code cannot tell which report, so the reply points to Past reports (spec §19 Q102).",
+  "channel": "sms",
+  "language": "en",
+  "text": "EDIT Apex was 7",
+  "recorded": {
+    "intent": "edit_request",
+    "confidence": 0.8,
+    "entities": {
+      "dayReference": null,
+      "numbers": [7]
+    },
+    "correctionText": "Apex was 7"
+  },
+  "expected": {
+    "intent": "edit_request",
+    "dayReference": null,
+    "correctionText": "Apex was 7"
+  }
+}

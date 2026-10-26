@@ -1,0 +1,24 @@
+{
+  "id": "test-en-check",
+  "description": "English. The Welcome screen's test recording (F4, W2-13): Priya Raman (EN · HI → en) checks the microphone. Nothing is filed.",
+  "kind": "test",
+  "audio": null,
+  "mime": "audio/webm;codecs=opus",
+  "site": "Elm St. Townhomes",
+  "reporter": {
+    "locale": "en-US",
+    "languages": ["en", "hi"]
+  },
+  "transcriptionLanguage": "en",
+  "expectedLanguage": "en",
+  "goldenCase": null,
+  "durationS": 3.4,
+  "text": "Testing, one, two, three. Can you hear me?",
+  "segments": [
+    {
+      "start": 0,
+      "end": 3.0,
+      "text": "Testing, one, two, three. Can you hear me?"
+    }
+  ]
+}

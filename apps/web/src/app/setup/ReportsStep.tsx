@@ -1,11 +1,15 @@
 import { ArrowLeft, Check } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
-import { copy } from '@/copy/en';
 import type { OrgSettings } from '@/data/types';
+import { useCopy } from '@/i18n/useCopy';
 import { ReportsSection } from '../settings/ReportsSection';
 import { EmailChips } from './fields';
 
+/**
+ * F2 step 3 · Reports & reminders. Its settings are Settings' own section (EN/TR since W4-05),
+ * without the daily link card's link to Field channels.
+ */
 export function ReportsStep({
   draft,
   update,
@@ -23,34 +27,34 @@ export function ReportsStep({
   onFinish: () => void;
   busy: boolean;
 }) {
-  const c = copy.setup.reports;
+  const { t } = useCopy();
   return (
     <div className="grid gap-6">
       <div>
-        <h2 className="font-h2 text-h2">{c.title}</h2>
-        <p className="mt-1 text-[15px] text-dust">{c.subtitle}</p>
+        <h2 className="font-h2 text-h2">{t('setup.reports.title')}</h2>
+        <p className="mt-1 text-[15px] text-dust">{t('setup.reports.subtitle')}</p>
       </div>
       <ReportsSection draft={draft} update={update} />
       <Card>
         <CardContent className="p-5">
-          <h3 className="font-h2 text-h2">{c.recipients}</h3>
-          <p className="mb-4 mt-1 text-caption text-dust">{c.recipientsHint}</p>
+          <h3 className="font-h2 text-h2">{t('setup.reports.recipients')}</h3>
+          <p className="mb-4 mt-1 text-caption text-dust">{t('setup.reports.recipientsHint')}</p>
           <EmailChips
             id="setup-recipients"
             emails={recipients}
             onChange={onRecipientsChange}
-            label={c.recipients}
+            label={t('setup.reports.recipients')}
           />
         </CardContent>
       </Card>
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
         <Button variant="ghost" onClick={onBack}>
           <ArrowLeft aria-hidden="true" />
-          {copy.common.back}
+          {t('common.back')}
         </Button>
         <Button variant="primary" loading={busy} onClick={onFinish}>
           <Check aria-hidden="true" />
-          {c.finish}
+          {t('setup.reports.finish')}
         </Button>
       </div>
     </div>

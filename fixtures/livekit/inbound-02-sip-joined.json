@@ -1,0 +1,41 @@
+{
+  "event": "participant_joined",
+  "room": {
+    "sid": "RM_{{room_sid}}",
+    "name": "sip_{{phone}}_Xq7Lm2Pz9Kd4",
+    "emptyTimeout": 300,
+    "departureTimeout": 20,
+    "creationTime": "{{ts}}",
+    "enabledCodecs": [
+      {
+        "mime": "audio/opus"
+      }
+    ],
+    "metadata": "",
+    "numParticipants": 1
+  },
+  "participant": {
+    "sid": "PA_sip{{room_sid}}",
+    "identity": "sip_{{phone}}",
+    "state": "ACTIVE",
+    "joinedAt": "{{ts+1}}",
+    "name": "Phone {{phone}}",
+    "version": 2,
+    "permission": {
+      "canSubscribe": true,
+      "canPublish": true,
+      "canPublishData": true
+    },
+    "kind": "SIP",
+    "attributes": {
+      "sip.callID": "SCL_{{room_sid}}",
+      "sip.callStatus": "active",
+      "sip.phoneNumber": "{{phone}}",
+      "sip.trunkID": "ST_sitelogUSin",
+      "sip.trunkPhoneNumber": "{{to}}",
+      "sip.ruleID": "SDR_sitelogUS"
+    }
+  },
+  "id": "{{id}}",
+  "createdAt": "{{ts+1}}"
+}

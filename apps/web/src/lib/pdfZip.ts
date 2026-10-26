@@ -3,9 +3,10 @@
  * URLs with a small concurrency limit and store them uncompressed (PDFs are already compressed).
  */
 import { zipSync, type Zippable } from 'fflate';
+import { pdfFileName } from '@sitelog/shared/report/numbering.ts';
 
 export interface ZipSource {
-  /** File name inside the zip, e.g. `RL-2041-0187.pdf`. */
+  /** File name inside the zip, e.g. `RL-2041-0187_2026-10-09_v2.pdf`. */
   name: string;
   url: string;
 }
@@ -29,12 +30,19 @@ export interface ZipResult {
 
 const UNSAFE = '\\/:*?"<>|';
 
-/** `{reportNo}.pdf` per report; unsafe characters become `_`, repeats get ` (2)`, ` (3)`… */
-export function pdfFileNames(reportNos: readonly string[]): string[] {
+/**
+ * The §12 name `{report_no}_{YYYY-MM-DD}_v{version}.pdf` per report (D33, `pdfFileName`); unsafe
+ * characters in the report number become `_`, repeats get ` (2)`, ` (3)`…
+ */
+export function pdfFileNames(
+  files: ReadonlyArray<{ reportNo: string; date: string; version: number }>,
+): string[] {
   const used = new Set<string>();
-  return reportNos.map((no) => {
-    const base =
-      [...no.trim()].map((ch) => (ch < ' ' || UNSAFE.includes(ch) ? '_' : ch)).join('') || 'report';
+  return files.map((f) => {
+    const no =
+      [...f.reportNo.trim()].map((ch) => (ch < ' ' || UNSAFE.includes(ch) ? '_' : ch)).join('') ||
+      'report';
+    const base = pdfFileName(no, f.date, f.version).replace(/\.pdf$/, '');
     let name = `${base}.pdf`;
     for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base} (${n}).pdf`;
     used.add(name.toLowerCase());

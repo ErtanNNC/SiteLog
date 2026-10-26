@@ -9,6 +9,10 @@
     "workingHours": "07:00–15:30"
   },
   "reportDate": "2026-10-02",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "en-US",
+  "channel": "web",
   "defaultShiftHours": 8,
   "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
   "reporterFirstName": "Priya",
@@ -22,29 +26,117 @@
     }
   ],
   "glossary": [
-    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
-    { "heard": "punch", "official": "Punch list items", "kind": "term" },
-    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+    {
+      "heard": "stood down",
+      "official": "Work stoppage",
+      "kind": "term"
+    },
+    {
+      "heard": "punch",
+      "official": "Punch list items",
+      "kind": "term"
+    },
+    {
+      "heard": "yards",
+      "official": "Cubic yards (yd³)",
+      "kind": "unit"
+    }
   ],
   "rejectedMappings": [],
   "observedWeather": {
     "date": "2026-10-02",
     "provider": "Open-Meteo",
     "fetchedAt": "2026-10-02T21:30:00Z",
-    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
     "hours": [
-      { "time": "06:00", "precipIn": 0, "tempF": 55, "windMph": 9, "gustMph": 18 },
-      { "time": "07:00", "precipIn": 0.09, "tempF": 58, "windMph": 10, "gustMph": 16 },
-      { "time": "08:00", "precipIn": 0.12, "tempF": 60, "windMph": 11, "gustMph": 14 },
-      { "time": "09:00", "precipIn": 0.07, "tempF": 62, "windMph": 9, "gustMph": 17 },
-      { "time": "10:00", "precipIn": 0, "tempF": 63, "windMph": 10, "gustMph": 15 },
-      { "time": "11:00", "precipIn": 0, "tempF": 64, "windMph": 11, "gustMph": 18 },
-      { "time": "12:00", "precipIn": 0, "tempF": 64, "windMph": 9, "gustMph": 16 },
-      { "time": "13:00", "precipIn": 0, "tempF": 63, "windMph": 10, "gustMph": 14 },
-      { "time": "14:00", "precipIn": 0, "tempF": 62, "windMph": 11, "gustMph": 17 },
-      { "time": "15:00", "precipIn": 0, "tempF": 60, "windMph": 9, "gustMph": 15 },
-      { "time": "16:00", "precipIn": 0, "tempF": 58, "windMph": 10, "gustMph": 18 },
-      { "time": "17:00", "precipIn": 0, "tempF": 55, "windMph": 11, "gustMph": 16 }
+      {
+        "time": "06:00",
+        "precipIn": 0,
+        "tempF": 55,
+        "windMph": 9,
+        "gustMph": 18
+      },
+      {
+        "time": "07:00",
+        "precipIn": 0.09,
+        "tempF": 58,
+        "windMph": 10,
+        "gustMph": 16
+      },
+      {
+        "time": "08:00",
+        "precipIn": 0.12,
+        "tempF": 60,
+        "windMph": 11,
+        "gustMph": 14
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0.07,
+        "tempF": 62,
+        "windMph": 9,
+        "gustMph": 17
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0,
+        "tempF": 63,
+        "windMph": 10,
+        "gustMph": 15
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0,
+        "tempF": 64,
+        "windMph": 11,
+        "gustMph": 18
+      },
+      {
+        "time": "12:00",
+        "precipIn": 0,
+        "tempF": 64,
+        "windMph": 9,
+        "gustMph": 16
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 63,
+        "windMph": 10,
+        "gustMph": 14
+      },
+      {
+        "time": "14:00",
+        "precipIn": 0,
+        "tempF": 62,
+        "windMph": 11,
+        "gustMph": 17
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 60,
+        "windMph": 9,
+        "gustMph": 15
+      },
+      {
+        "time": "16:00",
+        "precipIn": 0,
+        "tempF": 58,
+        "windMph": 10,
+        "gustMph": 18
+      },
+      {
+        "time": "17:00",
+        "precipIn": 0,
+        "tempF": 55,
+        "windMph": 11,
+        "gustMph": 16
+      }
     ],
     "summary": {
       "precipIn": 0.28,
@@ -60,44 +152,46 @@
   "previousAnswers": [],
   "previousDraft": null,
   "photos": [
-    { "messageId": "e0000014-0000-4000-8000-000000001405", "takenAt": "2026-10-02T22:02:00Z" },
     {
-      "messageId": "e0000014-0000-4000-8000-000000001406",
+      "uploadId": "e0000014-0000-4000-8000-000000001405",
+      "takenAt": "2026-10-02T22:02:00Z"
+    },
+    {
+      "uploadId": "e0000014-0000-4000-8000-000000001406",
       "caption": "Second floor walls",
       "takenAt": "2026-10-02T22:02:20Z"
     }
   ],
   "segments": [
     {
-      "messageId": "e0000014-0000-4000-8000-000000001401",
+      "uploadId": "e0000014-0000-4000-8000-000000001401",
       "start": 0,
       "end": 6.8,
       "text": "Elm Street, Friday. Rain from seven to ten this morning, we couldn't frame in that, the subfloor was too slick."
     },
     {
-      "messageId": "e0000014-0000-4000-8000-000000001401",
+      "uploadId": "e0000014-0000-4000-8000-000000001401",
       "start": 6.8,
       "end": 12.5,
       "text": "So three hours lost on the framing. The crew waited it out and sorted material in the garage bays."
     },
     {
-      "messageId": "e0000014-0000-4000-8000-000000001401",
+      "uploadId": "e0000014-0000-4000-8000-000000001401",
       "start": 12.5,
       "end": 20.4,
       "text": "Our crew, six guys, full day. After ten they framed second-floor walls on units one to four, about forty percent of the second floor."
     },
     {
-      "messageId": "e0000014-0000-4000-8000-000000001401",
+      "uploadId": "e0000014-0000-4000-8000-000000001401",
       "start": 20.4,
       "end": 27,
       "text": "The lumber package for the second floor came at eleven thirty, two flatbeds from the yard."
     },
     {
-      "messageId": "e0000014-0000-4000-8000-000000001401",
+      "uploadId": "e0000014-0000-4000-8000-000000001401",
       "start": 27,
       "end": 33,
       "text": "No incidents, toolbox talk on slips and wet surfaces. Two photos."
     }
-  ],
-  "texts": []
+  ]
 }

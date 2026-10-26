@@ -5,6 +5,7 @@
  */
 import type {
   AuditLogRow,
+  CallRow,
   CompanyRow,
   EvidencePackRow,
   GlossaryTermRow,
@@ -25,40 +26,101 @@ import type {
   SiteRow,
   SubInvoiceRow,
   TranscriptRow,
-  UnknownSenderRow,
+  UnknownContactRow,
+  UploadRow,
   WeatherEventRow,
 } from '@sitelog/shared/db/types.ts';
-import type { InvoiceStatus } from '@sitelog/shared/enums.ts';
+import {
+  isActiveReporterStatus,
+  isReporterAuthor,
+  type InvoiceStatus,
+} from '@sitelog/shared/enums.ts';
 import { reportChip, siteDayChip } from '@sitelog/shared/status.ts';
+import { noticeText, reviewReasonRef } from './notices';
 import type { ChipVariant } from '@sitelog/shared/status.ts';
-import type { DailyReportData, ManpowerEntry, Source } from '@sitelog/shared/schemas/report.ts';
+import type {
+  DailyReportData,
+  ManpowerEntry,
+  ObservedWeather,
+  ObservedWeatherV1,
+  Photo,
+  PhotoV1,
+  Source,
+  StoredReportData,
+} from '@sitelog/shared/schemas/report.ts';
+import { UI_RESOURCES } from '@sitelog/shared/copy/ui/index.ts';
+import type { PanelCopyTree } from '@sitelog/shared/copy/ui/types.ts';
 import { deriveTotals } from '@sitelog/shared/report/hours.ts';
+import { fillCopy } from '@sitelog/shared/report/progress.ts';
 import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
-import { normalizePayrollColumns, type PayrollColumn } from '@sitelog/shared/report/payroll.ts';
+import {
+  csvCell,
+  normalizePayrollColumns,
+  type PayrollColumn,
+} from '@sitelog/shared/report/payroll.ts';
 import { versionPhotos } from '@sitelog/shared/report/photos.ts';
+import {
+  confirmedBySiteManager,
+  packClaimReady,
+  packConfirmation,
+} from '@sitelog/shared/report/evidence-pack.ts';
+import {
+  isVoiceSourceKind,
+  mediaOf,
+  sourceMediaId,
+  transcriptMediaId,
+  voiceMediaIdOf,
+  type MediaRef,
+} from '@sitelog/shared/report/media.ts';
+import {
+  readReportData,
+  upgradeObservedV1,
+  upgradePhotosV1,
+} from '@sitelog/shared/report/upgrade.ts';
+import { withPreciseCallSeconds } from '@sitelog/shared/report/reconcile.ts';
 import { isWorkingDay } from '@sitelog/shared/schedule/day.ts';
+import { readCallPeaks } from '@sitelog/shared/voice.ts';
+import {
+  billingAlert,
+  billingPrice,
+  billingProviderOf,
+  monthlyTotalMinor,
+  type BillingStateInput,
+} from '@sitelog/shared/billing.ts';
 import {
   addDays,
+  convertMeasure,
   daysBetween,
   firstName,
   formatAudioTimestamp,
   formatDateInTz,
   formatHours,
+  formatHoursIn,
   formatMonthDay,
   formatPhone,
   formatTimeInTz,
   isoWeekOf,
   isoWeekRange,
+  MEASURE_DIGITS,
   parseIsoDate,
+  type MeasureKind,
 } from '@sitelog/shared/format.ts';
+import type { OrgLocale, ReporterLocale, UnitSystem } from '@sitelog/shared/locale.ts';
+import { settingsMessageChannels } from '@sitelog/shared/channels.ts';
+import type { CountryPack } from '@sitelog/shared/countries.ts';
+import { attemptIsFinal, attemptWasSent } from '@sitelog/shared/notify/walk.ts';
+import { callProgress, isOfficeCall, placesCalls } from '@sitelog/shared/voice-outbound.ts';
 import { copy } from '@/copy/en';
-import { formatGap, formatHoursNum } from '@/lib/format';
+import { copyRef } from '@/i18n/copyRef';
 import { groupBy, isRecord, sum, uniq } from '@/lib/utils';
 import type {
   ActivityEntry,
+  ActivityKind,
   AttentionItem,
   BillingData,
   CalendarCell,
+  CalendarChannel,
+  CallToday,
   Chip,
   CompanyOption,
   CrewRow,
@@ -70,12 +132,15 @@ import type {
   HoursRow,
   InvoiceDetail,
   InvoiceEvidence,
+  MediaClip,
   MessageItem,
   NavBadges,
   NotificationItem,
   OfficeUser,
+  OverviewChannel,
   OverviewData,
   OverviewSiteRow,
+  OverviewWeather,
   PackItem,
   QuestionItem,
   ReportDetail,
@@ -96,6 +161,8 @@ import type {
   StreakStatus,
   TeamData,
   TeamReporter,
+  TeamReporterState,
+  WelcomeAttempt,
   TranscriptExcerpt,
   TranscriptSegment,
   WeatherLog,
@@ -129,8 +196,16 @@ export interface RowSet {
   companies: CompanyRow[];
   glossary: GlossaryTermRow[];
   messages: MessageRow[];
+  /**
+   * Files of report sources (D14): office photos since 20261014000002 and the media the
+   * migration backfilled with their message ids. Readers take a source's file from here first and
+   * from `messages` otherwise (mediaIndex). Optional: rows from before W1-06 have none.
+   */
+  uploads?: UploadRow[];
   transcripts: TranscriptRow[];
-  unknownSenders: UnknownSenderRow[];
+  /** §6.3 calls (the report's recordings and the reporter's calls that day). Optional. */
+  calls?: CallRow[];
+  unknownContacts: UnknownContactRow[];
   siteDays: SiteDayRow[];
   reports: ReportRow[];
   versions: ReportVersionRow[];
@@ -142,12 +217,23 @@ export interface RowSet {
   packs: EvidencePackRow[];
   notifications: NotificationRow[];
   audit: AuditLogRow[];
-  billing?: Omit<BillingData['plan'], 'hasSubscription'> & { invoices: BillingData['invoices'] };
+  /** What the billing provider knows (demo: §18.1's card and invoices); price and sites are rows. */
+  billing?: {
+    nextInvoiceDate: string;
+    paymentMethod: BillingData['plan']['paymentMethod'];
+    invoices: BillingData['invoices'];
+  };
   /**
    * `data.photos` of report versions whose full row is not in `versions` (the Supabase Photos
    * tab loads only this column for the site's older reports).
    */
-  photoLists?: Array<{ report_id: string; version: number; photos: unknown }>;
+  photoLists?: Array<{
+    report_id: string;
+    version: number;
+    photos: unknown;
+    /** `data.schemaVersion` of that version (its photos are v1 entries unless it is 2). */
+    schemaVersion?: unknown;
+  }>;
 }
 
 export interface AssembleCtx {
@@ -155,7 +241,6 @@ export interface AssembleCtx {
   userId: string;
 }
 
-export const PRICE_PER_SITE_CENTS = 39_900;
 export const PAGE_SIZE = 50;
 
 // ───────────────────────────── Helpers ─────────────────────────────
@@ -236,12 +321,30 @@ export function toReporterSummary(r: ReporterRow, isPrimary: boolean): ReporterS
     languages: r.languages ?? [],
     status: r.status,
     isPrimary,
+    contactPref: r.contact_pref,
   };
 }
 
+/** A version's data as stored: v1 (WhatsApp era, and every writer until W1-12) or v2. */
+export function storedVersionData(v: ReportVersionRow): StoredReportData {
+  return v.data as unknown as StoredReportData;
+}
+
+/**
+ * A version's data as every view reads it: §10.3 v2, a stored v1 upgraded on read (D20). Null
+ * without the row, or for a row loaded without its `data` column (list queries select less).
+ */
 export function versionData(v: ReportVersionRow | undefined): DailyReportData | null {
-  if (!v) return null;
-  return v.data as unknown as DailyReportData;
+  if (!v || !isRecord(v.data)) return null;
+  return readReportData(storedVersionData(v));
+}
+
+/** A version's `data->photos` loaded on its own (RowSet.photoLists), in v2 terms like versionData. */
+function photoListOf(
+  p: { photos: unknown; schemaVersion?: unknown } | undefined,
+): DailyReportData['photos'] | undefined {
+  if (!p || !Array.isArray(p.photos)) return undefined;
+  return p.schemaVersion === 2 ? (p.photos as Photo[]) : upgradePhotosV1(p.photos as PhotoV1[]);
 }
 
 export function memberName(rows: RowSet, userId: string | null | undefined): string | null {
@@ -346,34 +449,60 @@ export function currentVersion(ix: Index, report: ReportRow): ReportVersionRow |
   return ix.versionsByReport.get(report.id)?.find((v) => v.version === report.current_version);
 }
 
-/** One photo a version shows, with its message (storage path, type). */
+/** Uploads and messages by id: where a source's file is (report/media.ts mediaOf). */
+export interface MediaIndex {
+  uploads: ReadonlyMap<string, UploadRow>;
+  messages: ReadonlyMap<string, MessageRow>;
+}
+
+export function mediaIndex(rows: Pick<RowSet, 'uploads' | 'messages'>): MediaIndex {
+  return {
+    uploads: new Map((rows.uploads ?? []).map((u) => [u.id, u])),
+    messages: new Map(rows.messages.map((m) => [m.id, m])),
+  };
+}
+
+/** A source's file: its upload, else its message. */
+export function sourceMedia(source: ReportSourceRow, media: MediaIndex): MediaRef | undefined {
+  return mediaOf(source, media.uploads, media.messages);
+}
+
+/** One photo a version shows, with its file (storage path, type). */
 export interface ShownPhoto {
   source: ReportSourceRow;
-  message: MessageRow | undefined;
+  /** The source's media id (upload, else message): the id data.photos keys it by. */
+  id: string;
+  media: MediaRef | undefined;
   caption: string | null;
   takenAt: string | null;
 }
 
 /**
  * The photos a version shows (versionPhotos: its data.photos in order; every photo of the report
- * for data without the list). The message body stands in for a missing caption only then: with
- * a list, a caption cleared in an edit stays cleared.
+ * for data without the list). The file's caption (an upload's, or a WhatsApp message's body)
+ * stands in for a missing caption only then: with a list, a caption cleared in an edit stays
+ * cleared.
  */
 export function shownPhotos(
   photos: unknown,
   sources: readonly ReportSourceRow[],
-  msgById: ReadonlyMap<string, MessageRow>,
+  media: MediaIndex,
 ): ShownPhoto[] {
   const listed = Array.isArray(photos);
-  return versionPhotos(listed ? (photos as DailyReportData['photos']) : null, sources).map(
+  return versionPhotos(listed ? (photos as DailyReportData['photos']) : null, sources).flatMap(
     ({ source, caption, takenAt }) => {
-      const message = msgById.get(source.message_id);
-      return {
-        source,
-        message,
-        caption: listed ? caption : (caption ?? message?.body ?? null),
-        takenAt: takenAt ?? message?.created_at ?? null,
-      };
+      const id = sourceMediaId(source);
+      if (!id) return [];
+      const file = sourceMedia(source, media);
+      return [
+        {
+          source,
+          id,
+          media: file,
+          caption: listed ? caption : (caption ?? file?.text ?? null),
+          takenAt: takenAt ?? file?.receivedAt ?? null,
+        },
+      ];
     },
   );
 }
@@ -460,34 +589,80 @@ export function currentWeather(rows: RowSet, ix: Index): WeatherLike[] {
   });
 }
 
-function weatherImpactText(data: DailyReportData | null): string | null {
+function overviewWeather(data: DailyReportData | null): OverviewWeather | null {
   if (!data) return null;
   const p =
     data.weather.periods.find((x) => x.lostHours > 0 || x.fullDay) ?? data.weather.periods[0];
   if (!p) return null;
-  const range = p.start && p.end ? `${p.start}–${p.end}` : p.start ? `from ${p.start}` : '';
-  const head = [p.condition, range].filter(Boolean).join(' ');
-  return p.impact ? `${head} · ${p.impact}` : head;
+  return {
+    condition: p.condition,
+    start: p.start ?? null,
+    end: p.end ?? null,
+    impact: p.impact ?? null,
+  };
 }
 
-export function peaksOf(payload: unknown): number[] {
-  if (!isRecord(payload)) return [];
-  const p = payload.peaks;
-  return Array.isArray(p) ? p.filter((x): x is number => typeof x === 'number') : [];
+/**
+ * weather_events.observed in the org's units (§10.11, P9 "observed values in org units", W3-07):
+ * a v1 copy is imperial (fetch_weather's units before v1.2) and is converted for a metric org; a
+ * v2 copy is in the version's units, which are the org's (§9.6).
+ */
+export function observedWeatherIn(json: unknown, units: UnitSystem): ObservedWeather | null {
+  const observed = observedWeatherOf(json);
+  if (!observed || !isRecord(json) || typeof json.precipIn !== 'number' || units === 'imperial')
+    return observed;
+  const c = (v: number, kind: MeasureKind) => convertMeasure(v, kind, 'imperial', units);
+  const digits = MEASURE_DIGITS[units];
+  const round = (v: number, d: number) => Math.round(v * 10 ** d) / 10 ** d;
+  return {
+    ...observed,
+    precip: round(c(observed.precip, 'precipitation'), digits.precipitation),
+    tempMin: round(c(observed.tempMin, 'temperature'), digits.temperature),
+    tempMax: round(c(observed.tempMax, 'temperature'), digits.temperature),
+    wind: round(c(observed.wind, 'wind'), digits.wind),
+    ...(observed.gust !== undefined ? { gust: round(c(observed.gust, 'wind'), digits.wind) } : {}),
+  };
+}
+
+/**
+ * weather_events.observed (the version's weather.observed, copied as written) in v2 terms: a v1
+ * copy (precipIn, tempMinF …) is upgraded, a v2 one (precip, tempMin …) passes; anything else is
+ * null.
+ */
+export function observedWeatherOf(json: unknown): ObservedWeather | null {
+  if (!isRecord(json)) return null;
+  if (typeof json.precipIn === 'number')
+    return upgradeObservedV1(json as unknown as ObservedWeatherV1);
+  if (typeof json.precip === 'number') return json as unknown as ObservedWeather;
+  return null;
+}
+
+/** A call segment's speaker lane: the reporter (`reporter`, `user`) or TalkOlog (`agent`…). */
+function speakerOf(value: unknown): TranscriptSegment['speaker'] | undefined {
+  if (value === 'reporter' || value === 'user' || value === 'caller') return 'reporter';
+  if (value === 'agent' || value === 'assistant') return 'agent';
+  return undefined;
 }
 
 export function segmentsOf(json: unknown): TranscriptSegment[] {
   if (!Array.isArray(json)) return [];
-  return json.filter(isRecord).map((s) => ({
-    start: Number(s.start ?? 0),
-    end: Number(s.end ?? 0),
-    text: String(s.text ?? ''),
-  }));
+  return json.filter(isRecord).map((s) => {
+    const speaker = speakerOf(s.speaker ?? s.role);
+    return {
+      start: Number(s.start ?? 0),
+      end: Number(s.end ?? 0),
+      text: String(s.text ?? ''),
+      ...(speaker ? { speaker } : {}),
+    };
+  });
 }
 
+/** A question's options: v1.2 `[{id,label}]` (§6.3), or WhatsApp's `[{id,title}]` buttons. */
 function optionsOf(json: unknown): string[] {
   if (!Array.isArray(json)) return [];
-  return json.map((o) => (isRecord(o) ? String(o.title ?? o.id ?? '') : String(o))).filter(Boolean);
+  return json
+    .map((o) => (isRecord(o) ? String(o.label ?? o.title ?? o.id ?? '') : String(o)))
+    .filter(Boolean);
 }
 
 function answerText(json: unknown): string | null {
@@ -581,6 +756,28 @@ export function manpowerChanges(
 
 // ───────────────────────────── Overview ─────────────────────────────
 
+/**
+ * A report's channel (§11.3 `ChannelIcon`): web and SMS → link, voice → call, office → typed;
+ * none for WhatsApp-era reports. The Overview's column and the archive's icon and Channel filter
+ * (W1-17, §19 Q73).
+ */
+export function reportChannel(channel: ReportRow['channel'] | undefined): OverviewChannel | null {
+  switch (channel) {
+    case 'web':
+    case 'sms':
+      return 'link';
+    case 'voice':
+      return 'call';
+    case 'office':
+      return 'office';
+    default:
+      return null;
+  }
+}
+
+const REMINDER_KEYS = new Set(['reminder_1', 'reminder_2']);
+const UNDELIVERED = new Set(['failed', 'undeliverable']);
+
 export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
   const ix = buildIndex(rows);
   const orgTz = rows.org.timezone;
@@ -594,6 +791,7 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
   const pdfReportIds: string[] = [];
   const sitesToday: OverviewSiteRow[] = [];
   const attention: AttentionItem[] = [];
+  const outbound = rows.messages.filter((m) => m.direction === 'out' && m.reporter_id);
 
   for (const site of active) {
     const siteToday = formatDateInTz(ctx.now, site.timezone);
@@ -627,6 +825,17 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
       lost += lostHours;
     }
 
+    // The reminder texts this reporter got today (the ladder's, from M6; §18.1's two at Elm St.).
+    const remindersSent = reporter
+      ? outbound.filter(
+          (m) =>
+            m.reporter_id === reporter.id &&
+            REMINDER_KEYS.has(m.copy_key ?? '') &&
+            formatDateInTz(m.created_at, site.timezone) === siteToday,
+        ).length
+      : 0;
+    const reported = report ? reportChannel(report.channel) : null;
+
     sitesToday.push({
       siteId: site.id,
       siteName: site.name,
@@ -639,10 +848,12 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
       siteDayId: sd?.id ?? null,
       siteDayStatus: status,
       chip,
+      channel: reported ?? reporter?.contact_pref ?? null,
+      channelReported: reported !== null,
       inAt: report?.received_at ?? null,
       crew: filedData ? filedData.crewOnSite : null,
       hours: filedData ? filedData.totalHours : null,
-      weatherImpact: weatherImpactText(data),
+      weather: overviewWeather(data),
       lostHours,
       weatherDay: isWeatherDay,
       // Only a filed report can be opened; a draft or a voided one has no page yet.
@@ -651,30 +862,55 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
       isLate: !!(sd?.is_late || report?.is_late),
       needsReview: !!report?.needs_review && report.status === 'filed',
       reminderStage: sd?.reminder_stage ?? 0,
+      remindersSent,
     });
 
     if (status === 'missing' && sd) {
       const first = reporter ? firstName(reporter.name) : copy.sites.reporter;
-      const reminders = sd.reminder_stage >= 3 ? 2 : sd.reminder_stage >= 2 ? 1 : 0;
+      // The office's missing notice of this day (spec §19 Q55: `missing_report`, "{site} — no
+      // report"), for the artboard's "Office alerted at 19:00." Roles it does not reach see none.
+      const alert = rows.notifications.find(
+        (n) =>
+          n.kind === 'missing_report' &&
+          n.title.startsWith(`${site.name} — `) &&
+          formatDateInTz(n.created_at, site.timezone) === siteToday,
+      );
       attention.push({
         id: `missing:${sd.id}`,
         kind: 'missing',
-        title: copy.overview.attention.missing.title(site.name),
-        body: copy.overview.attention.missing.body(first, reminders),
+        title: copyRef('overview.attention.missing.title', { site: site.name }),
+        body: [
+          remindersSent > 0
+            ? copyRef('overview.attention.missing.body', { first, count: remindersSent })
+            : copyRef('overview.attention.missing.bodyNoReminders', { first }),
+          ...(alert
+            ? [
+                copyRef('overview.attention.missing.alerted', {
+                  time: { time: alert.created_at, tz: site.timezone },
+                }),
+              ]
+            : []),
+        ],
         siteId: site.id,
         actions: [
           ...(reporter
             ? [
                 {
                   kind: 'call' as const,
-                  label: copy.overview.attention.missing.call(first),
+                  label: copyRef('overview.attention.missing.call', { first }),
                   tel: reporter.phone_e164,
+                },
+                {
+                  kind: 'text_link' as const,
+                  label: copyRef('overview.attention.missing.textLink'),
+                  siteId: site.id,
+                  first,
                 },
               ]
             : []),
           {
             kind: 'mark_no_work',
-            label: copy.overview.attention.missing.markNoWork,
+            label: copyRef('overview.attention.missing.markNoWork'),
             siteDayId: sd.id,
             siteName: site.name,
             date: sd.date,
@@ -683,32 +919,44 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
       });
     }
     if (report && report.status === 'filed' && report.needs_review) {
-      const reasons = report.review_reasons.map((r) => {
-        const [kind, name] = r.split(':');
-        if (kind === 'unknown_company' && data) {
-          const entry = data.manpower.find(
-            (m) =>
-              m.companyName.toLowerCase() === (name ?? '').toLowerCase() ||
-              m.companyNameHeard.toLowerCase() === (name ?? '').toLowerCase(),
-          );
-          return copy.overview.attention.needs_review.unknownCompany(
-            name ?? '',
-            entry?.workers ?? 0,
-          );
-        }
-        return reviewReasonText(r);
-      });
+      const reasons = report.review_reasons;
+      const [only] = reasons;
+      const [onlyKind, ...onlyName] = (only ?? '').split(':');
+      // One unknown subcontractor: the artboard's "Oakmont — unknown sub “Ridgeway”".
+      const single =
+        reasons.length === 1 && onlyKind === 'unknown_company' ? onlyName.join(':') : null;
+      const entry =
+        single !== null && data
+          ? data.manpower.find(
+              (m) =>
+                m.companyName.toLowerCase() === single.toLowerCase() ||
+                m.companyNameHeard.toLowerCase() === single.toLowerCase(),
+            )
+          : undefined;
       attention.push({
         id: `review:${report.id}`,
         kind: 'needs_review',
-        title: copy.overview.attention.needs_review.title(site.name),
-        body: reasons.join(' · '),
+        title:
+          single !== null
+            ? copyRef('overview.attention.needs_review.titleUnknownCompany', {
+                site: shortSiteName(site.name),
+                name: single,
+              })
+            : copyRef('overview.attention.needs_review.title', { site: site.name }),
+        body:
+          single !== null
+            ? [
+                copyRef('overview.attention.needs_review.unknownCompany', {
+                  count: entry?.workers ?? 0,
+                }),
+              ]
+            : reasons.map(reviewReasonRef),
         siteId: site.id,
         reportId: report.id,
         actions: [
           {
             kind: 'review_report',
-            label: copy.overview.attention.needs_review.review,
+            label: copyRef('overview.attention.needs_review.review'),
             reportId: report.id,
           },
         ],
@@ -743,29 +991,50 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
       id: `gap:${inv.id}`,
       kind: 'invoice_gap',
       gap,
-      title: copy.overview.attention.invoice_gap.title(company.name, formatGap(gap)),
-      body: copy.overview.attention.invoice_gap.body(
-        inv.invoice_no ?? '',
-        formatHours(invoiced),
-        formatHours(reported),
-      ),
+      title: copyRef('overview.attention.invoice_gap.title', {
+        company: company.name,
+        invoiced: { hours: invoiced },
+      }),
+      body: [
+        copyRef(
+          gap > 0
+            ? 'overview.attention.invoice_gap.bodyOver'
+            : 'overview.attention.invoice_gap.bodyUnder',
+          { reported: { hours: reported }, gap: { hours: Math.abs(gap) } },
+        ),
+      ],
       actions: [
-        { kind: 'compare_hours', label: copy.overview.attention.invoice_gap.compare, week },
+        {
+          kind: 'compare_hours',
+          label: copyRef('overview.attention.invoice_gap.compare'),
+          week,
+        },
       ],
     });
   }
   gapItems.sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
   attention.push(...gapItems.map(({ gap: _g, ...item }) => item));
 
-  for (const u of rows.unknownSenders.filter((x) => x.status === 'pending')) {
-    const snippet = (u.snippet ?? '').replace(/…$/, '');
+  for (const u of rows.unknownContacts.filter((x) => x.status === 'pending')) {
+    const snippet = (u.snippet ?? '').replace(/…$/, '').trim();
     const short = snippet.length > 42 ? `${snippet.slice(0, 41).trimEnd()}…` : snippet;
+    const phone = formatPhone(u.phone_e164);
     attention.push({
       id: `unknown:${u.id}`,
-      kind: 'unknown_sender',
-      title: copy.overview.attention.unknown_sender.title,
-      body: copy.overview.attention.unknown_sender.body(formatPhone(u.phone_e164), short),
-      actions: [{ kind: 'link_number', label: copy.overview.attention.unknown_sender.link }],
+      kind: 'unknown_contact',
+      title: copyRef(
+        u.channel === 'voice'
+          ? 'overview.attention.unknown_contact.titleCall'
+          : u.channel === null
+            ? 'overview.attention.unknown_contact.titleWhatsapp'
+            : 'overview.attention.unknown_contact.titleText',
+      ),
+      body: [
+        short
+          ? copyRef('overview.attention.unknown_contact.body', { phone, snippet: short })
+          : copyRef('overview.attention.unknown_contact.bodyNoSnippet', { phone }),
+      ],
+      actions: [{ kind: 'link_number', label: copyRef('overview.attention.unknown_contact.link') }],
     });
   }
 
@@ -774,9 +1043,50 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
     attention.push({
       id: 'glossary:review',
       kind: 'glossary_review',
-      title: copy.overview.attention.glossary_review.title(review.length),
-      body: copy.overview.attention.glossary_review.body(review.map((t) => t.heard)),
-      actions: [{ kind: 'review_terms', label: copy.overview.attention.glossary_review.review }],
+      title: copyRef('overview.attention.glossary_review.title', { count: review.length }),
+      body: [
+        copyRef('overview.attention.glossary_review.body', {
+          terms: review.map((t) => `“${t.heard}”`).join(', '),
+        }),
+      ],
+      actions: [
+        { kind: 'review_terms', label: copyRef('overview.attention.glossary_review.review') },
+      ],
+    });
+  }
+
+  // F17 `undeliverable_sms`: today's texts (org day) that ended failed or undeliverable, one
+  // item per reporter (their latest), until a later text to them is delivered.
+  const latestByReporter = new Map<string, MessageRow>();
+  for (const m of outbound) {
+    if (formatDateInTz(m.created_at, orgTz) !== today) continue;
+    const prior = latestByReporter.get(m.reporter_id!);
+    if (!prior || prior.created_at <= m.created_at) latestByReporter.set(m.reporter_id!, m);
+  }
+  for (const m of [...latestByReporter.values()].sort((a, b) =>
+    a.created_at.localeCompare(b.created_at),
+  )) {
+    if (!UNDELIVERED.has(m.status)) continue;
+    const reporter = ix.reporterById.get(m.reporter_id!);
+    if (!reporter) continue;
+    const first = firstName(reporter.name);
+    attention.push({
+      id: `undeliverable:${m.id}`,
+      kind: 'undeliverable',
+      title: copyRef('overview.attention.undeliverable.title', { name: reporter.name }),
+      body: [
+        copyRef('overview.attention.undeliverable.body', {
+          time: { time: m.created_at, tz: orgTz },
+        }),
+      ],
+      actions: [
+        {
+          kind: 'call',
+          label: copyRef('overview.attention.undeliverable.call', { first }),
+          tel: reporter.phone_e164,
+        },
+        { kind: 'open_team', label: copyRef('overview.attention.undeliverable.checkNumber') },
+      ],
     });
   }
 
@@ -784,8 +1094,9 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
     missing: 0,
     needs_review: 1,
     invoice_gap: 2,
-    unknown_sender: 3,
+    unknown_contact: 3,
     glossary_review: 4,
+    undeliverable: 5,
   };
   attention.sort((a, b) => order[a.kind] - order[b.kind]);
 
@@ -810,7 +1121,9 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
   // with the first reminder turned off, the "Reminders go out at …" line would be false.
   const activeIds = new Set(active.map((s) => s.id));
   const hasReporter = rows.siteReporters.some(
-    (sr) => activeIds.has(sr.site_id) && ix.reporterById.get(sr.reporter_id)?.status === 'verified',
+    (sr) =>
+      activeIds.has(sr.site_id) &&
+      isActiveReporterStatus(ix.reporterById.get(sr.reporter_id)?.status ?? ''),
   );
 
   return {
@@ -888,6 +1201,7 @@ export function assembleSiteCards(rows: RowSet, ctx: AssembleCtx): SiteCard[] {
       onTime14: streak.filter((c) => c.status === 'on_time').length,
       reporterName: reporter?.name ?? null,
       reporterPhone: reporter?.phone_e164 ?? null,
+      reporterContactPref: reporter?.contact_pref ?? null,
       crewToday: filedToday ? totalsOf(rows, data).crewOnSite : null,
       weatherDaysMonth: weatherDates.size,
       needsAttention:
@@ -904,6 +1218,25 @@ export function assembleSiteCards(rows: RowSet, ctx: AssembleCtx): SiteCard[] {
 
 // ───────────────────────────── Site detail ─────────────────────────────
 
+/**
+ * P5 "channel dot per day" (W1-18): a report's `field_channel` as the calendar shows it. Web and
+ * SMS answers come through the personal text link, voice is a call, office is typed in the panel;
+ * null is a v1.0 WhatsApp report (D13), which gets no dot.
+ */
+export function calendarChannel(channel: ReportRow['channel']): CalendarChannel | null {
+  switch (channel) {
+    case 'web':
+    case 'sms':
+      return 'link';
+    case 'voice':
+      return 'call';
+    case 'office':
+      return 'office';
+    default:
+      return null;
+  }
+}
+
 function crewRowsFor(
   rows: RowSet,
   ix: Index,
@@ -918,7 +1251,7 @@ function crewRowsFor(
     const unconfirmed = !company || company.status === 'unconfirmed';
     const badges: CrewRow['badges'] = [];
     const change = changes.get(i);
-    if (change) badges.push({ kind: 'edited', label: copy.chips.edited(report.current_version) });
+    if (change) badges.push({ kind: 'edited', version: report.current_version });
     const q = qs.find((x) => {
       const t = isRecord(x.target) ? x.target : {};
       return (
@@ -927,21 +1260,18 @@ function crewRowsFor(
         (typeof t.companyNameHeard === 'string' && t.companyNameHeard === m.companyNameHeard)
       );
     });
-    if (q?.answered_at)
-      badges.push({ kind: 'confirmed_by_reply', label: copy.chips.confirmedByReply });
+    // P5 "CONFIRMED BY ANSWER": the reporter answered a question about this row (any channel).
+    if (q?.answered_at) badges.push({ kind: 'confirmed_by_answer' });
     else if (q?.asked_at)
       badges.push({
         kind: 'asked',
-        label: copy.chips.asked(
-          formatTimeInTz(
-            q.asked_at,
-            ix.siteById.get(report.site_id)?.timezone ?? rows.org.timezone,
-          ),
+        time: formatTimeInTz(
+          q.asked_at,
+          ix.siteById.get(report.site_id)?.timezone ?? rows.org.timezone,
         ),
       });
-    if (m.hoursBasis === 'reply' && !q)
-      badges.push({ kind: 'confirmed_by_reply', label: copy.chips.confirmedByReply });
-    if (unconfirmed) badges.push({ kind: 'unconfirmed', label: copy.chips.unconfirmed });
+    if (m.hoursBasis === 'answer' && !q) badges.push({ kind: 'confirmed_by_answer' });
+    if (unconfirmed) badges.push({ kind: 'unconfirmed' });
     return {
       companyId: m.companyId,
       companyName: m.companyName,
@@ -995,6 +1325,7 @@ export function assembleSiteDetail(
       lostHours: lost,
       reportId: filed ? report.id : null,
       isLate: !!(sd?.is_late || report?.is_late),
+      channel: filed ? calendarChannel(report.channel) : null,
     };
   });
 
@@ -1077,7 +1408,7 @@ export function assembleSiteDetail(
     .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
 
   // Each report's photos as its current version shows them (an edit may remove or re-caption).
-  const msgById = new Map(rows.messages.map((m) => [m.id, m]));
+  const media = mediaIndex(rows);
   const photoSources = groupBy(
     rows.sources.filter((s) => s.kind === 'photo'),
     (s) => s.report_id,
@@ -1088,16 +1419,17 @@ export function assembleSiteDetail(
       const v = currentVersion(ix, r);
       const list = v
         ? versionData(v)?.photos
-        : rows.photoLists?.find((p) => p.report_id === r.id && p.version === r.current_version)
-            ?.photos;
-      return shownPhotos(list, photoSources.get(r.id) ?? [], msgById).map((p) => ({
-        messageId: p.source.message_id,
+        : photoListOf(
+            rows.photoLists?.find((p) => p.report_id === r.id && p.version === r.current_version),
+          );
+      return shownPhotos(list, photoSources.get(r.id) ?? [], media).map((p) => ({
+        messageId: p.id,
         reportId: r.id,
         reportNo: r.report_no,
         date: ix.reportDate.get(r.id) ?? '',
         caption: p.caption,
         takenAt: p.takenAt,
-        storagePath: p.message?.storage_path ?? null,
+        storagePath: p.media?.storagePath ?? null,
         url: null,
       }));
     })
@@ -1118,28 +1450,59 @@ export function assembleSiteDetail(
     monthStats,
     crewToday,
     photoCount: photos.length,
+    callToday: (() => {
+      const primary = reporters.find((r) => r.isPrimary) ?? reporters[0];
+      return primary
+        ? callTodayOf(rows.calls ?? [], primary.id, site.timezone, ctx.now, siteId)
+        : null;
+    })(),
     photos,
   };
 }
 
 // ───────────────────────────── Reports list ─────────────────────────────
 
-export function reportFlags(report: ReportRow, lost: number, tz: string): ReportFlag[] {
+export function reportFlags(
+  report: ReportRow,
+  lost: number,
+  tz: string,
+  photoCount: number | null = null,
+): ReportFlag[] {
   const flags: ReportFlag[] = [];
-  if (report.kind === 'weather_day')
-    flags.push({ kind: 'weather_day', label: copy.reports.flags.weatherDay });
-  else if (lost > 0)
-    flags.push({ kind: 'rain', label: copy.reports.flags.rain(formatHours(lost)) });
-  if (report.current_version > 1)
-    flags.push({ kind: 'version', label: copy.reports.flags.version(report.current_version) });
+  if (report.kind === 'weather_day') flags.push({ kind: 'weather_day' });
+  else if (lost > 0) flags.push({ kind: 'rain', hours: lost });
+  if (report.current_version > 1) flags.push({ kind: 'version', version: report.current_version });
   if (report.review_reasons.some((r) => r.startsWith('unknown_company')))
-    flags.push({ kind: 'unknown_sub', label: copy.reports.flags.unknownSub });
+    flags.push({ kind: 'unknown_sub' });
   if (report.is_late && report.received_at)
-    flags.push({
-      kind: 'late',
-      label: copy.reports.flags.late(formatTimeInTz(report.received_at, tz)),
-    });
+    flags.push({ kind: 'late', time: formatTimeInTz(report.received_at, tz) });
+  if (hasNoPhoto(report, photoCount)) flags.push({ kind: 'no_photo' });
   return flags;
+}
+
+/**
+ * P6 "No photo" (spec §19 Q72): a report the office flagged for it (`review_reasons` no_photo,
+ * §10.5: a call report whose photos never came), or a report other than a weather day whose
+ * current version shows no photo. Unknown (`null`: the version's photo list was not loaded)
+ * flags nothing.
+ */
+export function hasNoPhoto(report: ReportRow, photoCount: number | null): boolean {
+  if (report.review_reasons.includes('no_photo')) return true;
+  return report.kind !== 'weather_day' && photoCount === 0;
+}
+
+/**
+ * The current version's photo count: the length of its stored `data.photos` (v1 and v2 keep the
+ * list; no upgrade needed to count it), or of its `data->photos` loaded alone; else null.
+ */
+function currentPhotoCount(
+  ix: Index,
+  r: ReportRow,
+  lists: ReadonlyMap<string, unknown> | null,
+): number | null {
+  const v = currentVersion(ix, r);
+  const photos = v && isRecord(v.data) ? v.data.photos : lists?.get(r.id);
+  return Array.isArray(photos) ? photos.length : null;
 }
 
 export function assembleReportItems(
@@ -1154,15 +1517,22 @@ export function assembleReportItems(
   const lostByReport = new Map<string, number>();
   for (const w of wx)
     lostByReport.set(w.report_id, (lostByReport.get(w.report_id) ?? 0) + Number(w.lost_hours));
+  const current = new Map(reports.map((r) => [r.id, r.current_version]));
+  const lists = rows.photoLists
+    ? new Map(
+        rows.photoLists
+          .filter((p) => current.get(p.report_id) === p.version)
+          .map((p) => [p.report_id, p.photos]),
+      )
+    : null;
   return reports.map((r) => {
     const site = ix.siteById.get(r.site_id);
     const tz = site?.timezone ?? rows.org.timezone;
     const reporter = reporterOf(ix, r);
     const crewRows = crewByReport.get(r.id) ?? [];
     const lost = lostByReport.get(r.id) ?? 0;
-    const flags = reportFlags(r, lost, tz);
-    if (incidentReportIds.has(r.id))
-      flags.push({ kind: 'incident', label: copy.reports.flags.incident });
+    const flags = reportFlags(r, lost, tz, currentPhotoCount(ix, r, lists));
+    if (incidentReportIds.has(r.id)) flags.push({ kind: 'incident' });
     const isWx = r.kind === 'weather_day';
     return {
       reportId: r.id,
@@ -1176,6 +1546,7 @@ export function assembleReportItems(
       crew: isWx ? null : sum(crewRows.map((m) => Number(m.workers))),
       hours: isWx ? null : sum(crewRows.map((m) => Number(m.hours))),
       version: r.current_version,
+      channel: reportChannel(r.channel),
       flags,
       chip: chipForReport(r),
       status: r.status,
@@ -1199,8 +1570,8 @@ export function filterReports(
   for (const w of wx)
     lostByReport.set(w.report_id, (lostByReport.get(w.report_id) ?? 0) + Number(w.lost_hours));
   const incidentIds = new Set<string>();
-  const transcriptByMessage = new Map(
-    rows.transcripts.map((t) => [t.message_id, t.text.toLowerCase()]),
+  const transcriptByMedia = new Map(
+    rows.transcripts.map((t) => [transcriptMediaId(t), t.text.toLowerCase()]),
   );
   const sourcesByReport = groupBy(rows.sources, (s) => s.report_id);
 
@@ -1226,6 +1597,7 @@ export function filterReports(
     if (filters.hasWeatherDelay && !(lost > 0 || r.kind === 'weather_day')) return false;
     if (filters.edited && r.current_version <= 1) return false;
     if (filters.late && !r.is_late) return false;
+    if (filters.channel && reportChannel(r.channel) !== filters.channel) return false;
     const data = versionData(currentVersion(ix, r));
     const hasIncident = (data?.safety.incidents.length ?? 0) > 0;
     if (hasIncident) incidentIds.add(r.id);
@@ -1235,7 +1607,7 @@ export function filterReports(
         .join(' ')
         .toLowerCase();
       const transcripts = (sourcesByReport.get(r.id) ?? [])
-        .map((s) => transcriptByMessage.get(s.message_id) ?? '')
+        .map((s) => transcriptByMedia.get(sourceMediaId(s)) ?? '')
         .join(' ');
       if (!hay.includes(q) && !transcripts.includes(q)) return false;
     }
@@ -1281,25 +1653,95 @@ export function paginate(
 
 // ───────────────────────────── Report detail ─────────────────────────────
 
-const ACTION_LABELS: Record<string, string> = {
-  'report.created': 'Voice note received',
-  'question.asked': 'Question asked',
-  'question.answered': 'Question answered',
-  'report.confirmed': 'Confirmed on WhatsApp',
-  'report.filed': 'Filed',
-  'report.version_created': 'New version',
-  'report.pdf_rendered': 'PDF created',
-  'report.signed_off': 'Signed off',
-  'report.signoff_undone': 'Sign-off undone',
-  'report.signoff_reverted': 'Sign-off reverted by edit',
-  'report.needs_review': 'Flagged for review',
-  'report.unknown_company_resolved': 'Unknown company resolved',
-  'site_day.marked_no_work': 'Marked no work',
-  'site_day.missing': 'Missing — office alerted',
+/**
+ * Audit actions of a report and its site-day as Activity kinds (P7). `null` hides an action the
+ * timeline shows from its own rows (or that says nothing to the office); an action not listed is
+ * shown as `other` with its name.
+ */
+const AUDIT_KINDS: Record<string, ActivityKind | null> = {
+  'link.opened': 'link_opened',
+  'report.created': 'report_started',
+  'report.extracted': 'extracted',
+  'question.asked': 'question_asked',
+  'report.question_asked': 'question_asked',
+  'question.answered': 'question_answered',
+  'report.question_answered': 'question_answered',
+  'report.question_timeout': 'question_timeout',
+  'report.question_resolved': null,
+  'report.draft_sent': 'draft_shown',
+  'report.draft_corrected': 'draft_corrected',
+  'report.confirm_requested': 'confirmed',
+  'report.confirmed': 'confirmed',
+  'report.confirm_stale': null,
+  'report.status_changed': null,
+  'report.filed': 'filed',
+  'report.version_created': 'version',
+  'report.pdf_rendered': 'pdf_rendered',
+  'report.emailed': 'pdf_emailed',
+  'report.pdf_emailed': 'pdf_emailed',
+  'email.sent': 'pdf_emailed',
+  'report.signed_off': 'signed_off',
+  'report.signoff_undone': 'signoff_undone',
+  'report.signoff_reverted': 'signoff_reverted',
+  'report.needs_review': 'needs_review',
+  'report.unknown_company_resolved': 'company_resolved',
+  'report.voided': 'voided',
+  'site_day.marked_no_work': 'no_work',
+  'site_day.no_work': 'no_work',
+  'site_day.missing': 'missing',
+  'site_day.status_changed': null,
 };
 
-function excerptsFor(data: DailyReportData, segments: TranscriptSegment[]): TranscriptExcerpt[] {
+const QUESTION_KINDS = new Set<ActivityKind>(['question_asked', 'question_answered']);
+
+/** The words of the excerpts' mapped facts, in the report's language (report content, §11.2). */
+interface FactWords {
+  workers: string;
+  lost: string;
+  toolboxTalk: string;
+  noIncidents: string;
+  notStated: string;
+  workStatus: Record<string, string>;
+}
+
+function factWords(language: string): FactWords {
+  const en = copy.report;
+  const tr = UI_RESOURCES.tr.panel.report as PanelCopyTree | undefined;
+  const pick = (path: string, fallback: string): string => {
+    if (language !== 'tr' || !tr) return fallback;
+    const v = path
+      .split('.')
+      .reduce<unknown>((node, k) => (isRecord(node) ? node[k] : undefined), tr);
+    return typeof v === 'string' ? v : fallback;
+  };
+  return {
+    workers: pick('facts.workers', en.facts.workers),
+    lost: pick('facts.lost', en.facts.lost),
+    toolboxTalk: pick('facts.toolboxTalk', en.facts.toolboxTalk),
+    noIncidents: pick('facts.noIncidents', en.facts.noIncidents),
+    notStated: pick('facts.notStated', en.facts.notStated),
+    workStatus: Object.fromEntries(
+      Object.entries(en.workStatus).map(([k, v]) => [k, pick(`workStatus.${k}`, v)]),
+    ),
+  };
+}
+
+/**
+ * Transcript excerpts for the values a clip is cited for (`cites`: a voice note's upload or a
+ * call's id). A value cited to another clip of the report (a spoken correction, F10) has no
+ * excerpt here: its seconds are of that clip, not of these segments. The mapped facts are in the
+ * report's language.
+ */
+function excerptsFor(
+  data: DailyReportData,
+  segments: TranscriptSegment[],
+  cites: (s: Source) => boolean,
+  language: string,
+): TranscriptExcerpt[] {
   if (!segments.length) return [];
+  const w = factWords(language);
+  const locale = language === 'tr' ? 'tr-TR' : 'en-US';
+  const hrs = (h: number) => formatHoursIn(h, locale);
   const out: TranscriptExcerpt[] = [];
   const seen = new Set<string>();
   const push = (
@@ -1307,8 +1749,8 @@ function excerptsFor(data: DailyReportData, segments: TranscriptSegment[]): Tran
     mapped: string,
     section: TranscriptExcerpt['section'],
   ) => {
-    const a = src?.find((s) => s.type === 'audio');
-    if (!a || a.type !== 'audio') return;
+    const a = src?.find(cites);
+    if (!a || (a.type !== 'voice_note' && a.type !== 'call')) return;
     const seg =
       segments.find((s) => a.start >= s.start - 0.01 && a.start < s.end) ??
       segments.find((s) => s.end > a.start);
@@ -1316,16 +1758,21 @@ function excerptsFor(data: DailyReportData, segments: TranscriptSegment[]): Tran
     const key = `${seg.start}:${mapped}`;
     if (seen.has(key)) return;
     seen.add(key);
-    out.push({ start: seg.start, end: seg.end, quote: seg.text, mapped, section });
+    out.push({
+      start: seg.start,
+      end: seg.end,
+      quote: seg.text,
+      mapped,
+      section,
+      ...(seg.speaker ? { speaker: seg.speaker } : {}),
+    });
   };
   for (const m of data.manpower) {
-    const hrs =
-      m.totalHours !== null
-        ? ` × ${m.hoursPerWorker ?? '?'} h = ${formatHoursNum(m.totalHours)} h`
-        : '';
+    const total =
+      m.totalHours !== null ? ` × ${m.hoursPerWorker ?? '?'} = ${hrs(m.totalHours)}` : '';
     push(
       m.source,
-      `${m.companyName} · ${m.workers ?? '?'} ${copy.common.workersUnit}${hrs}${m.area ? ` · ${m.area}` : ''}`,
+      `${m.companyName} · ${fillCopy(w.workers, { count: m.workers ?? '?' })}${total}${m.area ? ` · ${m.area}` : ''}`,
       'manpower',
     );
   }
@@ -1333,19 +1780,18 @@ function excerptsFor(data: DailyReportData, segments: TranscriptSegment[]): Tran
     const range = p.start && p.end ? ` ${p.start}–${p.end}` : '';
     push(
       p.source,
-      `${p.condition}${range} · ${p.impact ?? ''} · ${formatHours(p.lostHours)} lost`.replace(
-        ' ·  ·',
-        ' ·',
-      ),
+      [`${p.condition}${range}`, p.impact, fillCopy(w.lost, { hours: hrs(p.lostHours) })]
+        .filter(Boolean)
+        .join(' · '),
       'weather',
     );
   }
-  for (const w of data.workPerformed) {
-    const qty = w.quantity ? ` · ${w.quantity.value} ${w.quantity.unit}` : '';
-    const pct = w.percentComplete !== undefined ? ` · ${w.percentComplete}%` : '';
+  for (const x of data.workPerformed) {
+    const qty = x.quantity ? ` · ${x.quantity.value} ${x.quantity.unit}` : '';
+    const pct = x.percentComplete !== undefined ? ` · ${x.percentComplete}%` : '';
     push(
-      w.source,
-      `${w.area} · ${w.activity} · ${copy.report.workStatus[w.status]}${qty}${pct}`,
+      x.source,
+      `${x.area} · ${x.activity} · ${w.workStatus[x.status] ?? x.status}${qty}${pct}`,
       'work',
     );
   }
@@ -1358,17 +1804,359 @@ function excerptsFor(data: DailyReportData, segments: TranscriptSegment[]): Tran
   push(
     data.safety.source,
     data.safety.toolboxTalk
-      ? copy.report.safety.toolboxTalk(data.safety.toolboxTalk) +
-          (data.safety.noIncidentsStated ? ` · ${copy.report.safety.noIncidents}` : '')
+      ? fillCopy(w.toolboxTalk, { topic: data.safety.toolboxTalk }) +
+          (data.safety.noIncidentsStated ? ` · ${w.noIncidents}` : '')
       : data.safety.noIncidentsStated
-        ? copy.report.safety.noIncidents
-        : copy.report.safety.notStated,
+        ? w.noIncidents
+        : w.notStated,
     'safety',
   );
   for (const n of data.nextWorkday) push(n.source, n.item, 'next');
   for (const i of data.issues) push(i.source, i.description, 'other');
   out.sort((a, b) => a.start - b.start);
   return out.slice(0, 8);
+}
+
+function byTime(a: { at: string }, b: { at: string }): number {
+  return a.at < b.at ? -1 : a.at > b.at ? 1 : 0;
+}
+
+/**
+ * Every recording of a report, in time order (§11.3 `MediaPlayer`, W1-17): its voice notes, from
+ * their uploads (a WhatsApp-era note from its message), and its answered calls' recordings, each
+ * with its transcript and the excerpts of the values it is cited for.
+ */
+export function reportClips(
+  rows: RowSet,
+  report: ReportRow,
+  data: DailyReportData,
+  sources: readonly ReportSourceRow[],
+  media: MediaIndex = mediaIndex(rows),
+): MediaClip[] {
+  const language = report.language ?? data.reportLanguage;
+  const transcriptOf = (pred: (t: TranscriptRow) => boolean) => {
+    const t = rows.transcripts.find(pred);
+    return t ? { language: t.language, text: t.text, segments: segmentsOf(t.segments) } : null;
+  };
+  const languagesOf = (lang: string | null | undefined) =>
+    (lang ?? '')
+      .split(/[+,\s]+/)
+      .map((c) => c.trim().toLowerCase())
+      .filter(Boolean);
+  const clips: MediaClip[] = [];
+  const seen = new Set<string>();
+  for (const s of sources) {
+    if (!isVoiceSourceKind(s.kind)) continue;
+    const file = sourceMedia(s, media);
+    if (!file || seen.has(file.id)) continue;
+    seen.add(file.id);
+    const transcript = transcriptOf((t) => transcriptMediaId(t) === file.id);
+    clips.push({
+      id: file.id,
+      kind: 'voice_note',
+      bucket: 'audio',
+      peaks: file.peaks ?? [],
+      durationS: Number(file.durationS ?? 0),
+      storagePath: file.storagePath,
+      url: null,
+      receivedAt: file.receivedAt,
+      languages: languagesOf(transcript?.language),
+      transcript,
+      excerpts: transcript
+        ? excerptsFor(data, transcript.segments, (x) => voiceMediaIdOf(x) === file.id, language)
+        : [],
+    });
+  }
+  const callIds = new Set(sources.flatMap((s) => (s.call_id ? [s.call_id] : [])));
+  for (const c of rows.calls ?? []) {
+    if (seen.has(c.id) || c.status !== 'completed') continue;
+    if (c.report_id !== report.id && !callIds.has(c.id)) continue;
+    seen.add(c.id);
+    const transcript = transcriptOf((t) => t.call_id === c.id);
+    // Two lanes since W3-01 (reporter, agent); a v1 row's single array is the reporter's lane.
+    const lanes = readCallPeaks(c.peaks);
+    clips.push({
+      id: c.id,
+      kind: 'call',
+      bucket: 'calls',
+      peaks: lanes?.reporter ?? [],
+      agentPeaks: lanes?.agent ?? null,
+      call: { direction: c.direction, transport: c.transport, outcome: c.outcome },
+      durationS: Number(c.duration_s ?? 0),
+      storagePath: c.recording_path,
+      url: null,
+      receivedAt: c.started_at ?? c.created_at ?? '',
+      languages: languagesOf(transcript?.language),
+      transcript,
+      excerpts: transcript
+        ? excerptsFor(
+            data,
+            transcript.segments,
+            (x) => x.type === 'call' && x.callId === c.id,
+            language,
+          )
+        : [],
+    });
+  }
+  return clips.sort((a, b) => byTime({ at: a.receivedAt }, { at: b.receivedAt }));
+}
+
+/**
+ * The spoken answers' clips of a report's questions (W2-09 *Other — say it*, `uploads.question_id`;
+ * §19 Q93): each with its transcript, in time order. Not report material: P7 plays one from its
+ * answer, never among the report's recordings.
+ */
+export function answerClips(rows: RowSet, report: ReportRow): MediaClip[] {
+  const questionIds = new Set(
+    rows.questions.filter((q) => q.report_id === report.id).map((q) => q.id),
+  );
+  return (rows.uploads ?? [])
+    .filter((u) => u.question_id !== null && questionIds.has(u.question_id) && u.kind === 'audio')
+    .map((u): MediaClip => {
+      const t = rows.transcripts.find((x) => x.upload_id === u.id);
+      return {
+        id: u.id,
+        kind: 'voice_note',
+        bucket: 'audio',
+        peaks: Array.isArray(u.peaks)
+          ? u.peaks.filter((x): x is number => typeof x === 'number')
+          : [],
+        durationS: Number(u.duration_s ?? 0),
+        storagePath: u.purged_at ? null : u.storage_path,
+        url: null,
+        receivedAt: u.received_at ?? u.recorded_at ?? '',
+        languages: [],
+        transcript: t
+          ? { language: t.language, text: t.text, segments: segmentsOf(t.segments) }
+          : null,
+        excerpts: [],
+        questionId: u.question_id,
+      };
+    })
+    .sort((a, b) => byTime({ at: a.receivedAt }, { at: b.receivedAt }));
+}
+
+/** Photos received with a voice note: within five minutes of it, in either direction. */
+const PHOTO_WITH_CLIP_MS = 5 * 60_000;
+
+/**
+ * P7 Activity: the report's field events and the office's actions, in time order. From the audit
+ * log (the report, its site-day, and the reporter's link openings that day), the report's uploads
+ * (voice notes with the photos sent along), its questions, the reporter's texts and calls that
+ * day, and a WhatsApp-era report's conversation.
+ */
+export function reportActivity(
+  rows: RowSet,
+  report: ReportRow,
+  input: {
+    date: string;
+    tz: string;
+    reporter: ReporterRow | undefined;
+    clips: readonly MediaClip[];
+    sources: readonly ReportSourceRow[];
+    whatsapp: readonly MessageRow[];
+  },
+): ActivityEntry[] {
+  const { date, tz, reporter, clips, sources, whatsapp } = input;
+  const ix = buildIndex(rows);
+  const reporterName = reporter?.name ?? null;
+  const sameDay = (at: string | null | undefined) => !!at && formatDateInTz(at, tz) === date;
+  const actorName = (a: AuditLogRow): string | null => {
+    if (a.actor_type === 'user') return memberName(rows, a.actor_id);
+    if (a.actor_type === 'reporter')
+      return (a.actor_id && ix.reporterById.get(a.actor_id)?.name) || reporterName;
+    return null;
+  };
+  const questions = rows.questions.filter((q) => q.report_id === report.id);
+  const isWhatsApp = whatsapp.length > 0;
+  const out: ActivityEntry[] = [];
+
+  for (const a of rows.audit) {
+    const ofReport =
+      a.entity_id === report.id || (a.entity === 'site_day' && a.entity_id === report.site_day_id);
+    const linkOpened =
+      a.action === 'link.opened' &&
+      !!reporter &&
+      a.actor_id === reporter.id &&
+      sameDay(a.created_at);
+    if (!ofReport && !linkOpened) continue;
+    const mapped = a.action in AUDIT_KINDS ? AUDIT_KINDS[a.action] : 'other';
+    if (!mapped) continue;
+    // The question rows and the uploads say these better.
+    if (QUESTION_KINDS.has(mapped) && questions.length) continue;
+    if (mapped === 'report_started' && clips.length) continue;
+    const diff = isRecord(a.diff) ? a.diff : {};
+    const params: Record<string, string | number> = {};
+    let detail: string | null = null;
+    if (typeof diff.version === 'number') params.version = diff.version;
+    if (mapped === 'filed' && params.version === undefined) params.version = 1;
+    const via = diff.via ?? diff.channel;
+    if (typeof via === 'string') params.channel = via;
+    if (mapped === 'version' && typeof diff.change_note === 'string') detail = diff.change_note;
+    else if (typeof diff.answer === 'string') detail = diff.answer;
+    else if (typeof diff.company === 'string')
+      detail = [typeof diff.field === 'string' ? diff.field : null, diff.company]
+        .filter(Boolean)
+        .join(' · ');
+    if (mapped === 'other') params.action = a.action;
+    out.push({
+      id: `audit:${a.id}`,
+      at: a.created_at,
+      actorType: (a.actor_type ?? 'system') as ActivityEntry['actorType'],
+      actorName: actorName(a),
+      kind: mapped,
+      params,
+      detail,
+      anchor: null,
+    });
+  }
+
+  // Voice notes with the photos sent along ("Voice note + 2 photos received"), then the rest.
+  if (!isWhatsApp) {
+    const reporterPhotos = sources
+      .filter((s) => s.kind === 'photo')
+      .flatMap((s) => {
+        const id = sourceMediaId(s);
+        const upload = id ? rows.uploads?.find((u) => u.id === id) : undefined;
+        if (upload?.uploaded_by) return []; // an office photo: its version says so
+        const at = upload?.received_at ?? upload?.recorded_at ?? s.taken_at ?? s.created_at;
+        return at ? [{ id: id ?? s.id, at }] : [];
+      })
+      .sort(byTime);
+    const used = new Set<string>();
+    for (const c of clips) {
+      if (c.kind !== 'voice_note') continue;
+      const t = new Date(c.receivedAt).getTime();
+      const along = reporterPhotos.filter(
+        (p) => !used.has(p.id) && Math.abs(new Date(p.at).getTime() - t) <= PHOTO_WITH_CLIP_MS,
+      );
+      along.forEach((p) => used.add(p.id));
+      out.push({
+        id: `clip:${c.id}`,
+        at: c.receivedAt,
+        actorType: 'reporter',
+        actorName: reporterName,
+        kind: 'clip_received',
+        params: { seconds: Math.round(c.durationS), photos: along.length },
+        detail: null,
+        anchor: null,
+      });
+    }
+    const rest = groupBy(
+      reporterPhotos.filter((p) => !used.has(p.id)),
+      (p) => p.at.slice(0, 16),
+    );
+    for (const [minute, list] of rest)
+      out.push({
+        id: `photos:${minute}`,
+        at: list[0]!.at,
+        actorType: 'reporter',
+        actorName: reporterName,
+        kind: 'photos_received',
+        params: { photos: list.length },
+        detail: null,
+        anchor: null,
+      });
+  }
+
+  for (const q of questions) {
+    const t = isRecord(q.target) ? q.target : {};
+    const about = typeof t.companyName === 'string' ? t.companyName : null;
+    const channel = q.channel ?? (isWhatsApp ? 'whatsapp' : null);
+    if (q.asked_at)
+      out.push({
+        id: `question:${q.id}:asked`,
+        at: q.asked_at,
+        actorType: 'agent',
+        actorName: null,
+        kind: 'question_asked',
+        params: channel ? { channel } : {},
+        detail: about ? `${about} · ${q.prompt}` : q.prompt,
+        anchor: null,
+      });
+    if (q.answered_at)
+      out.push({
+        id: `question:${q.id}:answered`,
+        at: q.answered_at,
+        actorType: 'reporter',
+        actorName: reporterName,
+        kind: 'question_answered',
+        params: channel ? { channel } : {},
+        detail: answerText(q.answer),
+        anchor: q.id,
+      });
+  }
+
+  // The reporter's texts that day (any channel the Notifier used). A text TalkOlog sent carries a
+  // personal link, so only its kind and delivery show; a reply shows its words.
+  if (reporter)
+    for (const m of rows.messages) {
+      if (m.channel === null || m.reporter_id !== reporter.id || !sameDay(m.created_at)) continue;
+      const out_ = m.direction === 'out';
+      out.push({
+        id: `message:${m.id}`,
+        at: m.created_at,
+        actorType: out_ ? 'agent' : 'reporter',
+        actorName: out_ ? null : reporterName,
+        kind: out_ ? 'text_sent' : 'text_received',
+        params: { channel: m.channel, message: m.copy_key ?? '', status: m.status },
+        detail: out_ ? null : m.body,
+        anchor: m.id,
+      });
+    }
+
+  // Calls of the report, and the reporter's other calls that day (a missed reminder call).
+  for (const c of rows.calls ?? []) {
+    const at = c.started_at ?? c.created_at;
+    const mine =
+      c.report_id === report.id ||
+      sources.some((s) => s.call_id === c.id) ||
+      (!!reporter && c.reporter_id === reporter.id && sameDay(at));
+    if (!mine || !at) continue;
+    const answered = c.status === 'completed';
+    out.push({
+      id: `call:${c.id}`,
+      at,
+      actorType: c.direction === 'inbound' ? 'reporter' : 'agent',
+      actorName: c.direction === 'inbound' ? reporterName : null,
+      kind: !answered ? 'call_missed' : c.direction === 'inbound' ? 'call_in' : 'call_out',
+      params: {
+        ...(answered ? { seconds: Number(c.duration_s ?? 0) } : { status: c.status }),
+        transport: c.transport,
+        ...(c.outcome ? { outcome: c.outcome } : {}),
+      },
+      detail: null,
+      anchor: c.id,
+    });
+  }
+
+  for (const m of whatsapp) {
+    if (m.type === null) continue;
+    out.push({
+      id: `whatsapp:${m.id}`,
+      at: m.created_at,
+      actorType: m.direction === 'in' ? 'reporter' : 'agent',
+      actorName: m.direction === 'in' ? reporterName : null,
+      kind: m.direction === 'in' ? 'whatsapp_in' : 'whatsapp_out',
+      params: { type: m.type },
+      detail: m.type === 'audio' ? null : m.body,
+      anchor: m.id,
+    });
+  }
+
+  out.sort(byTime);
+  // One entry per event: the audit log and the rows can both record a confirmation.
+  return out.filter(
+    (e, i) =>
+      !out
+        .slice(0, i)
+        .some(
+          (p) =>
+            p.kind === e.kind &&
+            p.kind === 'confirmed' &&
+            Math.abs(new Date(p.at).getTime() - new Date(e.at).getTime()) < 2 * 60_000,
+        ),
+  );
 }
 
 export function assembleReportDetail(
@@ -1387,23 +2175,31 @@ export function assembleReportDetail(
   const version =
     selected && versions.some((v) => v.version === selected) ? selected : report.current_version;
   const vRow = versions.find((v) => v.version === version);
-  const data = versionData(vRow);
-  if (!data) throw new Error(copy.errors.notFound);
+  const stored = versionData(vRow);
+  if (!vRow || !stored) throw new Error(copy.errors.notFound);
   const previousData = versionData(versions.find((v) => v.version === version - 1));
 
-  const sources = rows.sources.filter((s) => s.report_id === report.id);
-  const msgById = new Map(rows.messages.map((m) => [m.id, m]));
-  const audioSrc = sources.find((s) => s.kind === 'audio');
-  const audioMsg = audioSrc ? msgById.get(audioSrc.message_id) : undefined;
-  const transcriptRow = audioMsg
-    ? rows.transcripts.find((t) => t.message_id === audioMsg.id)
+  const sources = rows.sources
+    .filter((s) => s.report_id === report.id)
+    .sort((a, b) => byTime({ at: a.taken_at ?? '~' }, { at: b.taken_at ?? '~' }));
+  // W3-11 (§10.9): the precise seconds the post-call reconcile wrote replace the live seconds a
+  // value cites, so P7 plays the call where the recording says it.
+  const data = withPreciseCallSeconds(stored, sources);
+  const media = mediaIndex(rows);
+  const clips = reportClips(rows, report, data, sources, media);
+  // The first voice note (WhatsApp `audio` or v1.2 `voice_note`), for the PDF's evidence summary.
+  const firstVoice = clips.find((c) => c.kind === 'voice_note');
+  const firstFile = firstVoice
+    ? sources
+        .filter((s) => isVoiceSourceKind(s.kind))
+        .map((s) => sourceMedia(s, media))
+        .find((f) => f?.id === firstVoice.id)
     : undefined;
-  const segments = transcriptRow ? segmentsOf(transcriptRow.segments) : [];
   // The viewed version's photos: an office edit may have removed some or changed a caption.
-  const photos = shownPhotos(data.photos, sources, msgById).map((p) => ({
-    messageId: p.source.message_id,
-    storagePath: p.message?.storage_path ?? null,
-    mime: p.message?.media_mime ?? null,
+  const photos = shownPhotos(data.photos, sources, media).map((p) => ({
+    messageId: p.id,
+    storagePath: p.media?.storagePath ?? null,
+    mime: p.media?.mime ?? null,
     url: null,
     caption: p.caption,
     takenAt: p.takenAt,
@@ -1411,57 +2207,31 @@ export function assembleReportDetail(
 
   const reporter = reporterOf(ix, report);
   const reporterName = reporter?.name ?? copy.sites.reporter;
-  const actorName = (a: AuditLogRow): string => {
-    if (a.actor_type === 'user') return memberName(rows, a.actor_id) ?? 'Office';
-    if (a.actor_type === 'reporter')
-      return (a.actor_id && ix.reporterById.get(a.actor_id)?.name) || reporterName;
-    if (a.actor_type === 'agent') return 'SiteLog agent';
-    return 'System';
-  };
-  const activity: ActivityEntry[] = rows.audit
-    .filter(
-      (a) =>
-        a.entity_id === report.id ||
-        (a.entity === 'site_day' && a.entity_id === report.site_day_id),
-    )
-    .map((a) => {
-      const diff = isRecord(a.diff) ? a.diff : {};
-      const detail =
-        typeof diff.change_note === 'string'
-          ? `v${String(diff.version ?? '')}: ${diff.change_note}`
-          : typeof diff.answer === 'string'
-            ? diff.answer
-            : typeof diff.company === 'string'
-              ? `${String(diff.field ?? '')} · ${diff.company}`
-              : typeof diff.version === 'number'
-                ? `v${diff.version}`
-                : null;
-      return {
-        id: `audit:${a.id}`,
-        at: a.created_at,
-        actorType: (a.actor_type ?? 'system') as ActivityEntry['actorType'],
-        actorName: actorName(a),
-        label: ACTION_LABELS[a.action] ?? a.action,
-        detail,
-        messageId: null,
-      };
-    });
   const date = ix.reportDate.get(report.id) ?? data.reportDate;
+  // The WhatsApp thread of the day, when the voice note came by WhatsApp.
+  const convoId = firstFile?.conversationId ?? null;
   const convoMessages = rows.messages
     .filter(
       (m) =>
-        (audioMsg ? m.conversation_id === audioMsg.conversation_id : false) &&
+        convoId !== null &&
+        m.conversation_id === convoId &&
         formatDateInTz(m.created_at, tz) === date,
     )
     .sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
-  const messages: MessageItem[] = convoMessages.map((m) => ({
-    id: m.id,
-    direction: m.direction,
-    type: m.type,
-    body: m.body,
-    at: m.created_at,
-  }));
-  activity.sort((a, b) => (a.at < b.at ? -1 : 1));
+  // A WhatsApp message always has its type; SMS rows (no type) have no conversation.
+  const messages: MessageItem[] = convoMessages.flatMap((m) =>
+    m.type === null
+      ? []
+      : [{ id: m.id, direction: m.direction, type: m.type, body: m.body, at: m.created_at }],
+  );
+  const activity = reportActivity(rows, report, {
+    date,
+    tz,
+    reporter,
+    clips,
+    sources,
+    whatsapp: convoMessages,
+  });
 
   const questions: QuestionItem[] = rows.questions
     .filter((q) => q.report_id === report.id)
@@ -1474,6 +2244,7 @@ export function assembleReportDetail(
         options: optionsOf(q.options),
         askedAt: q.asked_at,
         answeredAt: q.answered_at,
+        answeredMessageId: q.answered_message_id,
         answer: answerText(q.answer),
         companyName: typeof t.companyName === 'string' ? t.companyName : null,
         manpowerIndex: typeof t.manpowerIndex === 'number' ? t.manpowerIndex : null,
@@ -1500,6 +2271,9 @@ export function assembleReportDetail(
       reviewReasons: report.review_reasons,
       isLate: report.is_late,
       kind: report.kind,
+      channel: report.channel ?? null,
+      confirmedVia: report.confirmed_via ?? null,
+      language: report.language ?? data.reportLanguage,
       receivedAt: report.received_at,
       confirmedAt: report.confirmed_at,
       filedAt: report.filed_at,
@@ -1511,6 +2285,7 @@ export function assembleReportDetail(
     reporter: reporter ? toReporterSummary(reporter, true) : null,
     version,
     data,
+    storedData: storedVersionData(vRow),
     previousData,
     versions: versions.map((v) => ({
       version: v.version,
@@ -1518,31 +2293,34 @@ export function assembleReportDetail(
       authorName:
         v.author === 'office_user'
           ? (memberName(rows, v.author_user_id) ?? 'Office')
-          : v.author === 'reporter_reply'
-            ? reporterName
-            : 'SiteLog agent',
+          : isReporterAuthor(v.author)
+            ? // F10 (W2-11, §19 Q81): the reporter who made the version (a backup may), else the report's.
+              (v.author_reporter_id && ix.reporterById.get(v.author_reporter_id)?.name) ||
+              reporterName
+            : 'TalkOlog agent',
       changeNote: v.change_note,
       createdAt: v.created_at,
       isCurrent: v.version === report.current_version,
       pdfPath: v.pdf_path,
+      via: v.via ?? null,
     })),
     totals: totalsOf(rows, data),
-    audio: audioMsg
+    audio: firstVoice
       ? {
-          messageId: audioMsg.id,
-          peaks: peaksOf(audioMsg.payload),
-          durationS: Number(audioMsg.duration_s ?? 0),
-          storagePath: audioMsg.storage_path,
+          messageId: firstVoice.id,
+          peaks: firstVoice.peaks,
+          durationS: firstVoice.durationS,
+          storagePath: firstVoice.storagePath,
           url: null,
-          receivedAt: audioMsg.created_at,
-          language: transcriptRow?.language ?? null,
+          receivedAt: firstVoice.receivedAt,
+          language: firstVoice.transcript?.language ?? null,
         }
       : null,
+    clips,
+    answerClips: answerClips(rows, report),
     photos,
-    transcript: transcriptRow
-      ? { language: transcriptRow.language, text: transcriptRow.text, segments }
-      : null,
-    excerpts: excerptsFor(data, segments),
+    transcript: firstVoice?.transcript ?? null,
+    excerpts: firstVoice?.excerpts ?? [],
     activity,
     messages,
     questions,
@@ -1565,6 +2343,68 @@ export function assembleReportDetail(
 /** Code-point order (not locale order), the same in every browser. */
 function compareText(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** What a crew line's first source cites, for the invoice check's evidence (P8). */
+interface EvidenceCite {
+  kind: InvoiceEvidence['kind'];
+  clipId: string | null;
+  at: number | null;
+  questionId: string | null;
+}
+
+/**
+ * A manpower row's source as invoice evidence: a voice note second (v2 `voice_note`, v1 `audio`),
+ * a call second, an answered question; a row with no source at all (WhatsApp-era data) points at
+ * the report's voice note; anything else (an office or reporter edit) at the report.
+ */
+function evidenceSource(
+  src: Record<string, unknown> | null,
+  reportAudio: ReportSourceRow | null,
+): EvidenceCite {
+  const at = src && typeof src.start === 'number' ? src.start : null;
+  if (src?.type === 'call' && typeof src.callId === 'string')
+    return { kind: 'call', clipId: src.callId, at, questionId: null };
+  if (src?.type === 'voice_note' || src?.type === 'audio') {
+    const id = voiceMediaIdOf(src as unknown as Source);
+    if (id) return { kind: 'voice_note', clipId: id, at, questionId: null };
+  }
+  if (src?.type === 'answer' && typeof src.questionId === 'string')
+    return { kind: 'answer', clipId: null, at: null, questionId: src.questionId };
+  const audioId = !src && reportAudio ? sourceMediaId(reportAudio) : null;
+  if (audioId) return { kind: 'voice_note', clipId: audioId, at: null, questionId: null };
+  return { kind: 'report', clipId: null, at: null, questionId: null };
+}
+
+/**
+ * The words behind a gap day's hours: the voice note's transcript segment at the cited second,
+ * the reporter's segment of the call at that second (never the agent's), or the answer. Null when
+ * there is nothing to read (the rows are not loaded for an accounts user).
+ */
+function evidenceQuote(
+  cite: EvidenceCite,
+  rows: RowSet,
+  transcriptByMedia: Map<string | null, TranscriptRow>,
+): string | null {
+  const at = cite.at;
+  if (cite.kind === 'voice_note' && cite.clipId && at !== null) {
+    const t = transcriptByMedia.get(cite.clipId);
+    const seg = t ? segmentsOf(t.segments).find((x) => at >= x.start && at < x.end) : undefined;
+    return seg?.text.trim() || null;
+  }
+  if (cite.kind === 'call' && cite.clipId && at !== null) {
+    const t = rows.transcripts.find((x) => x.call_id === cite.clipId);
+    const segs = t
+      ? segmentsOf(t.segments).filter((x) => x.speaker !== 'agent' && at >= x.start && at < x.end)
+      : [];
+    const seg = segs.find((x) => x.speaker === 'reporter') ?? segs[0];
+    return seg?.text.trim() || null;
+  }
+  if (cite.kind === 'answer' && cite.questionId) {
+    const q = rows.questions.find((x) => x.id === cite.questionId);
+    return q ? answerText(q.answer) : null;
+  }
+  return null;
 }
 
 export function assembleHours(
@@ -1667,9 +2507,12 @@ export function assembleHours(
   };
   const gapRows = rowsOut.filter((r) => r.status === 'gap');
 
-  const transcriptByMessage = new Map(rows.transcripts.map((t) => [t.message_id, t]));
+  const transcriptByMedia = new Map(rows.transcripts.map((t) => [transcriptMediaId(t), t]));
+  // A report's (first) voice note, for an entry that cites none.
   const audioByReport = new Map<string, ReportSourceRow>();
-  for (const s of rows.sources) if (s.kind === 'audio') audioByReport.set(s.report_id, s);
+  for (const s of rows.sources)
+    if (isVoiceSourceKind(s.kind) && !audioByReport.has(s.report_id))
+      audioByReport.set(s.report_id, s);
 
   const invoices: InvoiceDetail[] = rowsOut
     .filter((r) => r.invoiceId)
@@ -1697,31 +2540,28 @@ export function assembleHours(
           const entries = subs.filter((m) => m.report_id === rid && keyOf(m) === r.key);
           const entry = entries[0];
           if (!rep && !entry) continue;
-          const src =
-            entry && isRecord(entry.source) && entry.source.type === 'audio' ? entry.source : null;
-          const audioStart = src && typeof src.start === 'number' ? src.start : null;
-          const audio = audioByReport.get(rid);
-          const transcript = audio ? transcriptByMessage.get(audio.message_id) : undefined;
-          const seg =
-            transcript && audioStart !== null
-              ? segmentsOf(transcript.segments).find(
-                  (s) => audioStart >= s.start && audioStart < s.end,
-                )
-              : undefined;
-          const quote =
-            seg?.text ??
-            `${r.companyName} · ${entries.map((m) => `${m.workers} × ${formatHoursNum(Number(m.hours) / Math.max(1, Number(m.workers)))} h`).join(', ')} = ${formatHoursNum(sum(entries.map((m) => Number(m.hours))))} h`;
+          const cited = entry && isRecord(entry.source) ? entry.source : null;
+          const cite = evidenceSource(cited, audioByReport.get(rid) ?? null);
+          const quote = evidenceQuote(cite, rows, transcriptByMedia);
           const siteId = rep?.site_id ?? entry?.site_id;
           evidence.push({
             date: d.date,
             reportId: rid,
             reportNo: rep?.report_no ?? entry?.report_no ?? '',
             siteName: (siteId && ix.siteById.get(siteId)?.name) || '',
+            kind: cite.kind,
             quote,
-            audioStart,
-            messageId:
-              audio?.message_id ??
-              (src && typeof src.messageId === 'string' ? src.messageId : null),
+            crew: {
+              company: r.companyName,
+              lines: entries.map((m) => ({
+                workers: Number(m.workers),
+                hoursEach:
+                  Math.round((Number(m.hours) / Math.max(1, Number(m.workers))) * 100) / 100,
+              })),
+              total: sum(entries.map((m) => Number(m.hours))),
+            },
+            clipId: cite.clipId,
+            at: cite.at,
           });
         }
       }
@@ -1780,10 +2620,8 @@ export function payrollCsv(
   const cm = currentManpower(rows, ix).filter(
     (m) => m.date >= start && m.date <= end && (!siteId || m.site_id === siteId),
   );
-  const esc = (v: string | number | null | undefined) => {
-    const s = v === null || v === undefined ? '' : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
+  // The same cells as api-export-payroll: RFC 4180 quoting, formulas neutralised (W3-06).
+  const esc = csvCell;
   const lines = [columns.join(',')];
   for (const m of cm.sort((a, b) =>
     a.date === b.date ? a.site_id.localeCompare(b.site_id) : a.date < b.date ? -1 : 1,
@@ -1828,6 +2666,7 @@ export function assembleWeather(
   const monthEnd = monthDays(month).at(-1)!;
   const until = monthEnd < today ? monthEnd : today;
   const days = workdaysBetween(`${month}-01`, until, rows.settings.working_days);
+  const units: UnitSystem = rows.org.units === 'metric' ? 'metric' : 'imperial';
   const wx = currentWeather(rows, ix).filter(
     (w) =>
       w.date.startsWith(month) &&
@@ -1840,11 +2679,16 @@ export function assembleWeather(
     .map((w) => {
       const site = ix.siteById.get(w.site_id);
       const report = ix.reportById.get(w.report_id);
+      // The period's voice evidence: v1 `audio` (messageId), v2 `voice_note` (uploadId), or a
+      // `call` second (callId, 20261016000280).
       const audio = isRecord(w.audio_source) ? w.audio_source : null;
       const audioStart = audio && typeof audio.start === 'number' ? audio.start : null;
-      const observed = isRecord(w.observed)
-        ? (w.observed as unknown as DelayEntry['observed'])
-        : null;
+      const isCall = audio?.type === 'call' && typeof audio.callId === 'string';
+      const observed = observedWeatherIn(w.observed, units);
+      // Spec §19 Q134: a report the site manager did not confirm is claim-ready once signed off.
+      const confirmation = report ? packConfirmation(report) : null;
+      const signedOff = report?.status === 'signed_off';
+      const siteManager = confirmation === null || confirmedBySiteManager(confirmation);
       return {
         id: w.id,
         reportId: w.report_id,
@@ -1861,14 +2705,22 @@ export function assembleWeather(
         fullDay: w.full_day,
         observed,
         evidence: {
+          clip: audio ? (isCall ? ('call' as const) : ('voice_note' as const)) : null,
           audioStart,
-          messageId: audio && typeof audio.messageId === 'string' ? audio.messageId : null,
+          clipId: audio
+            ? isCall
+              ? (audio.callId as string)
+              : voiceMediaIdOf(audio as unknown as Source)
+            : null,
           photos: w.photo_count,
           weatherData: !!observed,
           // Only a site manager's report asks for a photo; one typed in the panel has no reporter.
           photoRequested: w.photo_count === 0 && !!report?.reporter_id,
         },
-        claimReady: w.claim_ready,
+        claimReady: confirmation
+          ? packClaimReady(w.claim_ready, confirmation, signedOff)
+          : w.claim_ready,
+        awaitingSignOff: !siteManager && !signedOff,
       };
     })
     .sort((a, b) =>
@@ -1910,6 +2762,7 @@ export function assembleWeather(
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   return {
     month,
+    units,
     siteId,
     sites: siteOptions,
     days,
@@ -1928,8 +2781,73 @@ export function assembleWeather(
 
 // ───────────────────────────── Team ─────────────────────────────
 
-export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
+/**
+ * P10 "Can't text this number" (W4-03): the latest welcome never went out and its walk is over
+ * (W2-01): no attempt was sent and the last one failed for good on its channel.
+ */
+export function welcomeUndeliverable(attempts: readonly WelcomeAttempt[]): boolean {
+  if (!attempts.length || attempts.some((a) => attemptWasSent(a))) return false;
+  const last = [...attempts].sort((a, b) => a.attempt - b.attempt).at(-1)!;
+  return attemptIsFinal({
+    status: last.status,
+    provider_message_id: last.provider_message_id,
+  });
+}
+
+/** The consent a message channel needs (§4.5; `MessageChannelSpec.consent`). */
+const CHANNEL_CONSENT = { sms: 'sms', whatsapp: 'whatsapp', push: 'push' } as const;
+
+/**
+ * W4-04 (F3, §19 Q230): the reporter's latest outbound call today (in `tz`), optionally at one
+ * site, as Team and Site detail show its progress. `calls` holds the rows the source loaded.
+ */
+export function callTodayOf(
+  calls: readonly Pick<
+    CallRow,
+    'id' | 'reporter_id' | 'site_id' | 'direction' | 'purpose' | 'status' | 'created_at'
+  >[],
+  reporterId: string,
+  tz: string,
+  now: Date,
+  siteId?: string,
+): CallToday | null {
+  const today = formatDateInTz(now, tz);
+  const latest = calls
+    .filter(
+      (c) =>
+        c.reporter_id === reporterId &&
+        c.direction === 'outbound' &&
+        (siteId === undefined || c.site_id === siteId) &&
+        !!c.created_at &&
+        formatDateInTz(new Date(c.created_at), tz) === today,
+    )
+    .sort((a, b) =>
+      a.created_at! < b.created_at! ? 1 : a.created_at! > b.created_at! ? -1 : 0,
+    )[0];
+  if (!latest) return null;
+  return {
+    id: latest.id,
+    progress: callProgress(latest.status),
+    at: latest.created_at!,
+    byOffice: isOfficeCall(latest),
+    live: ['queued', 'ringing', 'in_progress'].includes(latest.status),
+  };
+}
+
+/** §19 Q241 (W4-12): the automatic re-send's dedupe key. */
+const AUTO_RESEND_KEY = 'welcome_resend:';
+
+/**
+ * Team (P10, W4-03). `pack` is the org's country pack; `states` what `team_reporter_states()`
+ * answers (the demo builds the same from its rows).
+ */
+export function assembleTeam(
+  rows: RowSet,
+  ctx: AssembleCtx,
+  extra: { pack: CountryPack; states: readonly TeamReporterState[] },
+): TeamData {
   const ix = buildIndex(rows);
+  const stateById = new Map(extra.states.map((x) => [x.reporterId, x]));
   const today = formatDateInTz(ctx.now, rows.org.timezone);
   const from = addDays(today, -30);
   const reporters: TeamReporter[] = rows.reporters.map((r) => {
@@ -1958,14 +2876,21 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
         }
       }
     }
+    const state = stateById.get(r.id);
+    const welcome = state?.welcome ?? [];
     const chipStatus: TeamReporter['chipStatus'] =
       r.status === 'disabled'
         ? 'disabled'
-        : r.status === 'verified'
-          ? 'verified'
-          : r.last_invite_error
-            ? 'not_on_whatsapp'
-            : 'invite_sent';
+        : r.status === 'opted_out'
+          ? 'opted_out'
+          : isActiveReporterStatus(r.status)
+            ? 'active'
+            : welcomeUndeliverable(welcome)
+              ? 'undeliverable'
+              : 'invite_sent';
+    const optedOut = r.status === 'opted_out' || r.opted_out_at !== null;
+    const method = state?.optOutMethod ?? null;
+    const channel = r.message_channel;
     return {
       id: r.id,
       name: r.name,
@@ -1977,11 +2902,28 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
       sites,
       onTime30: expected ? Math.round((onTime / expected) * 100) : null,
       reports30,
-      lastInviteError: r.last_invite_error,
+      contactPref: r.contact_pref,
+      messageChannel: channel,
+      locale: r.locale as ReporterLocale,
+      optOutBy: !optedOut
+        ? null
+        : method === 'sms_keyword'
+          ? 'person'
+          : method === 'provider_opt_out'
+            ? 'provider'
+            : null,
+      devices: state?.devices ?? 0,
+      consents: state?.consents ?? [],
+      channelUnreachable:
+        channel !== null && !!state && !state.consents.includes(CHANNEL_CONSENT[channel]),
+      autoResent:
+        chipStatus === 'invite_sent' &&
+        welcome.some((a) => a.dedupe_key?.startsWith(AUTO_RESEND_KEY) === true),
+      callToday: callTodayOf(rows.calls ?? [], r.id, rows.org.timezone, ctx.now),
     };
   });
   reporters.sort((a, b) => a.name.localeCompare(b.name));
-  const unknownSenders = rows.unknownSenders
+  const unknownSenders = rows.unknownContacts
     .filter((u) => u.status === 'pending')
     .map((u) => ({
       id: u.id,
@@ -1992,13 +2934,24 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
       guessedSiteName: u.guessed_site_id
         ? (ix.siteById.get(u.guessed_site_id)?.name ?? null)
         : null,
-      messageId: u.first_message_id,
+      messageId: u.message_id,
+      channel: u.channel,
     }));
   return {
     reporters,
     unknownSenders,
     officeUsers: officeUsers(rows),
     sites: rows.sites.filter((s) => s.status !== 'archived').map(toSiteOption),
+    pack: {
+      code: extra.pack.code,
+      fieldLocales: [...extra.pack.fieldLocales],
+      messageChannels: [...extra.pack.messageChannels],
+      settingsChannels: settingsMessageChannels(extra.pack),
+      twoWaySms: extra.pack.twoWaySms,
+      hasVoiceNumber: extra.pack.voiceNumber !== null,
+    },
+    orgLocale: rows.org.locale as OrgLocale,
+    placesCalls: placesCalls({ isDemo: rows.org.is_demo === true }, extra.pack),
   };
 }
 
@@ -2011,6 +2964,7 @@ export function officeUsers(rows: RowSet): OfficeUser[] {
       email: m.email ?? null,
       title: m.title,
       role: m.role,
+      uiLocale: (m.ui_locale as OrgLocale | null) ?? null,
     }))
     .sort((a, b) => (order[a.role] ?? 9) - (order[b.role] ?? 9) || a.name.localeCompare(b.name));
 }
@@ -2033,6 +2987,7 @@ export function assembleGlossary(rows: RowSet): GlossaryData {
     firstSeenAt: t.first_seen_at,
     lastSeenAt: t.last_seen_at,
     isBuiltIn: t.org_id === null || t.status === 'built_in',
+    isGlobal: t.org_id === null,
   }));
   terms.sort((a, b) => b.timesHeard - a.timesHeard || a.heard.localeCompare(b.heard));
   return {
@@ -2047,7 +3002,7 @@ export function assembleGlossary(rows: RowSet): GlossaryData {
 
 // ───────────────────────────── Settings / billing / setup ─────────────────────────────
 
-export function assembleSettings(rows: RowSet): SettingsData {
+export function assembleSettings(rows: RowSet, pack: CountryPack | null = null): SettingsData {
   const { org_id: _o, updated_at: _u, ...settings } = rows.settings;
   return {
     org: {
@@ -2055,10 +3010,16 @@ export function assembleSettings(rows: RowSet): SettingsData {
       name: rows.org.name,
       address: rows.org.address,
       licenseNo: rows.org.license_no,
+      taxNo: rows.org.tax_no,
       timezone: rows.org.timezone,
       logoPath: rows.org.logo_path,
       logoUrl: null,
+      country: rows.org.country,
+      isDemo: rows.org.is_demo,
+      locale: rows.org.locale,
+      units: rows.org.units,
     },
+    pack,
     settings,
     siteRecipients: rows.sites
       .filter((s) => s.status !== 'archived')
@@ -2070,33 +3031,60 @@ export function assembleSettings(rows: RowSet): SettingsData {
   };
 }
 
+/**
+ * When the org last went past due: the latest audited `billing.status_changed` → past_due (what
+ * scheduler-tick reads), or null.
+ */
+export function pastDueSinceFrom(audit: readonly AuditLogRow[]): string | null {
+  let latest: string | null = null;
+  for (const a of audit) {
+    if (a.action !== 'billing.status_changed') continue;
+    const to = isRecord(a.diff) ? a.diff.to : null;
+    if (to === 'past_due' && (latest === null || a.created_at > latest)) latest = a.created_at;
+  }
+  return latest;
+}
+
+/** The org row's billing as the shared rules read it (§19 Q235). */
+export function billingStateOf(org: OrgRow, audit: readonly AuditLogRow[]): BillingStateInput {
+  return {
+    billing_status: org.billing_status,
+    billing_provider: org.billing_provider,
+    billing_subscription_id: org.billing_subscription_id,
+    trial_ends_at: org.trial_ends_at,
+    is_demo: org.is_demo,
+    past_due_since: pastDueSinceFrom(audit),
+  };
+}
+
+/**
+ * P13 Billing (W4-10): the org's own price (§19 Q234) × active sites, the provider (§19 Q236), the
+ * banner's alert (§19 Q235). Payment method, invoices and the next invoice date come from the
+ * provider (api-billing) in Supabase mode, from the demo dataset in demo mode.
+ */
 export function assembleBilling(rows: RowSet, ctx: AssembleCtx): BillingData {
   const active = rows.sites.filter((s) => s.status === 'active');
   const today = formatDateInTz(ctx.now, rows.org.timezone);
   const { y, m } = parseIsoDate(today);
   const nextMonth = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
-  const plan = rows.billing ?? {
-    monthlyCents: active.length * PRICE_PER_SITE_CENTS,
-    activeSites: active.length,
-    pricePerSiteCents: PRICE_PER_SITE_CENTS,
-    nextInvoiceDate: nextMonth,
-    paymentMethod: null,
-    status: rows.org.billing_status,
-    trialEndsAt: rows.org.trial_ends_at,
-    invoices: [],
-  };
+  const price = billingPrice(rows.org);
+  const graceDays = rows.settings.past_due_grace_days;
+  const extras = rows.billing;
   return {
     plan: {
-      monthlyCents: active.length * PRICE_PER_SITE_CENTS,
+      provider: billingProviderOf(rows.org),
+      price,
       activeSites: active.length,
-      pricePerSiteCents: PRICE_PER_SITE_CENTS,
-      nextInvoiceDate: plan.nextInvoiceDate,
-      paymentMethod: plan.paymentMethod,
+      monthlyMinor: price ? monthlyTotalMinor(price, active.length) : null,
+      nextInvoiceDate: extras?.nextInvoiceDate ?? nextMonth,
+      paymentMethod: extras?.paymentMethod ?? null,
       status: rows.org.billing_status,
       trialEndsAt: rows.org.trial_ends_at,
       hasSubscription:
-        rows.org.stripe_subscription_id != null && rows.org.billing_status !== 'canceled',
+        rows.org.billing_subscription_id != null && rows.org.billing_status !== 'canceled',
+      graceDays,
     },
+    alert: billingAlert(billingStateOf(rows.org, rows.audit), ctx.now, graceDays),
     sites: rows.sites
       .filter((s) => s.status !== 'archived')
       .map((s) => ({
@@ -2105,11 +3093,11 @@ export function assembleBilling(rows: RowSet, ctx: AssembleCtx): BillingData {
         projectCode: s.project_code,
         activeSince: s.active_since,
         status: s.status,
-        monthlyCents: s.status === 'active' ? PRICE_PER_SITE_CENTS : 0,
+        monthlyMinor: s.status === 'active' && price ? price.minor : null,
         pausedAt: s.paused_at,
       }))
       .sort((a, b) => ((a.activeSince ?? '') < (b.activeSince ?? '') ? -1 : 1)),
-    invoices: plan.invoices,
+    invoices: extras?.invoices ?? [],
   };
 }
 
@@ -2145,13 +3133,14 @@ export function assembleNotifications(rows: RowSet, ctx: AssembleCtx): Notificat
       targetPath: n.target_path,
       readAt: n.read_at,
       createdAt: n.created_at,
+      notice: noticeText(n.data),
     }));
 }
 
 export function assembleNavBadges(rows: RowSet, ctx: AssembleCtx): NavBadges {
   return {
     reportsToReview: rows.reports.filter((r) => r.status === 'filed' && r.needs_review).length,
-    unknownSenders: rows.unknownSenders.filter((u) => u.status === 'pending').length,
+    unknownSenders: rows.unknownContacts.filter((u) => u.status === 'pending').length,
     termsToReview: rows.glossary.filter((t) => t.status === 'needs_review').length,
     unreadNotifications: rows.notifications.filter(
       (n) => !n.read_at && (n.user_id === null || n.user_id === ctx.userId),
@@ -2192,10 +3181,10 @@ export function searchRows(rows: RowSet, q: string, limit = 12): SearchResult[] 
     if (has(c.name) || c.aliases.some(has))
       out.push({ kind: 'company', id: c.id, title: c.name, subtitle: c.trade, href: `/hours` });
   }
-  const sourceByMessage = new Map(rows.sources.map((s) => [s.message_id, s]));
+  const sourceByMedia = new Map(rows.sources.map((s) => [sourceMediaId(s), s]));
   for (const t of rows.transcripts) {
     if (!has(t.text)) continue;
-    const src = sourceByMessage.get(t.message_id);
+    const src = sourceByMedia.get(transcriptMediaId(t));
     const r = src ? ix.reportById.get(src.report_id) : undefined;
     const i = t.text.toLowerCase().indexOf(needle);
     const snippet = `…${t.text.slice(Math.max(0, i - 30), i + needle.length + 40).trim()}…`;

@@ -1,8 +1,16 @@
 import { z } from 'zod';
-import { normalizeE164, REPORTER_ROLES } from '@sitelog/shared';
+import {
+  CONTACT_PREFS,
+  REPORTER_LOCALES,
+  REPORTER_ROLES,
+  ensurePersonalLink,
+  jobKeys,
+} from '@sitelog/shared';
 import { logAudit } from '../_shared/audit.ts';
 import { requireOrgRole, requireUser, type AuthedUser } from '../_shared/auth.ts';
-import { attachConversation } from '../_shared/conversations.ts';
+import { loadOrgPack } from '../_shared/countries.ts';
+import { requireEnv } from '../_shared/env.ts';
+import { phoneOptedOut, supabaseLinkStore } from '../_shared/messaging.ts';
 import {
   HttpError,
   json,
@@ -14,13 +22,41 @@ import {
 import { enqueueJob } from '../_shared/jobs.ts';
 import { logInfo } from '../_shared/log.ts';
 import { adminClient, type AppClient, type TableRow } from '../_shared/supabase.ts';
-import { canResend, linkRows } from './logic.ts';
+import {
+  ATTESTATION_REQUIRED,
+  canResend,
+  invitedAuditDiff,
+  invitePhone,
+  inviteProfile,
+  lineCheckRefusal,
+  linkRows,
+  missingSmsAttestation,
+} from './logic.ts';
 
 /**
  * api-invite-reporter (§F2 step 2, §F3, §P10) — admin|ops.
- * POST { orgId, name, phone, role?, siteIds[], languages? }   → reporter + links + welcome job
+ * POST { orgId, name, phone, role?, siteIds[], languages?, locale?, contactPref?, smsAttested: true }
+ *      → reporter `invited` + site links + its personal field link + the welcome job
  * POST { action: 'resend', reporterId }                         → one re-send after 48 h
  * POST { action: 'disable', reporterId }                        → status 'disabled'
+ *
+ * W1-08: the welcome is a text with the reporter's personal link (F3, §9.2), sent by the worker's
+ * send_welcome through the Notifier. The invite creates the personal `field_links` row (its code
+ * derived from the row id under LINK_SIGNING_SECRET, `ensurePersonalLink`, so the worker can text
+ * it); no WhatsApp conversation is attached any more. The phone is read with the org's country as
+ * its default region; `locale` comes from the "Speaks" languages or the org's pack and
+ * `contactPref` defaults to the org's `default_contact_pref` (W4-05) when omitted, so the deployed panel's request (no locale, no
+ * preference) keeps working. A number that sent STOP on the pack's sender (`sms_opt_outs`, spec
+ * §9.5), or a disabled reporter who did (`opted_out_at`), is created or re-enabled `opted_out`:
+ * the welcome job then skips it and tells the office why (§13). The answer never holds the link
+ * code. W4-02 (§19 Q229 `delivery`): a number libphonenumber knows to be a fixed line is refused
+ * (422 `landline_text` for a text link; `landline_unreachable` where TalkOlog cannot reach it by
+ * phone either), before anything is written. Owner decision 2026-10-20 (Twilio toll-free
+ * verification, opt-in "Verbal"): an invite needs `smsAttested: true`, the office's attestation
+ * that the person agreed to get daily report messages from TalkOlog by text or WhatsApp; without it 400
+ * `attestation_required`, nothing written. It is kept in the `reporter.invited` audit entry
+ * (`sms_attestation: INVITE_MESSAGES_ATTESTATION`, the actor and time are the entry's), never as a
+ * `consents` row: the reporter's own consent is still asked in the field app.
  */
 
 const InviteSchema = z.object({
@@ -30,7 +66,10 @@ const InviteSchema = z.object({
   phone: z.string().trim().min(5).max(32),
   role: z.enum(REPORTER_ROLES).default('site_manager'),
   siteIds: z.array(z.uuid()).min(1).max(50),
-  languages: z.array(z.string().trim().min(2).max(8)).min(1).max(5).default(['en']),
+  languages: z.array(z.string().trim().min(2).max(8)).min(1).max(5).optional(),
+  locale: z.enum(REPORTER_LOCALES).optional(),
+  contactPref: z.enum(CONTACT_PREFS).optional(),
+  smsAttested: z.literal(true),
 });
 const ResendSchema = z.object({ action: z.literal('resend'), reporterId: z.uuid() });
 const DisableSchema = z.object({ action: z.literal('disable'), reporterId: z.uuid() });
@@ -42,7 +81,11 @@ Deno.serve(
   withHandler('api-invite-reporter', async (req) => {
     requireMethod(req, 'POST');
     const user = await requireUser(req);
-    const body = parseWith(BodySchema, await readJson(req));
+    const raw = await readJson(req);
+    if (missingSmsAttestation(raw)) {
+      throw new HttpError(400, ATTESTATION_REQUIRED.message, { code: ATTESTATION_REQUIRED.code });
+    }
+    const body = parseWith(BodySchema, raw);
     const admin = adminClient();
     if (body.action === 'resend') return json(req, await resend(admin, user, body.reporterId));
     if (body.action === 'disable') return json(req, await disable(admin, user, body.reporterId));
@@ -53,9 +96,21 @@ Deno.serve(
 
 async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof InviteSchema>) {
   await requireOrgRole(admin, user.userId, body.orgId, ['admin', 'ops']);
-  const phone = normalizeE164(body.phone);
+  const { org, pack } = await loadOrgPack(admin, body.orgId);
+  const phone = invitePhone(body.phone, org.country);
   if (!phone)
     throw new HttpError(400, 'Phone must be a valid international number, e.g. +1 555 014 3378');
+  // W4-05 (§19 Q231): a request without a preference takes the org's default for new reporters.
+  const { data: orgSettings } = body.contactPref
+    ? { data: null }
+    : await admin
+        .from('org_settings')
+        .select('default_contact_pref')
+        .eq('org_id', body.orgId)
+        .maybeSingle()
+        .throwOnError();
+  const profile = inviteProfile(pack, body, orgSettings?.default_contact_pref ?? 'link');
+  if (!profile.ok) throw new HttpError(400, profile.reason);
   const firstSiteId = body.siteIds[0];
   if (!firstSiteId) throw new HttpError(400, 'At least one site is required');
 
@@ -69,6 +124,10 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
     throw new HttpError(400, 'One or more sites do not belong to this organisation');
   }
 
+  // The phone's own opt-out on this pack's sender (STOP, or the provider's list): every STOP sticks.
+  const phoneOptOut = await phoneOptedOut(admin, phone, pack.code);
+  const now = new Date().toISOString();
+
   // Same phone already in this org → reuse the reporter and link the new sites (§F2 edge case).
   const { data: existing } = await admin
     .from('reporters')
@@ -77,18 +136,42 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
     .eq('phone_e164', phone)
     .maybeSingle()
     .throwOnError();
+  // F2's line check (§19 Q229): on the preference the reporter ends up with, before any write.
+  const refusal = lineCheckRefusal(
+    phone,
+    body.contactPref ?? existing?.contact_pref ?? profile.contactPref,
+    org,
+    pack,
+  );
+  if (refusal) throw new HttpError(422, refusal.message, { code: refusal.problem });
   let reporter: Reporter;
   if (existing) {
     reporter = existing;
+    // A reused reporter keeps the language and report mode they chose, unless the office sets them.
+    const patch: Partial<Reporter> = {
+      ...(body.locale ? { locale: profile.locale } : {}),
+      ...(body.contactPref ? { contact_pref: profile.contactPref } : {}),
+    };
     if (existing.status === 'disabled') {
-      const { data: reenabled } = await admin
+      // A disabled reporter who sent STOP meanwhile (opted_out_at) comes back opted out.
+      const optedOut = existing.opted_out_at !== null || phoneOptOut;
+      Object.assign(patch, {
+        status: optedOut ? 'opted_out' : 'invited',
+        opted_out_at: existing.opted_out_at ?? (optedOut ? now : null),
+        invited_at: null,
+        last_invite_error: null,
+        name: body.name,
+      });
+    }
+    if (Object.keys(patch).length > 0) {
+      const { data: updated } = await admin
         .from('reporters')
-        .update({ status: 'invited', invited_at: null, last_invite_error: null, name: body.name })
+        .update(patch)
         .eq('id', existing.id)
         .select('*')
         .single()
         .throwOnError();
-      reporter = reenabled;
+      reporter = updated;
     }
   } else {
     const { data: created } = await admin
@@ -98,8 +181,11 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
         name: body.name,
         phone_e164: phone,
         role: body.role,
-        languages: body.languages,
-        status: 'invited',
+        languages: profile.languages,
+        locale: profile.locale,
+        contact_pref: profile.contactPref,
+        status: phoneOptOut ? 'opted_out' : 'invited',
+        opted_out_at: phoneOptOut ? now : null,
       })
       .select('*')
       .single()
@@ -119,19 +205,26 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
     .upsert(links, { onConflict: 'site_id,reporter_id', ignoreDuplicates: true })
     .throwOnError();
 
-  const conversation = await attachConversation(admin, {
-    phone,
-    orgId: body.orgId,
-    reporterId: reporter.id,
-    state: 'new',
-  });
-
-  const jobId = await enqueueJob(
-    admin,
-    'send_welcome',
-    { reporterId: reporter.id, siteId: firstSiteId },
-    { dedupeKey: `welcome:${reporter.id}:${firstSiteId}` },
+  // The personal link (F3): reused when the reporter has one TalkOlog can text again.
+  const personal = await ensurePersonalLink(
+    supabaseLinkStore(admin),
+    requireEnv('LINK_SIGNING_SECRET'),
+    reporter.id,
+    () => crypto.randomUUID(),
   );
+  if (personal.created) {
+    await logAudit(admin, {
+      orgId: body.orgId,
+      actorType: 'user',
+      actorId: user.userId,
+      action: 'field_link.created',
+      entity: 'reporter',
+      entityId: reporter.id,
+      diff: { kind: 'personal', site_id: null, report_date: null },
+    });
+  }
+
+  const jobId = await welcomeJob(admin, reporter.id, firstSiteId);
   await logAudit(admin, {
     orgId: body.orgId,
     actorType: 'user',
@@ -139,12 +232,22 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
     action: 'reporter.invited',
     entity: 'reporter',
     entityId: reporter.id,
-    diff: { siteIds: body.siteIds, role: body.role, reused: existing !== null, jobId },
+    diff: invitedAuditDiff({
+      siteIds: body.siteIds,
+      role: body.role,
+      reused: existing !== null,
+      locale: reporter.locale,
+      contactPref: reporter.contact_pref,
+      status: reporter.status,
+      phoneOptedOut: phoneOptOut,
+      jobId,
+    }),
   });
   logInfo('reporter.invited', {
     orgId: body.orgId,
     reporterId: reporter.id,
     reused: existing !== null,
+    status: reporter.status,
   });
 
   return {
@@ -152,7 +255,7 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
     reused: existing !== null,
     linkedSiteIds: links.map((l) => l.site_id),
     primarySiteIds: links.filter((l) => l.is_primary).map((l) => l.site_id),
-    conversationId: conversation.id,
+    personalLinkId: personal.id,
     welcomeJobId: jobId,
   };
 }
@@ -178,11 +281,12 @@ async function resend(admin: AppClient, user: AuthedUser, reporterId: string) {
     .limit(1)
     .throwOnError();
   const siteId = links[0]?.site_id;
+  // D16: the nth re-send's own key; two taps at once read the same count and enqueue once.
   const jobId = await enqueueJob(
     admin,
     'send_welcome',
     { reporterId: reporter.id, siteId, reinvite: true },
-    { dedupeKey: `welcome:${reporter.id}:reinvite` },
+    { dedupeKey: jobKeys.welcomeResend(reporter.id, (count ?? 0) + 1) },
   );
   await logAudit(admin, {
     orgId: reporter.org_id,
@@ -194,6 +298,40 @@ async function resend(admin: AppClient, user: AuthedUser, reporterId: string) {
     diff: { siteId: siteId ?? null, jobId },
   });
   return { ok: true, reporterId: reporter.id, welcomeJobId: jobId };
+}
+
+/**
+ * The invite's welcome job (GAP D16, W1-10). A welcome for the same reporter and site still queued
+ * or running (a double submit, the same invite repeated before it went) is that one, as the old
+ * key did while its job was active; otherwise a new job under the key of the office's nth invite of
+ * the reporter, so an invite after the welcome went (a disabled reporter invited again) texts again.
+ */
+async function welcomeJob(admin: AppClient, reporterId: string, siteId: string): Promise<number> {
+  const { data: pending } = await admin
+    .from('jobs')
+    .select('id')
+    .eq('type', 'send_welcome')
+    .eq('payload->>reporterId', reporterId)
+    .eq('payload->>siteId', siteId)
+    .eq('payload->>reinvite', 'false')
+    .in('status', ['queued', 'running'])
+    .order('id')
+    .limit(1)
+    .throwOnError();
+  if (pending[0]) return pending[0].id;
+  const { count } = await admin
+    .from('audit_log')
+    .select('id', { count: 'exact', head: true })
+    .eq('action', 'reporter.invited')
+    .eq('actor_type', 'user') // the office's invites, not the worker's "welcome sent" rows
+    .eq('entity_id', reporterId)
+    .throwOnError();
+  return enqueueJob(
+    admin,
+    'send_welcome',
+    { reporterId, siteId },
+    { dedupeKey: jobKeys.welcomeInvite(reporterId, (count ?? 0) + 1) },
+  );
 }
 
 async function disable(admin: AppClient, user: AuthedUser, reporterId: string) {

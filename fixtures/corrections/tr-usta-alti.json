@@ -1,0 +1,39 @@
+{
+  "id": "tr-usta-alti",
+  "description": "Turkish, said on a call (W4-07): “Usta Beton beş değil, altı kişiydi.” on the Kartal call's draft (call-kartal-2026-10-09-tr) → Usta Beton 6 × 8 saat = 48 saat (the change note in Turkish, the report's language); the call reads the change back and asks again (fixtures/calls/kartal-fix-tr).",
+  "voice": "correction-tr-usta-call-alti",
+  "language": "tr",
+  "draft": "call-kartal-2026-10-09-tr",
+  "recorded": {
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/manpower/0/workers",
+        "value": 6,
+        "reason": "beş değil, altı kişiydi"
+      }
+    ],
+    "changeNote": "Usta Beton 5 → 6 kişi",
+    "needsClarification": null
+  },
+  "expected": {
+    "applies": true,
+    "crew": {
+      "company": "Usta Beton",
+      "workers": 6,
+      "hoursPerWorker": 8,
+      "totalHours": 48
+    },
+    "changes": [
+      {
+        "kind": "crew",
+        "company": "Usta Beton",
+        "change": "changed",
+        "workers": [5, 6],
+        "hoursPerWorker": [8, 8],
+        "totalHours": [40, 48]
+      }
+    ],
+    "droppedTotals": 0
+  }
+}

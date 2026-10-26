@@ -18,6 +18,21 @@ export function localId(prefix = 'id'): string {
   return `${prefix}-${rnd}`;
 }
 
+/**
+ * A v4 UUID for a request id (e.g. "Text today's link", W1-16): `crypto.randomUUID` where the page
+ * is a secure context, else built from `crypto.getRandomValues`, which plain http has too.
+ */
+export function uuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6]! & 0x0f) | 0x40;
+  b[8] = (b[8]! & 0x3f) | 0x80;
+  const hex = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
@@ -44,6 +59,19 @@ export function groupBy<T, K extends string | number>(
 
 export function uniq<T>(items: Iterable<T>): T[] {
   return [...new Set(items)];
+}
+
+/** The first item of each key, in order. */
+export function uniqBy<T>(items: Iterable<T>, key: (item: T) => unknown): T[] {
+  const seen = new Set<unknown>();
+  const out: T[] = [];
+  for (const item of items) {
+    const k = key(item);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(item);
+  }
+  return out;
 }
 
 export function isRecord(v: unknown): v is Record<string, unknown> {
@@ -75,6 +103,25 @@ export const storage = {
     }
   },
 };
+
+/**
+ * An error a data source throws with a machine-readable code (an api-* function's `details.code`,
+ * or the demo store mirroring it), so the panel can show its own copy in its language instead of
+ * the server's English message.
+ */
+export class CodedError extends Error {
+  readonly code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'CodedError';
+    this.code = code;
+  }
+}
+
+/** The error's code (`CodedError`), or null. */
+export function errorCode(err: unknown): string | null {
+  return err instanceof CodedError ? err.code : null;
+}
 
 export function errorMessage(err: unknown, fallback = 'Something went wrong'): string {
   if (err instanceof Error && err.message) return err.message;

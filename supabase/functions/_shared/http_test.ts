@@ -11,8 +11,8 @@ import {
 } from './http.ts';
 
 Deno.test('CORS: only the configured origins are echoed back', () => {
-  const allowed = ['https://app.sitelog.app', 'http://localhost:5173'];
-  assertEquals(isAllowedOrigin('https://app.sitelog.app', allowed), true);
+  const allowed = ['https://app.talkolog.com', 'http://localhost:5173'];
+  assertEquals(isAllowedOrigin('https://app.talkolog.com', allowed), true);
   assertEquals(isAllowedOrigin('https://evil.example', allowed), false);
   assertEquals(isAllowedOrigin(null, allowed), false);
   const ok = corsHeaders(

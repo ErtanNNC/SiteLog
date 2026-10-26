@@ -1,0 +1,55 @@
+{
+  "id": "es-delta-cinco",
+  "description": "Spanish, spoken: the same question in Marco’s Spanish, answered “Eran cinco, todo el día.” → 5 × full day = 40 h.",
+  "voice": "answer-es-delta-cinco",
+  "language": "es",
+  "question": {
+    "field": "manpower.workers",
+    "prompt": "Dijiste “los de Delta” en el nivel 2. ¿Cuántos eran y por cuánto tiempo?",
+    "options": ["4 · día completo", "5 · día completo"],
+    "target": {
+      "manpowerIndex": 0,
+      "companyName": "Delta Mechanical",
+      "companyNameHeard": "the Delta guys",
+      "path": "manpower.workers:Delta Mechanical"
+    }
+  },
+  "companies": [
+    {
+      "id": "delta",
+      "name": "Delta Mechanical",
+      "aliases": ["Delta", "los de Delta"]
+    },
+    {
+      "id": "apex",
+      "name": "Apex Concrete",
+      "aliases": ["Apex"]
+    }
+  ],
+  "defaultShiftHours": 8,
+  "crew": {
+    "companyName": "Delta Mechanical",
+    "companyNameHeard": "the Delta guys",
+    "area": "Level 2"
+  },
+  "recorded": {
+    "field": "manpower.workers",
+    "value": {
+      "workers": 5,
+      "fullDay": true
+    },
+    "confidence": 0.94
+  },
+  "expected": {
+    "applies": true,
+    "value": {
+      "workers": 5,
+      "fullDay": true
+    },
+    "crew": {
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40
+    }
+  }
+}
